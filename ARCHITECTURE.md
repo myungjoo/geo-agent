@@ -1085,10 +1085,10 @@ GeoScore {
   total              : number          // 0~100, 가중 합산 점수
 
   // 세부 지표 (각 0~100)
-  citation_rate      : number          // LLM 응답에서 인용된 빈도 (가중치 30%)
-  citation_accuracy  : number          // 인용 내용의 정확도 vs 원문 (25%)
-  coverage           : number          // 타겟 LLM 서비스 커버리지 (20%)
-  rank_position      : number          // 복수 출처 응답 시 인용 순위 (15%)
+  citation_rate      : number          // LLM 응답에서 인용된 빈도 (가중치 25%)
+  citation_accuracy  : number          // 인용 내용의 정확도 vs 원문 (20%)
+  coverage           : number          // 타겟 LLM 서비스 커버리지 (15%)
+  rank_position      : number          // 복수 출처 응답 시 인용 순위 (10%)
   structured_score   : number          // Schema.org, 시맨틱 HTML 완성도 (10%)
 
   // 정보 인식 검증 (Information Recognition)
@@ -1893,6 +1893,422 @@ GEO Score (0~100) = Σ(가중치 × 세부 지표)
 
 ---
 
+## 9-A. 에러 핸들링 및 복원 정책
+
+### 9-A.1 LLM API 호출 재시도
+
+```typescript
+RetryPolicy {
+  max_retries        : number          // 기본값 3
+  initial_delay_ms   : number          // 기본값 1000
+  backoff_multiplier : number          // 기본값 2.0 (exponential)
+  max_delay_ms       : number          // 기본값 30000
+  retryable_errors   : string[]        // ['rate_limit', 'timeout', 'server_error']
+  non_retryable      : string[]        // ['auth_error', 'invalid_request', 'content_filter']
+}
+```
+
+| HTTP 상태 | 대응 |
+|---|---|
+| 429 (Rate Limit) | `Retry-After` 헤더 준수, 없으면 exponential backoff |
+| 500/502/503 | exponential backoff 후 재시도 |
+| 401/403 | 재시도 없이 즉시 실패 → 사용자에게 API 키 확인 알림 |
+| timeout | 1.5× 타임아웃으로 1회 재시도 후 실패 처리 |
+
+### 9-A.2 에이전트 타임아웃
+
+| 에이전트 | 기본 타임아웃 | 사유 |
+|---|---|---|
+| Analysis Agent | 5분 | 이중 크롤링 + 구조 분석 |
+| Strategy Agent | 3분 | LLM 추론 기반 |
+| Optimization Agent | 10분 | 다수 패치 생성 가능 |
+| Validation Agent | 15분 | 6개+ LLM × 다수 질의 × 3회 반복 |
+| Monitoring Agent | 단건 5분, 주기 무제한 | 상시 동작 |
+
+타임아웃 초과 시: 부분 결과 저장 → Orchestrator에 `TIMEOUT` 상태 보고 → 사용자에게 알림.
+
+### 9-A.3 파이프라인 실패 복원
+
+```
+Pipeline State Machine:
+
+  INIT → ANALYZING → STRATEGIZING → OPTIMIZING → VALIDATING → COMPLETED
+    │         │            │             │            │
+    │         └────────────┴─────────────┴────────────┘
+    │                          │
+    ▼                          ▼
+  FAILED                  PARTIAL_FAILURE
+    │                          │
+    ▼                          ▼
+  [사용자 알림]          [부분 결과 보존 + 사용자 알림]
+                               │
+                          [재개(Resume) 가능]
+```
+
+| 실패 지점 | 부분 결과 보존 | 복원 방법 |
+|---|---|---|
+| Analysis 실패 | 없음 | 처음부터 재실행 |
+| Strategy 실패 | AnalysisReport 보존 | Strategy부터 재개 |
+| Optimization 실패 | AnalysisReport + OptimizationPlan 보존, 완료된 ChangeRecord 보존 | 미완료 태스크부터 재개 |
+| Validation 실패 | 모든 변경 적용 완료 상태 | Validation만 재실행 |
+| 배포 실패 | 패치 파일 보존 | 배포만 재시도 또는 수동 배포 전환 |
+
+### 9-A.4 롤백 정책
+
+| 트리거 조건 | 롤백 범위 | 자동/수동 |
+|---|---|---|
+| Validation에서 GEO 점수 10점 이상 하락 | 마지막 변경 되돌림 | **자동** (사용자 알림 후) |
+| Validation에서 정보 인식 정확도 30% 이상 하락 | 마지막 변경 되돌림 | **자동** |
+| Monitoring에서 외부 변경 후 점수 급락 | 해당 없음 (외부 변경이므로) | 수동 — 재분석 권고 |
+| 사용자 수동 롤백 요청 | 특정 ChangeRecord 이전 상태로 복원 | **수동** |
+
+롤백 실행: `ContentSnapshot(before)` 기반으로 이전 상태 복원 패치 생성 → 배포.
+
+### 9-A.5 에러 알림 체계
+
+```typescript
+ErrorEvent {
+  error_id       : string              // UUID
+  timestamp      : string              // ISO 8601
+  agent_id       : string              // 발생 에이전트
+  target_id      : string              // 대상 Target
+  error_type     : 'api_error'         // LLM API 오류
+                 | 'timeout'           // 타임아웃
+                 | 'crawl_error'       // 크롤링 실패 (403, 네트워크 등)
+                 | 'deploy_error'      // 배포 실패
+                 | 'validation_regression' // 검증 시 점수 하락
+                 | 'system_error'      // 내부 시스템 오류
+  severity       : 'critical' | 'warning' | 'info'
+  message        : string
+  context        : Record<string, unknown>  // 디버깅 컨텍스트
+  resolved       : boolean
+}
+```
+
+알림 경로: 대시보드 실시간 표시 + TargetProfile.notifications.channels 설정에 따라 email/slack 발송.
+
+---
+
+## 9-B. LLM API 추상화 레이어
+
+> Validation Agent가 6개+ LLM에 질의하고, 에이전트 오케스트레이션에도 LLM을 사용한다.
+> pi-ai가 기본 제공하는 멀티 프로바이더 기능 위에 GEO 특화 추상화를 추가한다.
+
+### 9-B.1 LLM Provider 구조
+
+```typescript
+// pi-ai 기반 멀티 프로바이더 활용
+LLMProviderConfig {
+  provider_id    : string              // 'openai' | 'anthropic' | 'google' | 'perplexity' | ...
+  api_key_ref    : string              // 환경변수 또는 시크릿 매니저 참조
+  models         : LLMModelConfig[]    // 사용 가능 모델 목록
+  rate_limit     : {
+    requests_per_minute : number
+    tokens_per_minute   : number
+  }
+  enabled        : boolean             // 활성화 여부
+}
+
+LLMModelConfig {
+  model_id       : string              // 'gpt-4o', 'claude-sonnet-4-6' 등
+  role           : 'orchestration'     // 에이전트 두뇌용 (고성능)
+               | 'validation_target'   // 테스트 대상 (인용 측정용)
+               | 'utility'            // 임베딩, 요약 등 보조 작업
+  max_tokens     : number
+  cost_per_1k_tokens : {
+    input  : number
+    output : number
+  }
+}
+```
+
+### 9-B.2 에이전트용 vs 검증 대상용 분리
+
+```
+┌─ 에이전트 오케스트레이션용 ──────────────────────────────┐
+│  역할: 에이전트의 "두뇌" — 분석, 전략, 최적화 수행        │
+│  모델: 고성능 모델 1개 (예: claude-sonnet-4-6)            │
+│  호출 방식: pi-agent-core Agent Loop 내부                  │
+│  설정: 시스템 프롬프트 (4-A) + 컨텍스트 슬롯 주입         │
+└────────────────────────────────────────────────────────────┘
+
+┌─ Validation 테스트 대상용 ────────────────────────────────┐
+│  역할: "이 LLM이 Target Page를 잘 인용하는가" 측정 대상    │
+│  모델: 6개+ LLM 서비스 각각                                │
+│  호출 방식: GeoLLMClient 인터페이스로 통합 호출             │
+│  주의: 에이전트 동작과 완전 분리 — 순수 질의+응답 수집용    │
+└────────────────────────────────────────────────────────────┘
+```
+
+### 9-B.3 GeoLLMClient (검증 질의 통합 인터페이스)
+
+```typescript
+interface GeoLLMClient {
+  // 단일 LLM에 질의
+  query(
+    provider: string,
+    query: string,
+    options?: { model?: string; temperature?: number }
+  ): Promise<LLMProbe>;
+
+  // 전체 활성 LLM에 동일 질의 (병렬 실행)
+  queryAll(
+    query: string,
+    options?: { concurrency?: number }
+  ): Promise<LLMProbe[]>;
+
+  // 정보 인식 검증 (InfoRecognitionItem에 대한 질의 자동 생성)
+  verifyInfoItem(
+    item: InfoRecognitionItem,
+    providers?: string[]
+  ): Promise<InfoRecognitionPerLLM[]>;
+
+  // 비용 추적
+  getCostSummary(since?: string): Promise<CostSummary>;
+}
+
+CostSummary {
+  total_cost         : number
+  per_provider       : Record<string, number>
+  total_requests     : number
+  period_start       : string
+}
+```
+
+### 9-B.4 비용 관리
+
+| 정책 | 설명 |
+|---|---|
+| **일일 비용 한도** | `workspace/config.json`에서 설정, 초과 시 경고 + 새 질의 차단 |
+| **응답 캐싱** | 동일 질의 + 동일 LLM + 24시간 이내 → 캐시된 응답 재사용 |
+| **질의 배치** | Validation 시 모든 질의를 수집 후 LLM별로 배치 실행 (연결 재사용) |
+| **비용 리포트** | 대시보드에 Provider별 / 에이전트별 API 비용 시각화 |
+
+---
+
+## 9-C. 배포 모드별 실행 흐름
+
+> TargetProfile.deployment_mode에 따라 Optimization Agent의 출력 처리 방식이 달라진다.
+
+### 9-C.1 `direct` 모드 (직접 배포)
+
+```
+[Optimization Agent]
+    │
+    ├─ 콘텐츠 패치 생성 (HTML diff, JSON-LD 등)
+    │
+    ├─ ChangeRecord 생성 + ContentSnapshot(before) 저장
+    │
+    ├─ deployment_config.type에 따라 배포:
+    │   ├─ 'git': Git commit + push (자동)
+    │   ├─ 'ftp': FTP/SFTP 파일 업로드
+    │   └─ 'custom_api': HTTP PUT/POST로 콘텐츠 전송
+    │
+    ├─ 배포 성공 확인 (HTTP 200 + 콘텐츠 반영 검증)
+    │
+    └─ Validation Agent로 전달
+```
+
+**안전장치**:
+- 배포 전 dry-run 옵션 (diff만 표시, 실제 배포 안 함)
+- 배포 전 사용자 확인 옵션 (`auto_deploy: false`이면 대시보드에서 승인 필요)
+- 배포 실패 시 자동 롤백 (이전 ContentSnapshot 기반)
+
+### 9-C.2 `cms_api` 모드 (CMS 연동)
+
+```
+[Optimization Agent]
+    │
+    ├─ 콘텐츠 패치를 CMS API 형식으로 변환
+    │   ├─ WordPress: REST API (/wp-json/wp/v2/posts/{id})
+    │   └─ Custom: deployment_config.endpoint로 전송
+    │
+    ├─ CMS가 반환하는 새 URL/ID로 검증 대상 확정
+    │
+    └─ CMS 반영 후 Validation Agent로 전달
+```
+
+### 9-C.3 `suggestion_only` 모드 (제안서 출력)
+
+```
+[Optimization Agent]
+    │
+    ├─ 콘텐츠 수정 제안서 생성:
+    │   ├─ 현재 상태 vs 제안 상태 side-by-side diff
+    │   ├─ 각 변경의 근거와 예상 효과
+    │   ├─ 우선순위별 정렬
+    │   └─ 복사-붙여넣기 가능한 코드 스니펫
+    │
+    ├─ 대시보드에 제안서 표시
+    │   └─ [적용 완료] 버튼 → 사용자가 수동 적용 후 클릭
+    │
+    └─ 사용자가 [적용 완료] 클릭 후 → Validation Agent 트리거
+```
+
+**제안서 포맷**:
+
+```
+┌─ 최적화 제안서 ── Target: 메인 랜딩 페이지 ──────────────┐
+│                                                            │
+│  제안 #1 (critical) — JSON-LD 구조화 데이터 추가           │
+│  예상 효과: GEO +8~12점 (과거 실적 기반)                   │
+│  ┌─ 추가할 코드 ─────────────────────────────────────┐    │
+│  │ <script type="application/ld+json">               │    │
+│  │ { "@type": "Product", "name": "...", ... }        │    │
+│  │ </script>                                         │    │
+│  └───────────────────────────────────────────────────┘    │
+│  삽입 위치: <head> 태그 내부                                │
+│                                                            │
+│  제안 #2 (high) — FAQ 섹션 추가                            │
+│  ...                                                       │
+│                                                            │
+│  [전체 제안 다운로드 (HTML)]  [적용 완료 보고]              │
+└────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 9-D. 데이터 저장 전략
+
+### 9-D.1 저장소 선택 기준
+
+| 데이터 | v1 (localhost) | 운영 환경 (v2+) |
+|---|---|---|
+| **TargetProfile, Config** | JSON 파일 (`workspace/`) | PostgreSQL |
+| **Agent Prompts** | JSON 파일 (`workspace/prompts/`) | PostgreSQL |
+| **AnalysisReport, Plans** | SQLite (`workspace/data/db/`) | PostgreSQL |
+| **ContentSnapshot** | SQLite + 파일 (`workspace/data/snapshots/`) | PostgreSQL + S3 |
+| **ChangeRecord, ChangeImpact** | SQLite | PostgreSQL |
+| **GeoTimeSeries** | SQLite | TimescaleDB (PostgreSQL 확장) |
+| **EffectivenessIndex** | SQLite | PostgreSQL (materialized view) |
+| **SemanticChangeRecord (벡터)** | ChromaDB (로컬) | Pinecone / pgvector |
+| **LLMProbe (응답 캐시)** | SQLite + Redis | Redis + PostgreSQL |
+
+### 9-D.2 SQLite 테이블 구조 (v1)
+
+```sql
+-- 핵심 테이블 (v1 SQLite)
+
+CREATE TABLE content_snapshots (
+  snapshot_id     TEXT PRIMARY KEY,
+  url             TEXT NOT NULL,
+  target_id       TEXT NOT NULL,
+  captured_at     TEXT NOT NULL,       -- ISO 8601
+  html_hash       TEXT NOT NULL,
+  content_text    TEXT,
+  structured_data TEXT,                -- JSON
+  geo_score       TEXT,                -- JSON (GeoScore)
+  FOREIGN KEY (target_id) REFERENCES targets(id)
+);
+
+CREATE TABLE change_records (
+  change_id       TEXT PRIMARY KEY,
+  experiment_id   TEXT,
+  url             TEXT NOT NULL,
+  target_id       TEXT NOT NULL,
+  changed_at      TEXT NOT NULL,
+  change_type     TEXT NOT NULL,       -- ChangeType enum value
+  change_summary  TEXT,
+  diff            TEXT,
+  snapshot_before TEXT REFERENCES content_snapshots(snapshot_id),
+  snapshot_after  TEXT REFERENCES content_snapshots(snapshot_id),
+  triggered_by    TEXT NOT NULL,       -- 'auto' | 'manual' | 'scheduled'
+  strategy_ref    TEXT,
+  FOREIGN KEY (target_id) REFERENCES targets(id)
+);
+
+CREATE TABLE change_impacts (
+  change_id       TEXT PRIMARY KEY REFERENCES change_records(change_id),
+  measured_at     TEXT NOT NULL,
+  score_before    REAL,
+  score_after     REAL,
+  delta           REAL,
+  delta_pct       REAL,
+  per_llm_impact  TEXT,                -- JSON (Record<string, number>)
+  confidence      REAL,
+  confounders     TEXT,                -- JSON (string[])
+  verdict         TEXT NOT NULL        -- 'positive' | 'negative' | 'neutral'
+);
+
+CREATE TABLE geo_time_series (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  url             TEXT NOT NULL,
+  target_id       TEXT NOT NULL,
+  llm_service     TEXT NOT NULL,
+  measured_at     TEXT NOT NULL,
+  geo_score       REAL,
+  citation_rate   REAL,
+  citation_rank   INTEGER,
+  change_id       TEXT REFERENCES change_records(change_id),
+  delta_score     REAL
+);
+CREATE INDEX idx_gts_target_time ON geo_time_series(target_id, measured_at);
+CREATE INDEX idx_gts_llm ON geo_time_series(llm_service, measured_at);
+
+CREATE TABLE llm_probes (
+  probe_id        TEXT PRIMARY KEY,
+  target_id       TEXT NOT NULL,
+  llm_service     TEXT NOT NULL,
+  model_version   TEXT,
+  query           TEXT NOT NULL,
+  query_type      TEXT NOT NULL,
+  response_text   TEXT,
+  response_at     TEXT NOT NULL,
+  cited           INTEGER NOT NULL,    -- 0 or 1
+  citation_excerpt TEXT,
+  citation_position INTEGER,
+  accuracy_vs_source REAL,
+  info_items_checked TEXT,             -- JSON
+  FOREIGN KEY (target_id) REFERENCES targets(id)
+);
+
+CREATE TABLE effectiveness_index (
+  url             TEXT NOT NULL,
+  change_type     TEXT NOT NULL,
+  llm_service     TEXT,                -- NULL = 전체 평균
+  sample_count    INTEGER NOT NULL DEFAULT 0,
+  avg_delta       REAL NOT NULL DEFAULT 0,
+  success_rate    REAL NOT NULL DEFAULT 0,
+  best_delta      REAL,
+  worst_delta     REAL,
+  last_updated    TEXT NOT NULL,
+  PRIMARY KEY (url, change_type, llm_service)
+);
+
+CREATE TABLE error_events (
+  error_id        TEXT PRIMARY KEY,
+  timestamp       TEXT NOT NULL,
+  agent_id        TEXT NOT NULL,
+  target_id       TEXT,
+  error_type      TEXT NOT NULL,
+  severity        TEXT NOT NULL,
+  message         TEXT NOT NULL,
+  context         TEXT,                -- JSON
+  resolved        INTEGER NOT NULL DEFAULT 0
+);
+```
+
+### 9-D.3 마이그레이션 전략
+
+```
+v1 (SQLite)  →  v2+ (PostgreSQL)
+      │
+      ├─ better-sqlite3 → node-postgres 드라이버 교체
+      │
+      ├─ 추상화 레이어: Repository 패턴 적용
+      │   ├─ interface ChangeRecordRepository { ... }
+      │   ├─ class SqliteChangeRecordRepo implements ChangeRecordRepository
+      │   └─ class PostgresChangeRecordRepo implements ChangeRecordRepository
+      │
+      ├─ 마이그레이션 도구: drizzle-orm (TypeScript 네이티브 ORM)
+      │   ├─ drizzle-kit generate → SQL 마이그레이션 파일 자동 생성
+      │   └─ drizzle-kit migrate → 마이그레이션 실행
+      │
+      └─ v1 → v2 데이터 이관: geo migrate 명령으로 SQLite → PostgreSQL 자동 이관
+```
+
+---
+
 ## 10. 디렉터리 구조
 
 ```
@@ -1941,6 +2357,21 @@ geo-agent/
 │   │   │   │   │   └── monitoring.ts         # Monitoring Agent 기본 프롬프트
 │   │   │   │   ├── prompt-loader.ts          # 프롬프트 로드 (workspace → default fallback)
 │   │   │   │   └── slot-injector.ts          # 컨텍스트 슬롯 {{...}} 주입 엔진
+│   │   │   ├── llm/                        # ★ LLM 추상화 레이어 (9-B)
+│   │   │   │   ├── provider-config.ts        # LLMProviderConfig 스키마
+│   │   │   │   ├── geo-llm-client.ts         # GeoLLMClient 구현
+│   │   │   │   ├── cost-tracker.ts           # 비용 추적
+│   │   │   │   └── response-cache.ts         # 응답 캐시
+│   │   │   ├── pipeline/                  # ★ 파이프라인 실행 엔진 (9-A)
+│   │   │   │   ├── state-machine.ts          # 파이프라인 상태 머신
+│   │   │   │   ├── retry-policy.ts           # 재시도 정책
+│   │   │   │   ├── rollback.ts               # 롤백 엔진
+│   │   │   │   └── error-handler.ts          # ErrorEvent 생성 및 알림
+│   │   │   ├── deploy/                    # ★ 배포 모드별 구현 (9-C)
+│   │   │   │   ├── deployer.ts               # Deployer 인터페이스
+│   │   │   │   ├── git-deployer.ts           # Git push 배포
+│   │   │   │   ├── cms-deployer.ts           # CMS API 배포
+│   │   │   │   └── suggestion-generator.ts   # 제안서 생성 (suggestion_only)
 │   │   │   └── config/
 │   │   │       └── settings.ts            # 설정 관리 (Zod validated)
 │   │   ├── package.json
