@@ -663,50 +663,137 @@ function deltaBadge(delta) {
 function renderEvaluation(data, container) {
 	let html = '';
 
-	// Score overview
+	// ── Score Overview ──────────────────────────────────────
 	const color = scoreColor(data.initial_score);
 	const fColor = data.delta !== 0 ? scoreColor(data.final_score) : color;
 	html += '<div class="card eval-score-card">';
 	html += '<div class="score-circle" style="background:conic-gradient(' + color + ' 0% ' + data.initial_score + '%, var(--border) ' + data.initial_score + '%);">';
 	html += '<span style="color:' + color + ';">' + Math.round(data.initial_score) + '</span></div>';
 	html += '<div style="flex:1;">';
-	html += '<div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Initial Score</div>';
+	html += '<div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">GEO Score</div>';
 	html += '<div style="font-size:24px;font-weight:800;color:' + color + ';">' + data.initial_score.toFixed(1) + '/100</div>';
 	html += '<div style="font-size:13px;color:var(--text-muted);">' + esc(String(data.initial_grade)) + ' · ' + esc(String(data.site_type)) + '</div>';
 	html += '</div>';
 	if (data.delta !== 0) {
-		html += '<div style="text-align:center;padding:0 16px;">';
-		html += '<div style="font-size:20px;">→</div>';
-		html += deltaBadge(data.delta);
-		html += '</div>';
+		html += '<div style="text-align:center;padding:0 16px;"><div style="font-size:20px;">→</div>' + deltaBadge(data.delta) + '</div>';
 		html += '<div class="score-circle" style="background:conic-gradient(' + fColor + ' 0% ' + data.final_score + '%, var(--border) ' + data.final_score + '%);">';
 		html += '<span style="color:' + fColor + ';">' + Math.round(data.final_score) + '</span></div>';
-		html += '<div>';
-		html += '<div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;">Final Score</div>';
-		html += '<div style="font-size:24px;font-weight:800;color:' + fColor + ';">' + data.final_score.toFixed(1) + '/100</div>';
-		html += '</div>';
+		html += '<div><div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;">Final</div>';
+		html += '<div style="font-size:24px;font-weight:800;color:' + fColor + ';">' + data.final_score.toFixed(1) + '/100</div></div>';
 	}
 	html += '</div>';
 
-	// Dimensions
+	// ── 7-Dimension Scores ──────────────────────────────────
 	if (data.dimensions && data.dimensions.length > 0) {
-		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">7-Dimension Scores</h3>';
+		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">📈 7-Dimension GEO Scores</h3>';
 		for (const d of data.dimensions) {
 			const c = scoreColor(d.score);
-			html += '<div class="eval-dim-bar">';
-			html += '<div class="bar-header"><span>' + esc(d.id + ' ' + d.label) + '</span><span style="color:' + c + ';font-weight:600;">' + d.score.toFixed(1) + '</span></div>';
-			html += '<div class="bar-track"><div class="bar-fill" style="width:' + d.score + '%;background:' + c + ';"></div></div>';
-			html += '</div>';
+			html += '<div class="eval-dim-bar"><div class="bar-header"><span>' + esc(d.id + ' ' + d.label) + '</span><span style="color:' + c + ';font-weight:600;">' + d.score.toFixed(1) + '</span></div>';
+			html += '<div class="bar-track"><div class="bar-fill" style="width:' + d.score + '%;background:' + c + ';"></div></div></div>';
 		}
 		html += '</div>';
 	}
 
-	// Multi-page breakdown
+	// ── eval_data sections (detailed GEO evaluation) ────────
+	const ed = data.eval_data;
+	if (ed) {
+		// ── Crawlability: Bot Policy Table ──────────────────
+		if (ed.bot_policies && ed.bot_policies.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🤖 AI Bot Access Policy (robots.txt)</h3>';
+			html += '<div style="overflow-x:auto;"><table class="eval-page-table"><thead><tr><th>Bot</th><th>Service</th><th>Status</th><th>Blocked Paths</th></tr></thead><tbody>';
+			for (const bot of ed.bot_policies) {
+				const statusStyle = bot.status === 'allowed' ? 'color:var(--success)' : bot.status === 'blocked' ? 'color:var(--danger)' : bot.status === 'partial' ? 'color:var(--warning)' : 'color:var(--text-muted)';
+				const statusLabel = bot.status === 'allowed' ? '✅ Allowed' : bot.status === 'blocked' ? '🚫 Blocked' : bot.status === 'partial' ? '⚠️ Partial' : 'ℹ️ Not specified';
+				html += '<tr><td><code>' + esc(bot.bot_name) + '</code></td><td>' + esc(bot.service) + '</td>';
+				html += '<td style="' + statusStyle + ';font-weight:600;">' + statusLabel + '</td>';
+				html += '<td style="font-size:11px;color:var(--text-muted);">' + (bot.disallowed_paths.length > 0 ? esc(bot.disallowed_paths.slice(0, 3).join(', ')) : '-') + '</td></tr>';
+			}
+			html += '</tbody></table></div>';
+
+			// llms.txt status
+			html += '<div style="margin-top:12px;padding:10px 14px;border-radius:6px;border:1px solid ' + (ed.llms_txt.exists ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)') + ';background:' + (ed.llms_txt.exists ? 'rgba(16,185,129,0.05)' : 'rgba(239,68,68,0.05)') + ';">';
+			html += '<span style="font-weight:700;color:' + (ed.llms_txt.exists ? 'var(--success)' : 'var(--danger)') + ';">' + (ed.llms_txt.exists ? '✅ llms.txt exists' : '❌ llms.txt not found (HTTP 404)') + '</span>';
+			if (ed.llms_txt.content_preview) html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;font-family:monospace;white-space:pre-wrap;max-height:60px;overflow:hidden;">' + esc(ed.llms_txt.content_preview.slice(0, 200)) + '</div>';
+			html += '</div></div>';
+		}
+
+		// ── Schema Coverage Matrix ──────────────────────────
+		if (ed.schema_coverage && ed.schema_coverage.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🏗️ Schema.org Coverage Matrix</h3>';
+			html += '<div style="overflow-x:auto;"><table class="eval-page-table"><thead><tr><th>Schema Type</th><th>Present</th><th>Quality</th><th>Details</th></tr></thead><tbody>';
+			for (const sc of ed.schema_coverage) {
+				const qColor = sc.quality === 'excellent' ? 'var(--success)' : sc.quality === 'good' ? 'var(--success)' : sc.quality === 'partial' ? 'var(--warning)' : 'var(--danger)';
+				const icon = sc.present ? '✅' : '❌';
+				html += '<tr><td><strong>' + esc(sc.schema_type) + '</strong></td>';
+				html += '<td>' + icon + '</td>';
+				html += '<td style="color:' + qColor + ';font-weight:600;text-transform:capitalize;">' + esc(sc.quality) + '</td>';
+				html += '<td style="font-size:12px;color:var(--text-muted);">' + esc(sc.details) + '</td></tr>';
+			}
+			html += '</tbody></table></div></div>';
+		}
+
+		// ── Product Info Per Page ────────────────────────────
+		if (ed.product_info && ed.product_info.length > 0) {
+			const hasProducts = ed.product_info.some(function(p) { return p.info.product_name || p.info.prices.length > 0 || p.info.specs_in_schema.length > 0; });
+			if (hasProducts) {
+				html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">📦 Product Information Extracted</h3>';
+				for (const pi of ed.product_info) {
+					if (!pi.info.product_name && pi.info.prices.length === 0 && pi.info.specs_in_schema.length === 0 && pi.info.specs_in_html.length === 0) continue;
+					html += '<div style="padding:10px 0;border-bottom:1px solid rgba(55,65,81,0.3);">';
+					html += '<div style="font-size:12px;color:var(--primary);font-family:monospace;">' + esc(pi.page_url.length > 70 ? '...' + pi.page_url.slice(-65) : pi.page_url) + '</div>';
+					if (pi.info.product_name) html += '<div style="font-weight:700;margin-top:4px;">' + esc(pi.info.product_name) + '</div>';
+					if (pi.info.prices.length > 0) html += '<div style="font-size:12px;color:var(--success);margin-top:2px;">💰 ' + esc(pi.info.prices.slice(0, 5).join(' · ')) + '</div>';
+					if (pi.info.has_aggregate_rating) html += '<div style="font-size:12px;color:var(--warning);margin-top:2px;">⭐ ' + esc(pi.info.rating_value || '') + ' (' + esc(pi.info.review_count || '0') + ' reviews)</div>';
+					if (pi.info.specs_in_schema.length > 0) html += '<div style="font-size:12px;color:var(--success);margin-top:2px;">📐 Schema specs: ' + esc(pi.info.specs_in_schema.slice(0, 5).join(', ')) + '</div>';
+					if (pi.info.specs_in_html.length > 0) html += '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">📄 HTML specs: ' + esc(pi.info.specs_in_html.slice(0, 5).join(', ')) + '</div>';
+					html += '</div>';
+				}
+				html += '</div>';
+			}
+		}
+
+		// ── Marketing Claims ────────────────────────────────
+		if (ed.marketing_claims && ed.marketing_claims.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">💬 Marketing Claims & Verifiability</h3>';
+			html += '<div style="overflow-x:auto;"><table class="eval-page-table"><thead><tr><th>Claim</th><th>Source?</th><th>Verifiability</th></tr></thead><tbody>';
+			for (const cl of ed.marketing_claims) {
+				const vColor = cl.verifiability === 'verifiable' || cl.verifiability === 'factual' ? 'var(--success)' : cl.verifiability === 'partial' ? 'var(--warning)' : 'var(--danger)';
+				html += '<tr><td style="font-size:12px;max-width:400px;">' + esc(cl.text) + '</td>';
+				html += '<td>' + (cl.has_source ? '✅' : '❌') + '</td>';
+				html += '<td style="color:' + vColor + ';font-weight:600;text-transform:capitalize;">' + esc(cl.verifiability) + '</td></tr>';
+			}
+			html += '</tbody></table></div></div>';
+		}
+
+		// ── JS Dependency ───────────────────────────────────
+		if (ed.js_dependency) {
+			const jd = ed.js_dependency;
+			const depColor = jd.estimated_js_dependency > 0.6 ? 'var(--danger)' : jd.estimated_js_dependency > 0.3 ? 'var(--warning)' : 'var(--success)';
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">⚙️ JavaScript Dependency Analysis</h3>';
+			html += '<div style="display:flex;gap:16px;flex-wrap:wrap;">';
+			html += '<div style="flex:1;min-width:150px;padding:12px;background:var(--surface2);border-radius:6px;text-align:center;"><div style="font-size:24px;font-weight:800;">' + jd.script_count + '</div><div style="font-size:11px;color:var(--text-muted);">Total Scripts</div></div>';
+			html += '<div style="flex:1;min-width:150px;padding:12px;background:var(--surface2);border-radius:6px;text-align:center;"><div style="font-size:24px;font-weight:800;">' + jd.external_scripts + '</div><div style="font-size:11px;color:var(--text-muted);">External</div></div>';
+			html += '<div style="flex:1;min-width:150px;padding:12px;background:var(--surface2);border-radius:6px;text-align:center;"><div style="font-size:24px;font-weight:800;color:' + depColor + ';">' + Math.round(jd.estimated_js_dependency * 100) + '%</div><div style="font-size:11px;color:var(--text-muted);">JS Dependency Est.</div></div>';
+			html += '</div>';
+			if (jd.frameworks_detected.length > 0) html += '<div style="margin-top:8px;font-size:12px;color:var(--text-muted);">Frameworks: ' + esc(jd.frameworks_detected.join(', ')) + '</div>';
+			html += '</div>';
+		}
+
+		// ── Blocked Paths ───────────────────────────────────
+		if (ed.blocked_paths && ed.blocked_paths.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🚫 Blocked Paths (AI Bots)</h3>';
+			html += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+			for (const path of ed.blocked_paths.slice(0, 15)) {
+				html += '<span style="font-family:monospace;font-size:11px;padding:3px 8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);border-radius:4px;color:var(--danger);">' + esc(path) + '</span>';
+			}
+			html += '</div></div>';
+		}
+	}
+
+	// ── Multi-page breakdown ────────────────────────────────
 	if (data.multi_page && data.multi_page.pages && data.multi_page.pages.length > 0) {
-		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">Per-Page Scores (' + data.multi_page.page_count + ' pages, aggregate: ' + data.multi_page.aggregate_score + ')</h3>';
-		html += '<div style="overflow-x:auto;"><table class="eval-page-table"><thead><tr>';
-		html += '<th>Page</th><th>Score</th><th>Grade</th>';
-		html += '</tr></thead><tbody>';
+		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🔍 Per-Page GEO Scores (' + data.multi_page.page_count + ' pages, aggregate: ' + data.multi_page.aggregate_score + ')</h3>';
+		html += '<div style="overflow-x:auto;"><table class="eval-page-table"><thead><tr><th>Page</th><th>Score</th><th>Grade</th></tr></thead><tbody>';
 		for (const p of data.multi_page.pages) {
 			const pc = scoreColor(p.score);
 			const urlShort = p.url ? (p.url.length > 60 ? '...' + p.url.slice(-55) : p.url) : p.filename;
@@ -717,9 +804,9 @@ function renderEvaluation(data, container) {
 		html += '</tbody></table></div></div>';
 	}
 
-	// Stage execution summary
+	// ── Stage Execution Summary ─────────────────────────────
 	if (data.stages && data.stages.length > 0) {
-		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">Stage Execution Summary</h3>';
+		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">⏱️ Pipeline Execution Summary</h3>';
 		for (const s of data.stages) {
 			const icon = s.status === 'completed' ? '✅' : s.status === 'failed' ? '❌' : s.status === 'running' ? '🔄' : '⏳';
 			const dur = s.duration_ms ? ' (' + (s.duration_ms / 1000).toFixed(1) + 's)' : '';

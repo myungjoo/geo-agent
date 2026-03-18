@@ -39,6 +39,7 @@ export * from "./agents/validation-agent.js";
 export * from "./agents/pipeline-runner.js";
 export * from "./agents/synthetic-probes.js";
 export * from "./agents/types.js";
+export * from "./agents/geo-eval-extractor.js";
 
 // Evaluation Templates
 export * from "./prompts/evaluation-templates/index.js";

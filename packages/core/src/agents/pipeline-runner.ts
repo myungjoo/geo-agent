@@ -216,6 +216,7 @@ export async function runPipeline(
 							per_dimension_averages: out.multi_page.per_dimension_averages,
 						}
 					: null,
+				eval_data: out.eval_data,
 			}),
 		);
 	});

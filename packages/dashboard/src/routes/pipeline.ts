@@ -280,6 +280,7 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 		site_type: initial.site_type ?? "unknown",
 		dimensions: initial.dimensions ?? [],
 		multi_page: initial.multi_page ?? null,
+		eval_data: initial.eval_data ?? null,
 		validation: final_data,
 		stages: stages.map((s) => ({
 			stage: s.stage,

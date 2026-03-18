@@ -10,6 +10,7 @@
 import { v4 as uuidv4 } from "uuid";
 import type { AnalysisReport } from "../models/analysis-report.js";
 import type { GeoScore } from "../models/geo-score.js";
+import { type GeoEvaluationData, extractGeoEvaluationData } from "./geo-eval-extractor.js";
 import type {
 	CrawlData,
 	MultiPageAnalysisResult,
@@ -49,6 +50,8 @@ export interface AnalysisOutput {
 	multi_page: MultiPageAnalysisResult | null;
 	/** 클론 저장용 전체 페이지 데이터. null이면 단일 페이지. */
 	all_pages: Array<{ filename: string; crawl_data: CrawlData }> | null;
+	/** 상세 GEO 평가 데이터 (봇 정책, 스키마 커버리지, 클레임, JS 의존성, 제품 정보) */
+	eval_data: GeoEvaluationData;
 }
 
 // ── Helper: CrawlData → AnalysisReport 변환 ─────────────────
@@ -323,6 +326,14 @@ export async function runAnalysis(
 			}
 		: geoScores;
 
+	// 6. Extract detailed GEO evaluation data
+	const subPages = allPages?.map((p) => ({
+		url: p.crawl_data.url,
+		filename: p.filename,
+		crawl_data: p.crawl_data,
+	})) ?? [];
+	const evalData = extractGeoEvaluationData(crawlData, subPages);
+
 	return {
 		report,
 		crawl_data: crawlData,
@@ -330,5 +341,6 @@ export async function runAnalysis(
 		geo_scores: finalGeoScores,
 		multi_page: multiPage,
 		all_pages: allPages,
+		eval_data: evalData,
 	};
 }
