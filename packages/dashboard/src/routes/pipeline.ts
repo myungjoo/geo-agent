@@ -1,12 +1,20 @@
 import {
+	type AppSettings,
 	type GeoDatabase,
 	PipelineRepository,
 	StageExecutionRepository,
+	TargetRepository,
+	type PipelineConfig,
+	type PipelineDeps,
+	type StageCallbacks,
+	runPipeline,
+	classifySite,
 } from "@geo-agent/core";
+import { crawlTarget, scoreTarget } from "@geo-agent/skills";
 /**
  * Pipeline & Cycle Control Routes
  *
- * /api/targets/:id/pipeline — 파이프라인 관리
+ * /api/targets/:id/pipeline — 파이프라인 관리 + 실행
  * /api/targets/:id/pipeline/:pipelineId/stages — 스테이지 실행 기록
  * /api/targets/:id/cycle    — 사이클 제어
  */
@@ -14,10 +22,17 @@ import { Hono } from "hono";
 
 let sharedPipelineRepo: PipelineRepository | null = null;
 let sharedStageRepo: StageExecutionRepository | null = null;
+let sharedTargetRepo: TargetRepository | null = null;
+let sharedSettings: AppSettings | null = null;
 
-export function initPipelineRouter(db: GeoDatabase): void {
+export function initPipelineRouter(
+	db: GeoDatabase,
+	settings?: AppSettings,
+): void {
 	sharedPipelineRepo = new PipelineRepository(db);
 	sharedStageRepo = new StageExecutionRepository(db);
+	sharedTargetRepo = new TargetRepository(db);
+	if (settings) sharedSettings = settings;
 }
 
 function getRepo(): PipelineRepository {
@@ -33,6 +48,16 @@ function getStageRepo(): StageExecutionRepository {
 	}
 	return sharedStageRepo;
 }
+
+function getTargetRepo(): TargetRepository {
+	if (!sharedTargetRepo) {
+		throw new Error("Pipeline router not initialized. Call initPipelineRouter(db) at startup.");
+	}
+	return sharedTargetRepo;
+}
+
+// Track running pipelines to prevent double execution
+const runningPipelines = new Set<string>();
 
 const pipelineRouter = new Hono();
 
@@ -55,13 +80,105 @@ pipelineRouter.get("/:id/pipeline/latest", async (c) => {
 	return c.json(pipeline);
 });
 
-// POST /api/targets/:id/pipeline — 새 파이프라인 실행 시작
+// POST /api/targets/:id/pipeline — 새 파이프라인 생성 (+ execute=true 시 비동기 실행)
 pipelineRouter.post("/:id/pipeline", async (c) => {
 	const repo = getRepo();
 	const targetId = c.req.param("id");
+	const shouldExecute = c.req.query("execute") === "true";
+
+	if (shouldExecute) {
+		// Prevent double execution
+		if (runningPipelines.has(targetId)) {
+			return c.json({ error: "Pipeline already running for this target" }, 409);
+		}
+
+		const targetRepo = getTargetRepo();
+		const target = await targetRepo.findById(targetId);
+		if (!target) {
+			return c.json({ error: "Target not found" }, 404);
+		}
+
+		const pipeline = await repo.create(targetId);
+		const stageRepo = getStageRepo();
+
+		// Build stage callbacks
+		const stageCallbacks: StageCallbacks = {
+			onStageStart: async (_pipelineId, stage, cycle, promptSummary) => {
+				await repo.updateStage(pipeline.pipeline_id, stage as never);
+				const exec = await stageRepo.create(
+					pipeline.pipeline_id,
+					stage,
+					cycle,
+					promptSummary,
+				);
+				return exec.id;
+			},
+			onStageComplete: async (executionId, resultSummary, resultFull) => {
+				await stageRepo.complete(executionId, resultSummary, resultFull);
+			},
+			onStageFail: async (executionId, error) => {
+				await stageRepo.fail(executionId, error);
+			},
+		};
+
+		const deps: PipelineDeps = {
+			crawlTarget,
+			scoreTarget,
+			classifySite,
+		};
+
+		const config: PipelineConfig = {
+			target_id: targetId,
+			target_url: target.url,
+			workspace_dir: sharedSettings?.workspace_dir ?? "./run",
+			stageCallbacks,
+		};
+
+		// Fire-and-forget: execute pipeline in background
+		runningPipelines.add(targetId);
+		executePipelineAsync(pipeline.pipeline_id, targetId, config, deps, repo).finally(
+			() => {
+				runningPipelines.delete(targetId);
+			},
+		);
+
+		return c.json(pipeline, 201);
+	}
+
+	// Default: just create DB record (no execution)
 	const pipeline = await repo.create(targetId);
 	return c.json(pipeline, 201);
 });
+
+/**
+ * Runs the pipeline asynchronously, updating DB state as it progresses.
+ */
+async function executePipelineAsync(
+	pipelineId: string,
+	targetId: string,
+	config: PipelineConfig,
+	deps: PipelineDeps,
+	repo: PipelineRepository,
+): Promise<void> {
+	try {
+		console.log(`⏳ Pipeline started for target ${targetId} (${config.target_url})`);
+		const result = await runPipeline(config, deps);
+
+		if (result.success) {
+			await repo.updateStage(pipelineId, "COMPLETED");
+			console.log(
+				`✅ Pipeline completed for ${targetId}: ${result.initial_score} → ${result.final_score} (+${result.delta})`,
+			);
+		} else {
+			await repo.setError(pipelineId, result.error ?? "Unknown error");
+			console.log(`❌ Pipeline failed for ${targetId}: ${result.error}`);
+		}
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		await repo.setError(pipelineId, msg);
+		console.error(`❌ Pipeline crashed for ${targetId}:`, msg);
+	}
+}
 
 // PUT /api/targets/:id/pipeline/:pipelineId/stage — 스테이지 변경
 pipelineRouter.put("/:id/pipeline/:pipelineId/stage", async (c) => {

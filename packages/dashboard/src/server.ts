@@ -122,7 +122,7 @@ export async function startServer(port?: number): Promise<{ settings: AppSetting
 	const db = createDatabase(settings);
 	await ensureTables(db);
 	initTargetsRouter(db);
-	initPipelineRouter(db);
+	initPipelineRouter(db, settings);
 
 	const serverPort = port ?? settings.port;
 

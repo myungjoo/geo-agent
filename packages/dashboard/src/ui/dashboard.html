@@ -506,7 +506,7 @@ async function loadPipelines() {
 					</div>
 					<div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
 						<span class="stage-badge stage-${status.stage}">${status.stage}</span>
-						${!status.is_terminal ? '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();stopPipeline(\''+t.id+'\')">Stop</button>' : ''}
+						${!status.is_terminal ? '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();stopPipeline(\''+t.id+'\')">Stop</button>' : '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();startPipeline(\''+t.id+'\')">Re-run</button>'}
 					</div>
 				</div>
 				<div style="margin-top:6px;font-size:12px;color:var(--text-muted);">
@@ -572,7 +572,7 @@ async function togglePipeline(card, targetId, pipelineId) {
 
 async function startPipeline(targetId) {
 	try {
-		await api('/api/targets/' + targetId + '/pipeline', { method: 'POST' });
+		await api('/api/targets/' + targetId + '/pipeline?execute=true', { method: 'POST' });
 		toast('Pipeline started');
 		loadPipelines();
 	} catch (e) { toast(e.message, 'error'); }

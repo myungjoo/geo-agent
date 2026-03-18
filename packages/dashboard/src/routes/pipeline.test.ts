@@ -25,12 +25,13 @@ const settings = loadSettings();
 const db = createDatabase(settings);
 await ensureTables(db);
 initTargetsRouter(db);
-initPipelineRouter(db);
+initPipelineRouter(db, settings);
 
 // ── Helpers ────────────────────────────────────────────────────
 
 async function clearAll(): Promise<void> {
 	const client = createClient({ url: `file:${dbPath}` });
+	await client.execute("DELETE FROM stage_executions");
 	await client.execute("DELETE FROM pipeline_runs");
 	await client.execute("DELETE FROM targets");
 	client.close();
