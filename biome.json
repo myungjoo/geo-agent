@@ -1,7 +1,7 @@
 {
 	"$schema": "https://biomejs.dev/schemas/1.9.0/schema.json",
 	"files": {
-		"ignore": ["dist/**", "node_modules/**", "*.tsbuildinfo", "drizzle/**"]
+		"ignore": ["dist/**", "node_modules/**", "*.tsbuildinfo", "drizzle/**", ".claude/**"]
 	},
 	"organizeImports": {
 		"enabled": true

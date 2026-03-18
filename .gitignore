@@ -21,6 +21,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Claude Code local settings
+.claude/settings.local.json
+
 # Workspace runtime data
 workspace/data/
 workspace/skills/
