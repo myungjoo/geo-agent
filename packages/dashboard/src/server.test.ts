@@ -1,8 +1,8 @@
-import { describe, it, expect, afterAll } from "vitest";
-import path from "node:path";
 import fs from "node:fs";
-import os from "node:os";
 import net from "node:net";
+import os from "node:os";
+import path from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
 
 const testDir = path.join(os.tmpdir(), `geo-server-test-${Date.now()}`);
 process.env.GEO_WORKSPACE = testDir;

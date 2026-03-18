@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createSkillRegistry, getBundledSkills } from "./index.js";
 import type { SkillMetadata, SkillRegistry } from "./index.js";
 
@@ -148,11 +148,15 @@ describe("executeSkill", () => {
 			}),
 		});
 
-		const result = await registry.executeSkill("echo-skill", {
-			target_id: "test",
-			target_url: "https://example.com",
-			workspace_dir: "/tmp",
-		}, { message: "hello" });
+		const result = await registry.executeSkill(
+			"echo-skill",
+			{
+				target_id: "test",
+				target_url: "https://example.com",
+				workspace_dir: "/tmp",
+			},
+			{ message: "hello" },
+		);
 
 		expect(result.success).toBe(true);
 		expect(result.data).toEqual({ message: "hello" });

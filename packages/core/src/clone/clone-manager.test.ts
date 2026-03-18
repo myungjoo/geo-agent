@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { CloneManager, CloneMetadataSchema } from "./clone-manager.js";
 import { v4 as uuidv4 } from "uuid";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { CloneManager, CloneMetadataSchema } from "./clone-manager.js";
 
 describe("CloneManager", () => {
 	let tmpDir: string;
@@ -48,21 +48,19 @@ describe("CloneManager", () => {
 		expect(fs.existsSync(path.join(clonePath, "original"))).toBe(true);
 		expect(fs.existsSync(path.join(clonePath, "working"))).toBe(true);
 		expect(fs.existsSync(path.join(clonePath, "metadata.json"))).toBe(true);
-		expect(
-			fs.readFileSync(path.join(clonePath, "original", "index.html"), "utf-8"),
-		).toBe(htmlContent);
-		expect(
-			fs.readFileSync(path.join(clonePath, "working", "index.html"), "utf-8"),
-		).toBe(htmlContent);
+		expect(fs.readFileSync(path.join(clonePath, "original", "index.html"), "utf-8")).toBe(
+			htmlContent,
+		);
+		expect(fs.readFileSync(path.join(clonePath, "working", "index.html"), "utf-8")).toBe(
+			htmlContent,
+		);
 
 		expect(metadata.target_id).toBe(targetId);
 		expect(metadata.source_url).toBe(sourceUrl);
 		expect(metadata.status).toBe("ready");
 		expect(metadata.file_count).toBe(1);
 		expect(metadata.cycle_count).toBe(0);
-		expect(metadata.total_size_bytes).toBe(
-			Buffer.byteLength(htmlContent, "utf-8"),
-		);
+		expect(metadata.total_size_bytes).toBe(Buffer.byteLength(htmlContent, "utf-8"));
 	});
 
 	// 4. createClone with additionalFiles stores extra files
@@ -71,26 +69,15 @@ describe("CloneManager", () => {
 		additional.set("styles/main.css", "body { color: red; }");
 		additional.set("scripts/app.js", "console.log('hello');");
 
-		const metadata = manager.createClone(
-			targetId,
-			sourceUrl,
-			htmlContent,
-			additional,
-		);
+		const metadata = manager.createClone(targetId, sourceUrl, htmlContent, additional);
 
 		const clonePath = manager.getClonePath(targetId);
-		expect(
-			fs.readFileSync(
-				path.join(clonePath, "original", "styles", "main.css"),
-				"utf-8",
-			),
-		).toBe("body { color: red; }");
-		expect(
-			fs.readFileSync(
-				path.join(clonePath, "working", "scripts", "app.js"),
-				"utf-8",
-			),
-		).toBe("console.log('hello');");
+		expect(fs.readFileSync(path.join(clonePath, "original", "styles", "main.css"), "utf-8")).toBe(
+			"body { color: red; }",
+		);
+		expect(fs.readFileSync(path.join(clonePath, "working", "scripts", "app.js"), "utf-8")).toBe(
+			"console.log('hello');",
+		);
 		expect(metadata.file_count).toBe(3);
 	});
 
@@ -223,9 +210,7 @@ describe("CloneManager", () => {
 	});
 
 	it("incrementCycle throws for non-existent clone", () => {
-		expect(() => manager.incrementCycle("no-such")).toThrow(
-			"Clone not found: no-such",
-		);
+		expect(() => manager.incrementCycle("no-such")).toThrow("Clone not found: no-such");
 	});
 
 	// 15. getDiff returns original vs working content
@@ -259,17 +244,12 @@ describe("CloneManager", () => {
 		// Archived directory should exist under baseDir with _archived_ suffix
 		const baseDir = manager.getBaseDir();
 		const entries = fs.readdirSync(baseDir);
-		const archivedEntry = entries.find(
-			(e) => e.startsWith(targetId) && e.includes("_archived_"),
-		);
+		const archivedEntry = entries.find((e) => e.startsWith(targetId) && e.includes("_archived_"));
 		expect(archivedEntry).toBeTruthy();
 
 		// Read metadata from archived directory to verify status
 		const archivedMeta = JSON.parse(
-			fs.readFileSync(
-				path.join(baseDir, archivedEntry!, "metadata.json"),
-				"utf-8",
-			),
+			fs.readFileSync(path.join(baseDir, archivedEntry!, "metadata.json"), "utf-8"),
 		);
 		expect(archivedMeta.status).toBe("archived");
 	});
@@ -357,13 +337,7 @@ describe("CloneManager", () => {
 		});
 
 		it("accepts all valid status values", () => {
-			const statuses = [
-				"creating",
-				"ready",
-				"modifying",
-				"archived",
-				"failed",
-			] as const;
+			const statuses = ["creating", "ready", "modifying", "archived", "failed"] as const;
 			const now = new Date().toISOString();
 			for (const status of statuses) {
 				const obj = {
@@ -409,9 +383,7 @@ describe("CloneManager", () => {
 
 		// Archived version should exist
 		const entries = fs.readdirSync(manager.getBaseDir());
-		const archivedEntry = entries.find(
-			(e) => e.startsWith(targetId) && e.includes("_archived_"),
-		);
+		const archivedEntry = entries.find((e) => e.startsWith(targetId) && e.includes("_archived_"));
 		expect(archivedEntry).toBeTruthy();
 	});
 
@@ -424,10 +396,7 @@ describe("CloneManager", () => {
 		expect(content).toBe('{"key":"value"}');
 
 		// Original should not have this file
-		const originalContent = manager.readOriginalFile(
-			targetId,
-			"data/config.json",
-		);
+		const originalContent = manager.readOriginalFile(targetId, "data/config.json");
 		expect(originalContent).toBeNull();
 	});
 });

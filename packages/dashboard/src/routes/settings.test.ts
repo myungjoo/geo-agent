@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
+import path from "node:path";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 const testDir = path.join(os.tmpdir(), `geo-settings-test-${Date.now()}`);
 
@@ -397,7 +397,8 @@ describe("Integration: update -> get -> reset -> get default flow", () => {
 		const defaultPrompt = await defaultRes.json();
 
 		// Step 2: Update the prompt
-		const customInstruction = "This is a completely custom optimization prompt for integration testing.";
+		const customInstruction =
+			"This is a completely custom optimization prompt for integration testing.";
 		const updateRes = await app.request(`/api/settings/agents/prompts/${agentId}`, {
 			method: "PUT",
 			headers: { "Content-Type": "application/json" },

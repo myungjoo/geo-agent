@@ -1,17 +1,14 @@
-import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
-import os from "node:os";
-import fs from "node:fs";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { createClient } from "@libsql/client";
+import { afterEach, describe, expect, it } from "vitest";
+import { type AppSettings, AppSettingsSchema } from "../config/settings.js";
 import { createDatabase, ensureTables } from "./connection.js";
-import { AppSettingsSchema, type AppSettings } from "../config/settings.js";
 
 function makeTmpDir(): string {
-	const dir = path.join(
-		os.tmpdir(),
-		`geo-db-test-${crypto.randomBytes(8).toString("hex")}`,
-	);
+	const dir = path.join(os.tmpdir(), `geo-db-test-${crypto.randomBytes(8).toString("hex")}`);
 	fs.mkdirSync(dir, { recursive: true });
 	return dir;
 }
@@ -50,10 +47,7 @@ describe("createDatabase", () => {
 		const settings = makeSettings();
 		createDatabase(settings);
 
-		const expectedPath = path.join(
-			settings.workspace_dir,
-			settings.db_path,
-		);
+		const expectedPath = path.join(settings.workspace_dir, settings.db_path);
 		expect(fs.existsSync(expectedPath)).toBe(true);
 	});
 
@@ -61,11 +55,7 @@ describe("createDatabase", () => {
 		const settings = makeSettings({ db_path: "subdir/test.db" });
 		createDatabase(settings);
 
-		const expectedPath = path.join(
-			settings.workspace_dir,
-			"subdir",
-			"test.db",
-		);
+		const expectedPath = path.join(settings.workspace_dir, "subdir", "test.db");
 		expect(fs.existsSync(expectedPath)).toBe(true);
 	});
 
@@ -83,12 +73,7 @@ describe("createDatabase", () => {
 		const settings = makeSettings({
 			db_path: "deep/nested/dir/test.db",
 		});
-		const expectedDir = path.join(
-			settings.workspace_dir,
-			"deep",
-			"nested",
-			"dir",
-		);
+		const expectedDir = path.join(settings.workspace_dir, "deep", "nested", "dir");
 
 		createDatabase(settings);
 
@@ -101,10 +86,7 @@ describe("createDatabase", () => {
 		const db = createDatabase(settings);
 		await ensureTables(db);
 
-		const dbPath = path.join(
-			settings.workspace_dir,
-			settings.db_path,
-		);
+		const dbPath = path.join(settings.workspace_dir, settings.db_path);
 		const client = createClient({ url: `file:${dbPath}` });
 		const result = await client.execute("PRAGMA journal_mode");
 		client.close();
@@ -117,10 +99,7 @@ describe("createDatabase", () => {
 		const db = createDatabase(settings);
 		await ensureTables(db);
 
-		const dbPath = path.join(
-			settings.workspace_dir,
-			settings.db_path,
-		);
+		const dbPath = path.join(settings.workspace_dir, settings.db_path);
 		const client = createClient({ url: `file:${dbPath}` });
 		const result = await client.execute("PRAGMA foreign_keys");
 		client.close();

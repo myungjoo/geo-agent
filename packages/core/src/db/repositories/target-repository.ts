@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
+import type { CreateTarget, TargetProfile, UpdateTarget } from "../../models/target-profile.js";
 import type { GeoDatabase } from "../connection.js";
 import { targets } from "../schema.js";
-import type { TargetProfile, CreateTarget, UpdateTarget } from "../../models/target-profile.js";
 
 const DEFAULT_NOTIFICATIONS = {
 	on_score_drop: true,
@@ -20,10 +20,7 @@ export class TargetRepository {
 	}
 
 	async findById(id: string): Promise<TargetProfile | null> {
-		const rows = await this.db
-			.select()
-			.from(targets)
-			.where(eq(targets.id, id));
+		const rows = await this.db.select().from(targets).where(eq(targets.id, id));
 		return rows.length > 0 ? this.toModel(rows[0]) : null;
 	}
 
@@ -53,10 +50,7 @@ export class TargetRepository {
 		return this.findById(record.id) as Promise<TargetProfile>;
 	}
 
-	async update(
-		id: string,
-		input: UpdateTarget,
-	): Promise<TargetProfile | null> {
+	async update(id: string, input: UpdateTarget): Promise<TargetProfile | null> {
 		const existing = await this.findById(id);
 		if (!existing) return null;
 
@@ -68,21 +62,14 @@ export class TargetRepository {
 		if (input.name !== undefined) updates.name = input.name;
 		if (input.description !== undefined) updates.description = input.description;
 		if (input.topics !== undefined) updates.topics = input.topics;
-		if (input.target_queries !== undefined)
-			updates.target_queries = input.target_queries;
+		if (input.target_queries !== undefined) updates.target_queries = input.target_queries;
 		if (input.audience !== undefined) updates.audience = input.audience;
-		if (input.competitors !== undefined)
-			updates.competitors = input.competitors;
-		if (input.business_goal !== undefined)
-			updates.business_goal = input.business_goal;
-		if (input.llm_priorities !== undefined)
-			updates.llm_priorities = input.llm_priorities;
-		if (input.clone_base_path !== undefined)
-			updates.clone_base_path = input.clone_base_path;
-		if (input.site_type !== undefined)
-			updates.site_type = input.site_type;
-		if (input.notifications !== undefined)
-			updates.notifications = input.notifications;
+		if (input.competitors !== undefined) updates.competitors = input.competitors;
+		if (input.business_goal !== undefined) updates.business_goal = input.business_goal;
+		if (input.llm_priorities !== undefined) updates.llm_priorities = input.llm_priorities;
+		if (input.clone_base_path !== undefined) updates.clone_base_path = input.clone_base_path;
+		if (input.site_type !== undefined) updates.site_type = input.site_type;
+		if (input.notifications !== undefined) updates.notifications = input.notifications;
 		if (input.monitoring_interval !== undefined)
 			updates.monitoring_interval = input.monitoring_interval;
 

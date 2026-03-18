@@ -1,10 +1,7 @@
 import { z } from "zod";
 import { GeoScoreSchema } from "./geo-score.js";
+import { InfoRecognitionPerLLMSchema, InfoRecognitionScoreSchema } from "./info-recognition.js";
 import { LLMProbeSchema } from "./llm-probe.js";
-import {
-	InfoRecognitionScoreSchema,
-	InfoRecognitionPerLLMSchema,
-} from "./info-recognition.js";
 
 export const ValidationLLMResultSchema = z.object({
 	llm_service: z.string(),

@@ -1,21 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { AgentPromptConfig, AgentId } from "../models/agent-prompt-config.js";
+import type { AgentId, AgentPromptConfig } from "../models/agent-prompt-config.js";
 import { DEFAULT_PROMPTS } from "./defaults.js";
 
 /**
  * Loads a prompt config for a given agent.
  * Priority: workspace custom > default.
  */
-export function loadPrompt(
-	workspaceDir: string,
-	agentId: AgentId,
-): AgentPromptConfig {
-	const customPath = path.join(
-		workspaceDir,
-		"prompts",
-		`${agentId}.json`,
-	);
+export function loadPrompt(workspaceDir: string, agentId: AgentId): AgentPromptConfig {
+	const customPath = path.join(workspaceDir, "prompts", `${agentId}.json`);
 
 	if (fs.existsSync(customPath)) {
 		try {
@@ -40,10 +33,7 @@ export function loadPrompt(
 /**
  * Saves a custom prompt config to workspace.
  */
-export function savePrompt(
-	workspaceDir: string,
-	config: AgentPromptConfig,
-): void {
+export function savePrompt(workspaceDir: string, config: AgentPromptConfig): void {
 	const promptDir = path.join(workspaceDir, "prompts");
 	fs.mkdirSync(promptDir, { recursive: true });
 
@@ -54,15 +44,8 @@ export function savePrompt(
 /**
  * Resets a prompt to default by deleting the custom file.
  */
-export function resetPrompt(
-	workspaceDir: string,
-	agentId: AgentId,
-): AgentPromptConfig {
-	const customPath = path.join(
-		workspaceDir,
-		"prompts",
-		`${agentId}.json`,
-	);
+export function resetPrompt(workspaceDir: string, agentId: AgentId): AgentPromptConfig {
+	const customPath = path.join(workspaceDir, "prompts", `${agentId}.json`);
 
 	if (fs.existsSync(customPath)) {
 		fs.unlinkSync(customPath);
@@ -74,9 +57,7 @@ export function resetPrompt(
 /**
  * Loads all agent prompt configs.
  */
-export function loadAllPrompts(
-	workspaceDir: string,
-): AgentPromptConfig[] {
+export function loadAllPrompts(workspaceDir: string): AgentPromptConfig[] {
 	const agentIds: AgentId[] = [
 		"orchestrator",
 		"analysis",
@@ -92,10 +73,7 @@ export function loadAllPrompts(
 /**
  * Injects context slot values into a system instruction.
  */
-export function injectSlots(
-	instruction: string,
-	slotValues: Record<string, string>,
-): string {
+export function injectSlots(instruction: string, slotValues: Record<string, string>): string {
 	let result = instruction;
 	for (const [slot, value] of Object.entries(slotValues)) {
 		result = result.replaceAll(slot, value);

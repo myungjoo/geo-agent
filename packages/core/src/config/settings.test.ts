@@ -1,20 +1,12 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
-import path from "node:path";
-import os from "node:os";
-import fs from "node:fs";
 import crypto from "node:crypto";
-import {
-	AppSettingsSchema,
-	loadSettings,
-	saveSettings,
-	initWorkspace,
-} from "./settings.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AppSettingsSchema, initWorkspace, loadSettings, saveSettings } from "./settings.js";
 
 function makeTmpDir(): string {
-	const dir = path.join(
-		os.tmpdir(),
-		`geo-settings-test-${crypto.randomBytes(8).toString("hex")}`,
-	);
+	const dir = path.join(os.tmpdir(), `geo-settings-test-${crypto.randomBytes(8).toString("hex")}`);
 	fs.mkdirSync(dir, { recursive: true });
 	return dir;
 }
@@ -45,9 +37,7 @@ describe("AppSettingsSchema", () => {
 	it("applies all default values when given an empty object", () => {
 		const result = AppSettingsSchema.parse({});
 
-		expect(result.workspace_dir).toBe(
-			path.join(os.homedir(), ".geo-agent"),
-		);
+		expect(result.workspace_dir).toBe(path.join(os.homedir(), ".geo-agent"));
 		expect(result.db_path).toBe("data/geo-agent.db");
 		expect(result.port).toBe(3000);
 		expect(result.default_model).toBe("gpt-4o");
@@ -73,27 +63,19 @@ describe("AppSettingsSchema", () => {
 	});
 
 	it("rejects a negative port number", () => {
-		expect(() =>
-			AppSettingsSchema.parse({ port: -1 }),
-		).toThrow();
+		expect(() => AppSettingsSchema.parse({ port: -1 })).toThrow();
 	});
 
 	it("rejects port 0", () => {
-		expect(() =>
-			AppSettingsSchema.parse({ port: 0 }),
-		).toThrow();
+		expect(() => AppSettingsSchema.parse({ port: 0 })).toThrow();
 	});
 
 	it("rejects a float port number", () => {
-		expect(() =>
-			AppSettingsSchema.parse({ port: 3000.5 }),
-		).toThrow();
+		expect(() => AppSettingsSchema.parse({ port: 3000.5 })).toThrow();
 	});
 
 	it("rejects an invalid log_level", () => {
-		expect(() =>
-			AppSettingsSchema.parse({ log_level: "verbose" }),
-		).toThrow();
+		expect(() => AppSettingsSchema.parse({ log_level: "verbose" })).toThrow();
 	});
 });
 
@@ -114,10 +96,7 @@ describe("loadSettings", () => {
 	it("reads config.json from the specified directory", () => {
 		const dir = trackTmpDir();
 		const config = { port: 9999, default_model: "claude-3-sonnet" };
-		fs.writeFileSync(
-			path.join(dir, "config.json"),
-			JSON.stringify(config),
-		);
+		fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify(config));
 
 		const settings = loadSettings(dir);
 
@@ -131,10 +110,7 @@ describe("loadSettings", () => {
 	it("reads GEO_WORKSPACE env var when no argument is passed", () => {
 		const dir = trackTmpDir();
 		const config = { port: 7777 };
-		fs.writeFileSync(
-			path.join(dir, "config.json"),
-			JSON.stringify(config),
-		);
+		fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify(config));
 		vi.stubEnv("GEO_WORKSPACE", dir);
 
 		const settings = loadSettings();
@@ -146,14 +122,8 @@ describe("loadSettings", () => {
 	it("explicit argument takes priority over GEO_WORKSPACE", () => {
 		const envDir = trackTmpDir();
 		const argDir = trackTmpDir();
-		fs.writeFileSync(
-			path.join(envDir, "config.json"),
-			JSON.stringify({ port: 1111 }),
-		);
-		fs.writeFileSync(
-			path.join(argDir, "config.json"),
-			JSON.stringify({ port: 2222 }),
-		);
+		fs.writeFileSync(path.join(envDir, "config.json"), JSON.stringify({ port: 1111 }));
+		fs.writeFileSync(path.join(argDir, "config.json"), JSON.stringify({ port: 2222 }));
 		vi.stubEnv("GEO_WORKSPACE", envDir);
 
 		const settings = loadSettings(argDir);
@@ -174,10 +144,7 @@ describe("loadSettings", () => {
 	});
 
 	it("handles a non-existent directory gracefully", () => {
-		const dir = path.join(
-			os.tmpdir(),
-			`geo-nonexistent-${crypto.randomBytes(8).toString("hex")}`,
-		);
+		const dir = path.join(os.tmpdir(), `geo-nonexistent-${crypto.randomBytes(8).toString("hex")}`);
 		// Ensure it does NOT exist
 		expect(fs.existsSync(dir)).toBe(false);
 
@@ -192,11 +159,7 @@ describe("loadSettings", () => {
 
 describe("saveSettings", () => {
 	it("creates the directory if needed and writes valid JSON", () => {
-		const dir = path.join(
-			trackTmpDir(),
-			"nested",
-			"workspace",
-		);
+		const dir = path.join(trackTmpDir(), "nested", "workspace");
 
 		const settings = AppSettingsSchema.parse({ workspace_dir: dir });
 		saveSettings(settings);

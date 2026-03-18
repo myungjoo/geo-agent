@@ -1,3 +1,8 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
 /**
  * REGRESSION TEST FILE: Known bugs discovered during testing.
  *
@@ -6,17 +11,12 @@
  * with it.fails() so the overall suite still passes while documenting
  * the expected behavior.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import path from "node:path";
-import fs from "node:fs";
-import os from "node:os";
-import { createClient } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
-import * as schema from "./db/schema.js";
-import { TargetRepository } from "./db/repositories/target-repository.js";
-import type { CreateTarget } from "./models/target-profile.js";
-import { loadSettings, AppSettingsSchema, initWorkspace, saveSettings } from "./config/settings.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { AppSettingsSchema, initWorkspace, loadSettings, saveSettings } from "./config/settings.js";
 import { createDatabase, ensureTables } from "./db/connection.js";
+import { TargetRepository } from "./db/repositories/target-repository.js";
+import * as schema from "./db/schema.js";
+import type { CreateTarget } from "./models/target-profile.js";
 
 // ─── Test helpers ─────────────────────────────────────────────────
 
@@ -181,9 +181,7 @@ describe("BUG #1: JSON fields returned as strings instead of parsed arrays/objec
 		const db = await createTestDb();
 		const repo = new TargetRepository(db);
 
-		const llm_priorities = [
-			{ llm_service: "openai", priority: "critical" as const },
-		];
+		const llm_priorities = [{ llm_service: "openai", priority: "critical" as const }];
 		const input = makeCreateTarget({ llm_priorities });
 		const result = await repo.create(input);
 
@@ -191,7 +189,6 @@ describe("BUG #1: JSON fields returned as strings instead of parsed arrays/objec
 		expect(typeof result.llm_priorities).not.toBe("string");
 		expect(result.llm_priorities).toEqual(llm_priorities);
 	});
-
 });
 
 // ─── BUG #2: notifications null when not provided ────────────────

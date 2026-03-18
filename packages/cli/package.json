@@ -1,22 +1,22 @@
 {
-  "name": "@geo-agent/cli",
-  "version": "0.1.0",
-  "description": "GEO Agent CLI (service start/stop + skill management)",
-  "type": "module",
-  "bin": {
-    "geo": "dist/index.js"
-  },
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "scripts": {
-    "build": "tsc -b",
-    "dev": "node --import tsx src/index.ts",
-    "test": "vitest run",
-    "clean": "rimraf dist .tsbuildinfo"
-  },
-  "dependencies": {
-    "@geo-agent/core": "*",
-    "@geo-agent/dashboard": "*",
-    "commander": "^12.0.0"
-  }
+	"name": "@geo-agent/cli",
+	"version": "0.1.0",
+	"description": "GEO Agent CLI (service start/stop + skill management)",
+	"type": "module",
+	"bin": {
+		"geo": "dist/index.js"
+	},
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"scripts": {
+		"build": "tsc -b",
+		"dev": "node --import tsx src/index.ts",
+		"test": "vitest run",
+		"clean": "rimraf dist .tsbuildinfo"
+	},
+	"dependencies": {
+		"@geo-agent/core": "*",
+		"@geo-agent/dashboard": "*",
+		"commander": "^12.0.0"
+	}
 }

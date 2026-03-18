@@ -14,13 +14,7 @@ export const OptimizationTaskSchema = z.object({
 
 	info_recognition_ref: z.string().nullable(),
 
-	status: z.enum([
-		"pending",
-		"in_progress",
-		"completed",
-		"skipped",
-		"failed",
-	]),
+	status: z.enum(["pending", "in_progress", "completed", "skipped", "failed"]),
 	change_record_ref: z.string().uuid().nullable(),
 });
 
@@ -47,13 +41,7 @@ export const OptimizationPlanSchema = z.object({
 		rationale: z.string(),
 	}),
 
-	status: z.enum([
-		"draft",
-		"approved",
-		"executing",
-		"completed",
-		"cancelled",
-	]),
+	status: z.enum(["draft", "approved", "executing", "completed", "cancelled"]),
 });
 
 export type OptimizationPlan = z.infer<typeof OptimizationPlanSchema>;

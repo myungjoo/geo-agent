@@ -1,10 +1,10 @@
-import { Hono } from "hono";
 import {
 	CreateTargetSchema,
-	UpdateTargetSchema,
-	TargetRepository,
 	type GeoDatabase,
+	TargetRepository,
+	UpdateTargetSchema,
 } from "@geo-agent/core";
+import { Hono } from "hono";
 
 let sharedRepo: TargetRepository | null = null;
 

@@ -1,27 +1,25 @@
 {
-  "name": "geo-agent",
-  "version": "0.1.0",
-  "private": true,
-  "description": "GEO (Generative Engine Optimization) Agent System",
-  "workspaces": [
-    "packages/*"
-  ],
-  "scripts": {
-    "build": "npm run build --workspaces",
-    "dev": "npm run dev --workspace=packages/dashboard",
-    "lint": "biome check .",
-    "lint:fix": "biome check --write .",
-    "pretest": "npm run build",
-    "test": "vitest run",
-    "ci": "npm install && npm run build && npm test",
-    "clean": "npm run clean --workspaces"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^1.9.0",
-    "typescript": "^5.7.0",
-    "vitest": "^2.0.0"
-  },
-  "engines": {
-    "node": ">=20.0.0"
-  }
+	"name": "geo-agent",
+	"version": "0.1.0",
+	"private": true,
+	"description": "GEO (Generative Engine Optimization) Agent System",
+	"workspaces": ["packages/*"],
+	"scripts": {
+		"build": "npm run build --workspaces",
+		"dev": "npm run dev --workspace=packages/dashboard",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"pretest": "npm run build",
+		"test": "vitest run",
+		"ci": "npm install && npm run build && npm test",
+		"clean": "npm run clean --workspaces"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.0",
+		"typescript": "^5.7.0",
+		"vitest": "^2.0.0"
+	},
+	"engines": {
+		"node": ">=20.0.0"
+	}
 }

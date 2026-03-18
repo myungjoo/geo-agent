@@ -1,3 +1,4 @@
+import { type GeoDatabase, PipelineRepository } from "@geo-agent/core";
 /**
  * Pipeline & Cycle Control Routes
  *
@@ -5,10 +6,6 @@
  * /api/targets/:id/cycle    — 사이클 제어
  */
 import { Hono } from "hono";
-import {
-	type GeoDatabase,
-	PipelineRepository,
-} from "@geo-agent/core";
 
 let sharedPipelineRepo: PipelineRepository | null = null;
 

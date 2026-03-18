@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
-	ReportBuilder,
-	OptimizationReportSchema,
-	renderSimpleDiff,
 	ChangeEntrySchema,
+	OptimizationReportSchema,
+	ReportBuilder,
 	ScoreComparisonSchema,
+	renderSimpleDiff,
 } from "./report-generator.js";
 
 // ─── ChangeEntrySchema ──────────────────────────────────────────
@@ -151,7 +151,7 @@ describe("ReportBuilder", () => {
 				summary: "Added JSON-LD schema",
 				impact_score: 30,
 				affected_dimensions: ["structured_score"],
-				diff_preview: "+ <script type=\"application/ld+json\">",
+				diff_preview: '+ <script type="application/ld+json">',
 			})
 			.addKeyImprovement("JSON-LD structured data added")
 			.addRemainingIssue("Missing alt text on images")

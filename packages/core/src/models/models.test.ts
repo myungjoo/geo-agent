@@ -1,69 +1,62 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
+	AccuracyLevelSchema,
+	// Agent Configuration
+	AgentIdSchema,
+	AgentPromptConfigSchema,
+	AnalysisReportSchema,
+	ChangeImpactSchema,
+	ChangeRecordSchema,
 	// Change Tracking
 	ChangeTypeSchema,
-	ChangeRecordSchema,
-	VerdictSchema,
-	ChangeImpactSchema,
-
+	// Target & Content
+	CompetitorEntrySchema,
+	CompetitorGapSchema,
+	ContentAnalysisSchema,
+	ContentSnapshotSchema,
+	ContextSlotSchema,
+	CrawlerAccessResultSchema,
+	CreateTargetSchema,
+	// Agent Memory
+	EffectivenessIndexSchema,
+	ErrorEventSchema,
+	ErrorTypeSchema,
+	GEO_SCORE_WEIGHTS,
 	// GEO Scoring
 	GeoScorePerLLMSchema,
 	GeoScoreSchema,
-	GEO_SCORE_WEIGHTS,
 	GeoTimeSeriesSchema,
 	InfoCategorySchema,
-	AccuracyLevelSchema,
-	InfoRecognitionPerLLMSchema,
 	InfoRecognitionItemSchema,
+	InfoRecognitionPerLLMSchema,
 	InfoRecognitionScoreSchema,
-
-	// LLM
-	QueryTypeSchema,
-	LLMProbeSchema,
-	OAuthConfigSchema,
 	LLMAuthConfigSchema,
-	ModelRoleSchema,
 	LLMModelConfigSchema,
-	LLMProviderConfigSchema,
-
-	// Target & Content
-	CompetitorEntrySchema,
 	LLMPrioritySchema,
-	NotificationConfigSchema,
-	TargetProfileSchema,
-	CreateTargetSchema,
-	UpdateTargetSchema,
-	ContentSnapshotSchema,
-
-	// Analysis & Planning
-	StructureQualitySchema,
-	CrawlerAccessResultSchema,
+	LLMProbeSchema,
+	LLMProviderConfigSchema,
 	MachineReadabilitySchema,
-	ContentAnalysisSchema,
-	StructuredDataAuditSchema,
-	CompetitorGapSchema,
-	AnalysisReportSchema,
-	OptimizationTaskSchema,
+	ModelRoleSchema,
+	NotificationConfigSchema,
+	OAuthConfigSchema,
 	OptimizationPlanSchema,
-	ValidationLLMResultSchema,
-	ValidationReportSchema,
-
-	// Agent Memory
-	EffectivenessIndexSchema,
-	SemanticChangeRecordSchema,
-
-	// Agent Configuration
-	AgentIdSchema,
-	ContextSlotSchema,
-	AgentPromptConfigSchema,
-
+	OptimizationTaskSchema,
 	// Pipeline & Error Handling
 	PipelineStageSchema,
 	PipelineStateSchema,
+	// LLM
+	QueryTypeSchema,
 	RetryPolicySchema,
-	ErrorTypeSchema,
+	SemanticChangeRecordSchema,
 	SeveritySchema,
-	ErrorEventSchema,
+	// Analysis & Planning
+	StructureQualitySchema,
+	StructuredDataAuditSchema,
+	TargetProfileSchema,
+	UpdateTargetSchema,
+	ValidationLLMResultSchema,
+	ValidationReportSchema,
+	VerdictSchema,
 } from "./index.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -251,7 +244,8 @@ describe("InfoRecognition", () => {
 
 		it("accepts null llm_answer", () => {
 			expect(
-				InfoRecognitionPerLLMSchema.safeParse(makeInfoRecognitionPerLLM({ llm_answer: null })).success,
+				InfoRecognitionPerLLMSchema.safeParse(makeInfoRecognitionPerLLM({ llm_answer: null }))
+					.success,
 			).toBe(true);
 		});
 
@@ -268,7 +262,8 @@ describe("InfoRecognition", () => {
 
 		it("rejects invalid accuracy", () => {
 			expect(
-				InfoRecognitionPerLLMSchema.safeParse(makeInfoRecognitionPerLLM({ accuracy: "wrong" })).success,
+				InfoRecognitionPerLLMSchema.safeParse(makeInfoRecognitionPerLLM({ accuracy: "wrong" }))
+					.success,
 			).toBe(false);
 		});
 	});
@@ -280,13 +275,15 @@ describe("InfoRecognition", () => {
 
 		it("rejects invalid uuid for info_id", () => {
 			expect(
-				InfoRecognitionItemSchema.safeParse(makeInfoRecognitionItem({ info_id: "not-a-uuid" })).success,
+				InfoRecognitionItemSchema.safeParse(makeInfoRecognitionItem({ info_id: "not-a-uuid" }))
+					.success,
 			).toBe(false);
 		});
 
 		it("rejects invalid category", () => {
 			expect(
-				InfoRecognitionItemSchema.safeParse(makeInfoRecognitionItem({ category: "INVALID" })).success,
+				InfoRecognitionItemSchema.safeParse(makeInfoRecognitionItem({ category: "INVALID" }))
+					.success,
 			).toBe(false);
 		});
 
@@ -332,13 +329,15 @@ describe("InfoRecognition", () => {
 
 		it("rejects coverage_rate > 1", () => {
 			expect(
-				InfoRecognitionScoreSchema.safeParse(makeInfoRecognitionScore({ coverage_rate: 1.1 })).success,
+				InfoRecognitionScoreSchema.safeParse(makeInfoRecognitionScore({ coverage_rate: 1.1 }))
+					.success,
 			).toBe(false);
 		});
 
 		it("rejects negative accuracy_rate", () => {
 			expect(
-				InfoRecognitionScoreSchema.safeParse(makeInfoRecognitionScore({ accuracy_rate: -0.1 })).success,
+				InfoRecognitionScoreSchema.safeParse(makeInfoRecognitionScore({ accuracy_rate: -0.1 }))
+					.success,
 			).toBe(false);
 		});
 	});
@@ -371,15 +370,13 @@ describe("LLMProbe", () => {
 		});
 
 		it("accepts null citation_excerpt", () => {
-			expect(
-				LLMProbeSchema.safeParse(makeLLMProbe({ citation_excerpt: null })).success,
-			).toBe(true);
+			expect(LLMProbeSchema.safeParse(makeLLMProbe({ citation_excerpt: null })).success).toBe(true);
 		});
 
 		it("accepts null citation_position", () => {
-			expect(
-				LLMProbeSchema.safeParse(makeLLMProbe({ citation_position: null })).success,
-			).toBe(true);
+			expect(LLMProbeSchema.safeParse(makeLLMProbe({ citation_position: null })).success).toBe(
+				true,
+			);
 		});
 
 		it("rejects missing required probe_id", () => {
@@ -392,27 +389,25 @@ describe("LLMProbe", () => {
 		});
 
 		it("rejects accuracy_vs_source > 1", () => {
-			expect(
-				LLMProbeSchema.safeParse(makeLLMProbe({ accuracy_vs_source: 1.5 })).success,
-			).toBe(false);
+			expect(LLMProbeSchema.safeParse(makeLLMProbe({ accuracy_vs_source: 1.5 })).success).toBe(
+				false,
+			);
 		});
 
 		it("rejects negative accuracy_vs_source", () => {
-			expect(
-				LLMProbeSchema.safeParse(makeLLMProbe({ accuracy_vs_source: -0.1 })).success,
-			).toBe(false);
+			expect(LLMProbeSchema.safeParse(makeLLMProbe({ accuracy_vs_source: -0.1 })).success).toBe(
+				false,
+			);
 		});
 
 		it("rejects invalid datetime for response_at", () => {
-			expect(
-				LLMProbeSchema.safeParse(makeLLMProbe({ response_at: "not-a-date" })).success,
-			).toBe(false);
+			expect(LLMProbeSchema.safeParse(makeLLMProbe({ response_at: "not-a-date" })).success).toBe(
+				false,
+			);
 		});
 
 		it("rejects invalid query_type", () => {
-			expect(
-				LLMProbeSchema.safeParse(makeLLMProbe({ query_type: "invalid" })).success,
-			).toBe(false);
+			expect(LLMProbeSchema.safeParse(makeLLMProbe({ query_type: "invalid" })).success).toBe(false);
 		});
 	});
 });
@@ -520,20 +515,17 @@ describe("GeoScore", () => {
 
 		it("accepts optional info_recognition", () => {
 			expect(
-				GeoScoreSchema.safeParse(makeGeoScore({ info_recognition: makeInfoRecognitionScore() })).success,
+				GeoScoreSchema.safeParse(makeGeoScore({ info_recognition: makeInfoRecognitionScore() }))
+					.success,
 			).toBe(true);
 		});
 
 		it("accepts empty llm_breakdown", () => {
-			expect(
-				GeoScoreSchema.safeParse(makeGeoScore({ llm_breakdown: {} })).success,
-			).toBe(true);
+			expect(GeoScoreSchema.safeParse(makeGeoScore({ llm_breakdown: {} })).success).toBe(true);
 		});
 
 		it("rejects invalid datetime for measured_at", () => {
-			expect(
-				GeoScoreSchema.safeParse(makeGeoScore({ measured_at: "bad" })).success,
-			).toBe(false);
+			expect(GeoScoreSchema.safeParse(makeGeoScore({ measured_at: "bad" })).success).toBe(false);
 		});
 	});
 
@@ -573,13 +565,15 @@ describe("TargetProfile", () => {
 
 		it("rejects invalid url", () => {
 			expect(
-				CompetitorEntrySchema.safeParse({ url: "not-a-url", name: "X", relationship: "direct" }).success,
+				CompetitorEntrySchema.safeParse({ url: "not-a-url", name: "X", relationship: "direct" })
+					.success,
 			).toBe(false);
 		});
 
 		it("rejects invalid relationship", () => {
 			expect(
-				CompetitorEntrySchema.safeParse({ url: URL_VALID, name: "X", relationship: "enemy" }).success,
+				CompetitorEntrySchema.safeParse({ url: URL_VALID, name: "X", relationship: "enemy" })
+					.success,
 			).toBe(false);
 		});
 	});
@@ -594,16 +588,14 @@ describe("TargetProfile", () => {
 		it.each(["critical", "important", "nice_to_have", "monitor_only"])(
 			"accepts priority: %s",
 			(p) => {
-				expect(
-					LLMPrioritySchema.safeParse({ llm_service: "x", priority: p }).success,
-				).toBe(true);
+				expect(LLMPrioritySchema.safeParse({ llm_service: "x", priority: p }).success).toBe(true);
 			},
 		);
 
 		it("rejects invalid priority", () => {
-			expect(
-				LLMPrioritySchema.safeParse({ llm_service: "x", priority: "unknown" }).success,
-			).toBe(false);
+			expect(LLMPrioritySchema.safeParse({ llm_service: "x", priority: "unknown" }).success).toBe(
+				false,
+			);
 		});
 	});
 
@@ -632,9 +624,7 @@ describe("TargetProfile", () => {
 		});
 
 		it("rejects invalid channel", () => {
-			expect(
-				NotificationConfigSchema.safeParse({ channels: ["telegram"] }).success,
-			).toBe(false);
+			expect(NotificationConfigSchema.safeParse({ channels: ["telegram"] }).success).toBe(false);
 		});
 	});
 
@@ -679,15 +669,13 @@ describe("TargetProfile", () => {
 		});
 
 		it("rejects invalid url", () => {
-			expect(
-				TargetProfileSchema.safeParse({ ...validProfile, url: "not-a-url" }).success,
-			).toBe(false);
+			expect(TargetProfileSchema.safeParse({ ...validProfile, url: "not-a-url" }).success).toBe(
+				false,
+			);
 		});
 
 		it("rejects empty name (min 1)", () => {
-			expect(
-				TargetProfileSchema.safeParse({ ...validProfile, name: "" }).success,
-			).toBe(false);
+			expect(TargetProfileSchema.safeParse({ ...validProfile, name: "" }).success).toBe(false);
 		});
 
 		it("rejects missing required id", () => {
@@ -696,16 +684,16 @@ describe("TargetProfile", () => {
 		});
 
 		it("rejects invalid status", () => {
-			expect(
-				TargetProfileSchema.safeParse({ ...validProfile, status: "deleted" }).success,
-			).toBe(false);
+			expect(TargetProfileSchema.safeParse({ ...validProfile, status: "deleted" }).success).toBe(
+				false,
+			);
 		});
 
 		it("strips extra fields", () => {
 			const result = TargetProfileSchema.safeParse({ ...validProfile, extra_field: "hi" });
 			expect(result.success).toBe(true);
 			if (result.success) {
-				expect((result.data as Record<string, unknown>)["extra_field"]).toBeUndefined();
+				expect((result.data as Record<string, unknown>).extra_field).toBeUndefined();
 			}
 		});
 	});
@@ -792,15 +780,15 @@ describe("ContentSnapshotSchema", () => {
 	});
 
 	it("rejects invalid url", () => {
-		expect(
-			ContentSnapshotSchema.safeParse({ ...validSnapshot, url: "not-url" }).success,
-		).toBe(false);
+		expect(ContentSnapshotSchema.safeParse({ ...validSnapshot, url: "not-url" }).success).toBe(
+			false,
+		);
 	});
 
 	it("rejects invalid uuid for snapshot_id", () => {
-		expect(
-			ContentSnapshotSchema.safeParse({ ...validSnapshot, snapshot_id: "bad" }).success,
-		).toBe(false);
+		expect(ContentSnapshotSchema.safeParse({ ...validSnapshot, snapshot_id: "bad" }).success).toBe(
+			false,
+		);
 	});
 });
 
@@ -827,27 +815,25 @@ describe("ChangeRecordSchema", () => {
 	});
 
 	it("accepts null snapshot_after", () => {
-		expect(
-			ChangeRecordSchema.safeParse({ ...validRecord, snapshot_after: null }).success,
-		).toBe(true);
+		expect(ChangeRecordSchema.safeParse({ ...validRecord, snapshot_after: null }).success).toBe(
+			true,
+		);
 	});
 
 	it("accepts null strategy_ref", () => {
-		expect(
-			ChangeRecordSchema.safeParse({ ...validRecord, strategy_ref: null }).success,
-		).toBe(true);
+		expect(ChangeRecordSchema.safeParse({ ...validRecord, strategy_ref: null }).success).toBe(true);
 	});
 
 	it("rejects invalid change_type", () => {
-		expect(
-			ChangeRecordSchema.safeParse({ ...validRecord, change_type: "UNKNOWN" }).success,
-		).toBe(false);
+		expect(ChangeRecordSchema.safeParse({ ...validRecord, change_type: "UNKNOWN" }).success).toBe(
+			false,
+		);
 	});
 
 	it("rejects invalid triggered_by", () => {
-		expect(
-			ChangeRecordSchema.safeParse({ ...validRecord, triggered_by: "cron" }).success,
-		).toBe(false);
+		expect(ChangeRecordSchema.safeParse({ ...validRecord, triggered_by: "cron" }).success).toBe(
+			false,
+		);
 	});
 
 	it("rejects missing required fields", () => {
@@ -887,39 +873,33 @@ describe("ChangeImpact", () => {
 		});
 
 		it("accepts empty per_llm_impact", () => {
-			expect(
-				ChangeImpactSchema.safeParse({ ...validImpact, per_llm_impact: {} }).success,
-			).toBe(true);
+			expect(ChangeImpactSchema.safeParse({ ...validImpact, per_llm_impact: {} }).success).toBe(
+				true,
+			);
 		});
 
 		it("accepts empty confounders", () => {
-			expect(
-				ChangeImpactSchema.safeParse({ ...validImpact, confounders: [] }).success,
-			).toBe(true);
+			expect(ChangeImpactSchema.safeParse({ ...validImpact, confounders: [] }).success).toBe(true);
 		});
 
 		it("rejects confidence > 1", () => {
-			expect(
-				ChangeImpactSchema.safeParse({ ...validImpact, confidence: 1.1 }).success,
-			).toBe(false);
+			expect(ChangeImpactSchema.safeParse({ ...validImpact, confidence: 1.1 }).success).toBe(false);
 		});
 
 		it("rejects negative confidence", () => {
-			expect(
-				ChangeImpactSchema.safeParse({ ...validImpact, confidence: -0.1 }).success,
-			).toBe(false);
+			expect(ChangeImpactSchema.safeParse({ ...validImpact, confidence: -0.1 }).success).toBe(
+				false,
+			);
 		});
 
 		it("rejects score_before > 100", () => {
-			expect(
-				ChangeImpactSchema.safeParse({ ...validImpact, score_before: 101 }).success,
-			).toBe(false);
+			expect(ChangeImpactSchema.safeParse({ ...validImpact, score_before: 101 }).success).toBe(
+				false,
+			);
 		});
 
 		it("rejects negative score_after", () => {
-			expect(
-				ChangeImpactSchema.safeParse({ ...validImpact, score_after: -1 }).success,
-			).toBe(false);
+			expect(ChangeImpactSchema.safeParse({ ...validImpact, score_after: -1 }).success).toBe(false);
 		});
 
 		it("accepts negative delta (score went down)", () => {
@@ -949,51 +929,41 @@ describe("GeoTimeSeriesSchema", () => {
 	});
 
 	it("accepts null citation_rank", () => {
-		expect(
-			GeoTimeSeriesSchema.safeParse({ ...validEntry, citation_rank: null }).success,
-		).toBe(true);
+		expect(GeoTimeSeriesSchema.safeParse({ ...validEntry, citation_rank: null }).success).toBe(
+			true,
+		);
 	});
 
 	it("accepts null change_id", () => {
-		expect(
-			GeoTimeSeriesSchema.safeParse({ ...validEntry, change_id: null }).success,
-		).toBe(true);
+		expect(GeoTimeSeriesSchema.safeParse({ ...validEntry, change_id: null }).success).toBe(true);
 	});
 
 	it("rejects geo_score > 100", () => {
-		expect(
-			GeoTimeSeriesSchema.safeParse({ ...validEntry, geo_score: 101 }).success,
-		).toBe(false);
+		expect(GeoTimeSeriesSchema.safeParse({ ...validEntry, geo_score: 101 }).success).toBe(false);
 	});
 
 	it("rejects negative geo_score", () => {
-		expect(
-			GeoTimeSeriesSchema.safeParse({ ...validEntry, geo_score: -1 }).success,
-		).toBe(false);
+		expect(GeoTimeSeriesSchema.safeParse({ ...validEntry, geo_score: -1 }).success).toBe(false);
 	});
 
 	it("rejects citation_rate > 1", () => {
-		expect(
-			GeoTimeSeriesSchema.safeParse({ ...validEntry, citation_rate: 1.1 }).success,
-		).toBe(false);
+		expect(GeoTimeSeriesSchema.safeParse({ ...validEntry, citation_rate: 1.1 }).success).toBe(
+			false,
+		);
 	});
 
 	it("rejects non-positive citation_rank", () => {
-		expect(
-			GeoTimeSeriesSchema.safeParse({ ...validEntry, citation_rank: 0 }).success,
-		).toBe(false);
+		expect(GeoTimeSeriesSchema.safeParse({ ...validEntry, citation_rank: 0 }).success).toBe(false);
 	});
 
 	it("rejects non-integer citation_rank", () => {
-		expect(
-			GeoTimeSeriesSchema.safeParse({ ...validEntry, citation_rank: 1.5 }).success,
-		).toBe(false);
+		expect(GeoTimeSeriesSchema.safeParse({ ...validEntry, citation_rank: 1.5 }).success).toBe(
+			false,
+		);
 	});
 
 	it("rejects invalid url", () => {
-		expect(
-			GeoTimeSeriesSchema.safeParse({ ...validEntry, url: "bad" }).success,
-		).toBe(false);
+		expect(GeoTimeSeriesSchema.safeParse({ ...validEntry, url: "bad" }).success).toBe(false);
 	});
 });
 
@@ -1013,21 +983,21 @@ describe("AnalysisReport", () => {
 		});
 
 		it("rejects semantic_tag_ratio > 1", () => {
-			expect(
-				StructureQualitySchema.safeParse({ ...valid, semantic_tag_ratio: 1.1 }).success,
-			).toBe(false);
+			expect(StructureQualitySchema.safeParse({ ...valid, semantic_tag_ratio: 1.1 }).success).toBe(
+				false,
+			);
 		});
 
 		it("rejects negative div_nesting_depth", () => {
-			expect(
-				StructureQualitySchema.safeParse({ ...valid, div_nesting_depth: -1 }).success,
-			).toBe(false);
+			expect(StructureQualitySchema.safeParse({ ...valid, div_nesting_depth: -1 }).success).toBe(
+				false,
+			);
 		});
 
 		it("rejects non-integer div_nesting_depth", () => {
-			expect(
-				StructureQualitySchema.safeParse({ ...valid, div_nesting_depth: 2.5 }).success,
-			).toBe(false);
+			expect(StructureQualitySchema.safeParse({ ...valid, div_nesting_depth: 2.5 }).success).toBe(
+				false,
+			);
 		});
 	});
 
@@ -1044,9 +1014,9 @@ describe("AnalysisReport", () => {
 		});
 
 		it("rejects non-integer http_status", () => {
-			expect(
-				CrawlerAccessResultSchema.safeParse({ ...valid, http_status: 200.5 }).success,
-			).toBe(false);
+			expect(CrawlerAccessResultSchema.safeParse({ ...valid, http_status: 200.5 }).success).toBe(
+				false,
+			);
 		});
 	});
 
@@ -1113,27 +1083,25 @@ describe("AnalysisReport", () => {
 		});
 
 		it.each(["technical", "general", "simplified"])("accepts readability_level: %s", (level) => {
-			expect(
-				ContentAnalysisSchema.safeParse({ ...valid, readability_level: level }).success,
-			).toBe(true);
+			expect(ContentAnalysisSchema.safeParse({ ...valid, readability_level: level }).success).toBe(
+				true,
+			);
 		});
 
 		it("rejects negative word_count", () => {
-			expect(
-				ContentAnalysisSchema.safeParse({ ...valid, word_count: -1 }).success,
-			).toBe(false);
+			expect(ContentAnalysisSchema.safeParse({ ...valid, word_count: -1 }).success).toBe(false);
 		});
 
 		it("rejects content_density > 100", () => {
-			expect(
-				ContentAnalysisSchema.safeParse({ ...valid, content_density: 101 }).success,
-			).toBe(false);
+			expect(ContentAnalysisSchema.safeParse({ ...valid, content_density: 101 }).success).toBe(
+				false,
+			);
 		});
 
 		it("rejects topic_alignment > 1", () => {
-			expect(
-				ContentAnalysisSchema.safeParse({ ...valid, topic_alignment: 1.1 }).success,
-			).toBe(false);
+			expect(ContentAnalysisSchema.safeParse({ ...valid, topic_alignment: 1.1 }).success).toBe(
+				false,
+			);
 		});
 	});
 
@@ -1178,15 +1146,15 @@ describe("AnalysisReport", () => {
 		});
 
 		it("accepts null competitor_geo_score", () => {
-			expect(
-				CompetitorGapSchema.safeParse({ ...valid, competitor_geo_score: null }).success,
-			).toBe(true);
+			expect(CompetitorGapSchema.safeParse({ ...valid, competitor_geo_score: null }).success).toBe(
+				true,
+			);
 		});
 
 		it("rejects invalid url", () => {
-			expect(
-				CompetitorGapSchema.safeParse({ ...valid, competitor_url: "bad" }).success,
-			).toBe(false);
+			expect(CompetitorGapSchema.safeParse({ ...valid, competitor_url: "bad" }).success).toBe(
+				false,
+			);
 		});
 	});
 
@@ -1276,36 +1244,28 @@ describe("OptimizationPlan", () => {
 		});
 
 		it("accepts null target_element", () => {
-			expect(
-				OptimizationTaskSchema.safeParse({ ...validTask, target_element: null }).success,
-			).toBe(true);
+			expect(OptimizationTaskSchema.safeParse({ ...validTask, target_element: null }).success).toBe(
+				true,
+			);
 		});
 
 		it.each(["pending", "in_progress", "completed", "skipped", "failed"])(
 			"accepts status: %s",
 			(s) => {
-				expect(
-					OptimizationTaskSchema.safeParse({ ...validTask, status: s }).success,
-				).toBe(true);
+				expect(OptimizationTaskSchema.safeParse({ ...validTask, status: s }).success).toBe(true);
 			},
 		);
 
 		it.each(["critical", "high", "medium", "low"])("accepts priority: %s", (p) => {
-			expect(
-				OptimizationTaskSchema.safeParse({ ...validTask, priority: p }).success,
-			).toBe(true);
+			expect(OptimizationTaskSchema.safeParse({ ...validTask, priority: p }).success).toBe(true);
 		});
 
 		it("rejects negative order", () => {
-			expect(
-				OptimizationTaskSchema.safeParse({ ...validTask, order: -1 }).success,
-			).toBe(false);
+			expect(OptimizationTaskSchema.safeParse({ ...validTask, order: -1 }).success).toBe(false);
 		});
 
 		it("rejects non-integer order", () => {
-			expect(
-				OptimizationTaskSchema.safeParse({ ...validTask, order: 1.5 }).success,
-			).toBe(false);
+			expect(OptimizationTaskSchema.safeParse({ ...validTask, order: 1.5 }).success).toBe(false);
 		});
 	});
 
@@ -1348,17 +1308,13 @@ describe("OptimizationPlan", () => {
 		});
 
 		it("accepts empty tasks array", () => {
-			expect(
-				OptimizationPlanSchema.safeParse({ ...validPlan, tasks: [] }).success,
-			).toBe(true);
+			expect(OptimizationPlanSchema.safeParse({ ...validPlan, tasks: [] }).success).toBe(true);
 		});
 
 		it.each(["draft", "approved", "executing", "completed", "cancelled"])(
 			"accepts status: %s",
 			(s) => {
-				expect(
-					OptimizationPlanSchema.safeParse({ ...validPlan, status: s }).success,
-				).toBe(true);
+				expect(OptimizationPlanSchema.safeParse({ ...validPlan, status: s }).success).toBe(true);
 			},
 		);
 
@@ -1403,9 +1359,9 @@ describe("ValidationReport", () => {
 		});
 
 		it("rejects citation_rate > 1", () => {
-			expect(
-				ValidationLLMResultSchema.safeParse({ ...valid, citation_rate: 1.5 }).success,
-			).toBe(false);
+			expect(ValidationLLMResultSchema.safeParse({ ...valid, citation_rate: 1.5 }).success).toBe(
+				false,
+			);
 		});
 
 		it("rejects negative citation_accuracy", () => {
@@ -1446,21 +1402,15 @@ describe("ValidationReport", () => {
 		});
 
 		it("accepts null plan_ref", () => {
-			expect(
-				ValidationReportSchema.safeParse({ ...valid, plan_ref: null }).success,
-			).toBe(true);
+			expect(ValidationReportSchema.safeParse({ ...valid, plan_ref: null }).success).toBe(true);
 		});
 
 		it.each(["improved", "unchanged", "degraded"])("accepts verdict: %s", (v) => {
-			expect(
-				ValidationReportSchema.safeParse({ ...valid, verdict: v }).success,
-			).toBe(true);
+			expect(ValidationReportSchema.safeParse({ ...valid, verdict: v }).success).toBe(true);
 		});
 
 		it("rejects invalid verdict", () => {
-			expect(
-				ValidationReportSchema.safeParse({ ...valid, verdict: "mixed" }).success,
-			).toBe(false);
+			expect(ValidationReportSchema.safeParse({ ...valid, verdict: "mixed" }).success).toBe(false);
 		});
 
 		it("rejects missing required fields", () => {
@@ -1515,14 +1465,15 @@ describe("EffectivenessIndexSchema", () => {
 	});
 
 	it("rejects invalid url", () => {
-		expect(
-			EffectivenessIndexSchema.safeParse(makeEffectivenessIndex({ url: "bad" })).success,
-		).toBe(false);
+		expect(EffectivenessIndexSchema.safeParse(makeEffectivenessIndex({ url: "bad" })).success).toBe(
+			false,
+		);
 	});
 
 	it("rejects invalid change_type", () => {
 		expect(
-			EffectivenessIndexSchema.safeParse(makeEffectivenessIndex({ change_type: "INVALID" })).success,
+			EffectivenessIndexSchema.safeParse(makeEffectivenessIndex({ change_type: "INVALID" }))
+				.success,
 		).toBe(false);
 	});
 });
@@ -1549,13 +1500,15 @@ describe("SemanticChangeRecordSchema", () => {
 
 	it("rejects non-number in embedding", () => {
 		expect(
-			SemanticChangeRecordSchema.safeParse(makeSemanticChangeRecord({ embedding: ["a", "b"] })).success,
+			SemanticChangeRecordSchema.safeParse(makeSemanticChangeRecord({ embedding: ["a", "b"] }))
+				.success,
 		).toBe(false);
 	});
 
 	it("rejects invalid impact_verdict", () => {
 		expect(
-			SemanticChangeRecordSchema.safeParse(makeSemanticChangeRecord({ impact_verdict: "unknown" })).success,
+			SemanticChangeRecordSchema.safeParse(makeSemanticChangeRecord({ impact_verdict: "unknown" }))
+				.success,
 		).toBe(false);
 	});
 
@@ -1635,39 +1588,33 @@ describe("AgentPromptConfig", () => {
 		});
 
 		it("accepts null model_preference", () => {
-			expect(
-				AgentPromptConfigSchema.safeParse({ ...valid, model_preference: null }).success,
-			).toBe(true);
+			expect(AgentPromptConfigSchema.safeParse({ ...valid, model_preference: null }).success).toBe(
+				true,
+			);
 		});
 
 		it("accepts custom temperature in range", () => {
-			expect(
-				AgentPromptConfigSchema.safeParse({ ...valid, temperature: 0.7 }).success,
-			).toBe(true);
+			expect(AgentPromptConfigSchema.safeParse({ ...valid, temperature: 0.7 }).success).toBe(true);
 		});
 
 		it("rejects temperature > 1", () => {
-			expect(
-				AgentPromptConfigSchema.safeParse({ ...valid, temperature: 1.5 }).success,
-			).toBe(false);
+			expect(AgentPromptConfigSchema.safeParse({ ...valid, temperature: 1.5 }).success).toBe(false);
 		});
 
 		it("rejects negative temperature", () => {
-			expect(
-				AgentPromptConfigSchema.safeParse({ ...valid, temperature: -0.1 }).success,
-			).toBe(false);
+			expect(AgentPromptConfigSchema.safeParse({ ...valid, temperature: -0.1 }).success).toBe(
+				false,
+			);
 		});
 
 		it("rejects invalid agent_id", () => {
-			expect(
-				AgentPromptConfigSchema.safeParse({ ...valid, agent_id: "hacker" }).success,
-			).toBe(false);
+			expect(AgentPromptConfigSchema.safeParse({ ...valid, agent_id: "hacker" }).success).toBe(
+				false,
+			);
 		});
 
 		it("accepts empty context_slots", () => {
-			expect(
-				AgentPromptConfigSchema.safeParse({ ...valid, context_slots: [] }).success,
-			).toBe(true);
+			expect(AgentPromptConfigSchema.safeParse({ ...valid, context_slots: [] }).success).toBe(true);
 		});
 	});
 });
@@ -1725,15 +1672,11 @@ describe("ErrorEvent", () => {
 		});
 
 		it("accepts explicit resolved=true", () => {
-			expect(
-				ErrorEventSchema.safeParse({ ...valid, resolved: true }).success,
-			).toBe(true);
+			expect(ErrorEventSchema.safeParse({ ...valid, resolved: true }).success).toBe(true);
 		});
 
 		it("accepts empty context object", () => {
-			expect(
-				ErrorEventSchema.safeParse({ ...valid, context: {} }).success,
-			).toBe(true);
+			expect(ErrorEventSchema.safeParse({ ...valid, context: {} }).success).toBe(true);
 		});
 
 		it("accepts context with mixed value types", () => {
@@ -1746,15 +1689,11 @@ describe("ErrorEvent", () => {
 		});
 
 		it("rejects invalid error_type", () => {
-			expect(
-				ErrorEventSchema.safeParse({ ...valid, error_type: "unknown" }).success,
-			).toBe(false);
+			expect(ErrorEventSchema.safeParse({ ...valid, error_type: "unknown" }).success).toBe(false);
 		});
 
 		it("rejects invalid severity", () => {
-			expect(
-				ErrorEventSchema.safeParse({ ...valid, severity: "debug" }).success,
-			).toBe(false);
+			expect(ErrorEventSchema.safeParse({ ...valid, severity: "debug" }).success).toBe(false);
 		});
 
 		it("rejects missing required fields", () => {
@@ -1787,21 +1726,15 @@ describe("LLMProviderConfig", () => {
 		});
 
 		it.each(["google", "microsoft", "openai"])("accepts provider: %s", (p) => {
-			expect(
-				OAuthConfigSchema.safeParse({ ...valid, provider: p }).success,
-			).toBe(true);
+			expect(OAuthConfigSchema.safeParse({ ...valid, provider: p }).success).toBe(true);
 		});
 
 		it("rejects invalid provider", () => {
-			expect(
-				OAuthConfigSchema.safeParse({ ...valid, provider: "aws" }).success,
-			).toBe(false);
+			expect(OAuthConfigSchema.safeParse({ ...valid, provider: "aws" }).success).toBe(false);
 		});
 
 		it("accepts null token_endpoint", () => {
-			expect(
-				OAuthConfigSchema.safeParse({ ...valid, token_endpoint: null }).success,
-			).toBe(true);
+			expect(OAuthConfigSchema.safeParse({ ...valid, token_endpoint: null }).success).toBe(true);
 		});
 
 		it("accepts explicit tokens", () => {
@@ -1843,25 +1776,18 @@ describe("LLMProviderConfig", () => {
 		});
 
 		it("rejects api_key method missing api_key_ref", () => {
-			expect(
-				LLMAuthConfigSchema.safeParse({ method: "api_key" }).success,
-			).toBe(false);
+			expect(LLMAuthConfigSchema.safeParse({ method: "api_key" }).success).toBe(false);
 		});
 
 		it("rejects oauth method missing oauth_config", () => {
-			expect(
-				LLMAuthConfigSchema.safeParse({ method: "oauth" }).success,
-			).toBe(false);
+			expect(LLMAuthConfigSchema.safeParse({ method: "oauth" }).success).toBe(false);
 		});
 	});
 
 	describe("ModelRoleSchema", () => {
-		it.each(["orchestration", "validation_target", "utility", "both"])(
-			"accepts: %s",
-			(role) => {
-				expect(ModelRoleSchema.safeParse(role).success).toBe(true);
-			},
-		);
+		it.each(["orchestration", "validation_target", "utility", "both"])("accepts: %s", (role) => {
+			expect(ModelRoleSchema.safeParse(role).success).toBe(true);
+		});
 
 		it("rejects invalid role", () => {
 			expect(ModelRoleSchema.safeParse("admin").success).toBe(false);
@@ -1887,15 +1813,11 @@ describe("LLMProviderConfig", () => {
 		});
 
 		it("rejects non-positive max_tokens", () => {
-			expect(
-				LLMModelConfigSchema.safeParse({ ...valid, max_tokens: 0 }).success,
-			).toBe(false);
+			expect(LLMModelConfigSchema.safeParse({ ...valid, max_tokens: 0 }).success).toBe(false);
 		});
 
 		it("rejects non-integer max_tokens", () => {
-			expect(
-				LLMModelConfigSchema.safeParse({ ...valid, max_tokens: 100.5 }).success,
-			).toBe(false);
+			expect(LLMModelConfigSchema.safeParse({ ...valid, max_tokens: 100.5 }).success).toBe(false);
 		});
 
 		it("rejects negative cost", () => {
@@ -1935,15 +1857,11 @@ describe("LLMProviderConfig", () => {
 		});
 
 		it("accepts explicit enabled=false", () => {
-			expect(
-				LLMProviderConfigSchema.safeParse({ ...valid, enabled: false }).success,
-			).toBe(true);
+			expect(LLMProviderConfigSchema.safeParse({ ...valid, enabled: false }).success).toBe(true);
 		});
 
 		it("accepts empty models array", () => {
-			expect(
-				LLMProviderConfigSchema.safeParse({ ...valid, models: [] }).success,
-			).toBe(true);
+			expect(LLMProviderConfigSchema.safeParse({ ...valid, models: [] }).success).toBe(true);
 		});
 
 		it("rejects non-positive rate_limit values", () => {
@@ -2055,27 +1973,21 @@ describe("PipelineState", () => {
 		});
 
 		it("rejects negative retry_count", () => {
-			expect(
-				PipelineStateSchema.safeParse({ ...valid, retry_count: -1 }).success,
-			).toBe(false);
+			expect(PipelineStateSchema.safeParse({ ...valid, retry_count: -1 }).success).toBe(false);
 		});
 
 		it("rejects invalid stage", () => {
-			expect(
-				PipelineStateSchema.safeParse({ ...valid, stage: "UNKNOWN" }).success,
-			).toBe(false);
+			expect(PipelineStateSchema.safeParse({ ...valid, stage: "UNKNOWN" }).success).toBe(false);
 		});
 
 		it("rejects invalid uuid for pipeline_id", () => {
-			expect(
-				PipelineStateSchema.safeParse({ ...valid, pipeline_id: "bad" }).success,
-			).toBe(false);
+			expect(PipelineStateSchema.safeParse({ ...valid, pipeline_id: "bad" }).success).toBe(false);
 		});
 
 		it("rejects invalid datetime for started_at", () => {
-			expect(
-				PipelineStateSchema.safeParse({ ...valid, started_at: "not-a-date" }).success,
-			).toBe(false);
+			expect(PipelineStateSchema.safeParse({ ...valid, started_at: "not-a-date" }).success).toBe(
+				false,
+			);
 		});
 	});
 
@@ -2089,7 +2001,11 @@ describe("PipelineState", () => {
 				expect(result.data.backoff_multiplier).toBe(2.0);
 				expect(result.data.max_delay_ms).toBe(30000);
 				expect(result.data.retryable_errors).toEqual(["rate_limit", "timeout", "server_error"]);
-				expect(result.data.non_retryable).toEqual(["auth_error", "invalid_request", "content_filter"]);
+				expect(result.data.non_retryable).toEqual([
+					"auth_error",
+					"invalid_request",
+					"content_filter",
+				]);
 			}
 		});
 

@@ -7,13 +7,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+	CLASSIFICATION_SIGNALS,
+	type ClassificationSignal,
+	type EvaluationTemplate,
 	type SiteType,
 	SiteTypeSchema,
-	CLASSIFICATION_SIGNALS,
 	TEMPLATE_REGISTRY,
-	type EvaluationTemplate,
 	getTemplate,
-	type ClassificationSignal,
 } from "./evaluation-templates/index.js";
 
 // ── Template Parameters ────────────────────────────────────────
@@ -58,9 +58,7 @@ export class TemplateEngine {
 		// {{variable}} 형태의 파라미터 치환
 		for (const [key, value] of Object.entries(params)) {
 			const placeholder = `{{${key}}}`;
-			const replacement = Array.isArray(value)
-				? value.join(", ")
-				: String(value ?? "");
+			const replacement = Array.isArray(value) ? value.join(", ") : String(value ?? "");
 			content = content.replaceAll(placeholder, replacement);
 		}
 
@@ -103,7 +101,10 @@ export function classifySite(htmlContent: string, url: string): ClassificationRe
 	if (lowerHtml.includes('"@type":"offer"') || lowerHtml.includes("aggregaterating")) {
 		mfgMatches.push("Offer/AggregateRating 스키마 존재");
 	}
-	if (/\/(products?|shop|buy|store)\//i.test(lowerUrl) || /\/(products?|shop|buy|store)\//i.test(lowerHtml)) {
+	if (
+		/\/(products?|shop|buy|store)\//i.test(lowerUrl) ||
+		/\/(products?|shop|buy|store)\//i.test(lowerHtml)
+	) {
 		mfgMatches.push("/products/, /shop/, /buy/ 경로 존재");
 	}
 	if (lowerHtml.includes("og:product:price") || lowerHtml.includes("product:price")) {
@@ -125,7 +126,10 @@ export function classifySite(htmlContent: string, url: string): ClassificationRe
 	if (lowerHtml.includes("scholarlyarticle") || lowerHtml.includes("techarticle")) {
 		resMatches.push("ScholarlyArticle/TechArticle 스키마 존재");
 	}
-	if (/\/(publications?|papers?|research)\//i.test(lowerUrl) || /\/(publications?|papers?|research)\//i.test(lowerHtml)) {
+	if (
+		/\/(publications?|papers?|research)\//i.test(lowerUrl) ||
+		/\/(publications?|papers?|research)\//i.test(lowerHtml)
+	) {
 		resMatches.push("/publications/, /papers/, /research/ 경로 존재");
 	}
 	if (lowerHtml.includes("doi.org") || lowerHtml.includes("doi:")) {
@@ -137,7 +141,10 @@ export function classifySite(htmlContent: string, url: string): ClassificationRe
 	if (lowerHtml.includes("citation_") || lowerHtml.includes("dc.")) {
 		resMatches.push("학술 메타태그 (citation_*, DC.*)");
 	}
-	if (lowerHtml.includes(".pdf") && (lowerHtml.includes("download") || lowerHtml.includes("paper"))) {
+	if (
+		lowerHtml.includes(".pdf") &&
+		(lowerHtml.includes("download") || lowerHtml.includes("paper"))
+	) {
 		resMatches.push("PDF 논문 다운로드 링크 존재");
 	}
 
@@ -160,9 +167,10 @@ export function classifySite(htmlContent: string, url: string): ClassificationRe
 		genMatches.push("Service/LocalBusiness 스키마");
 	}
 
-	const genConfidence = mfgConfidence < 0.3 && resConfidence < 0.3
-		? Math.max(0.5, Math.min(genMatches.length / 2, 1))
-		: Math.max(0, 1 - Math.max(mfgConfidence, resConfidence));
+	const genConfidence =
+		mfgConfidence < 0.3 && resConfidence < 0.3
+			? Math.max(0.5, Math.min(genMatches.length / 2, 1))
+			: Math.max(0, 1 - Math.max(mfgConfidence, resConfidence));
 	signals.push({
 		site_type: "generic",
 		confidence: genConfidence,
@@ -170,9 +178,7 @@ export function classifySite(htmlContent: string, url: string): ClassificationRe
 	});
 
 	// 가장 높은 confidence를 선택
-	const winner = signals.reduce((best, s) =>
-		s.confidence > best.confidence ? s : best,
-	);
+	const winner = signals.reduce((best, s) => (s.confidence > best.confidence ? s : best));
 
 	return {
 		site_type: winner.site_type,

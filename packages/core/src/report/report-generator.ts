@@ -52,6 +52,10 @@ export type OptimizationReport = z.infer<typeof OptimizationReportSchema>;
 
 export class ReportBuilder {
 	private report: Partial<OptimizationReport>;
+	private readonly _changes: ChangeEntry[] = [];
+	private readonly _scoreComparisons: ScoreComparison[] = [];
+	private readonly _keyImprovements: string[] = [];
+	private readonly _remainingIssues: string[] = [];
 
 	constructor(reportId: string, targetId: string, targetUrl: string) {
 		this.report = {
@@ -59,10 +63,6 @@ export class ReportBuilder {
 			target_id: targetId,
 			target_url: targetUrl,
 			generated_at: new Date().toISOString(),
-			changes: [],
-			score_comparisons: [],
-			key_improvements: [],
-			remaining_issues: [],
 		};
 	}
 
@@ -92,7 +92,7 @@ export class ReportBuilder {
 	addScoreComparison(dimension: string, before: number, after: number): this {
 		const delta = after - before;
 		const delta_pct = before > 0 ? (delta / before) * 100 : 0;
-		this.report.score_comparisons!.push({
+		this._scoreComparisons.push({
 			dimension,
 			before,
 			after,
@@ -103,22 +103,28 @@ export class ReportBuilder {
 	}
 
 	addChange(entry: ChangeEntry): this {
-		this.report.changes!.push(entry);
+		this._changes.push(entry);
 		return this;
 	}
 
 	addKeyImprovement(improvement: string): this {
-		this.report.key_improvements!.push(improvement);
+		this._keyImprovements.push(improvement);
 		return this;
 	}
 
 	addRemainingIssue(issue: string): this {
-		this.report.remaining_issues!.push(issue);
+		this._remainingIssues.push(issue);
 		return this;
 	}
 
 	build(): OptimizationReport {
-		return OptimizationReportSchema.parse(this.report);
+		return OptimizationReportSchema.parse({
+			...this.report,
+			changes: this._changes,
+			score_comparisons: this._scoreComparisons,
+			key_improvements: this._keyImprovements,
+			remaining_issues: this._remainingIssues,
+		});
 	}
 }
 

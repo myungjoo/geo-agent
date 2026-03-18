@@ -1,3 +1,4 @@
+import type { EvaluationResult } from "../prompts/evaluation-templates/index.js";
 /**
  * Interactive Dashboard HTML Generator
  *
@@ -6,7 +7,6 @@
  * - Tab 10: 사이클 이력 (cycle >= 1일 때만 표시)
  */
 import type { OptimizationReport, ScoreComparison } from "./report-generator.js";
-import type { EvaluationResult } from "../prompts/evaluation-templates/index.js";
 
 export interface DashboardData {
 	report: OptimizationReport;
@@ -77,21 +77,21 @@ canvas { max-width: 100%; }
   <div style="margin-top:8px">
     <span class="score-badge ${gradeClass(report.grade_before)}">${report.overall_before.toFixed(1)}</span>
     → <span class="score-badge ${gradeClass(report.grade_after)}">${report.overall_after.toFixed(1)}</span>
-    <span style="margin-left:8px;color:${report.overall_delta >= 0 ? '#2d6a4f' : '#e94560'}">
-      ${report.overall_delta >= 0 ? '+' : ''}${report.overall_delta.toFixed(1)}
+    <span style="margin-left:8px;color:${report.overall_delta >= 0 ? "#2d6a4f" : "#e94560"}">
+      ${report.overall_delta >= 0 ? "+" : ""}${report.overall_delta.toFixed(1)}
     </span>
   </div>
 </div>
 
 <div class="tabs" id="tabs">
-${tabNames.map((name, i) => `  <div class="tab${i === 0 ? ' active' : ''}" data-tab="${i}">${name}</div>`).join("\n")}
+${tabNames.map((name, i) => `  <div class="tab${i === 0 ? " active" : ""}" data-tab="${i}">${name}</div>`).join("\n")}
 </div>
 
 <!-- Tab 0: Overview -->
 <div class="panel active" id="panel-0">
   <div class="grid-2">
     <div class="card"><h3>Summary</h3>
-      <p>Overall: ${report.overall_before.toFixed(1)} → ${report.overall_after.toFixed(1)} (${report.overall_delta >= 0 ? '+' : ''}${report.overall_delta.toFixed(1)})</p>
+      <p>Overall: ${report.overall_before.toFixed(1)} → ${report.overall_after.toFixed(1)} (${report.overall_delta >= 0 ? "+" : ""}${report.overall_delta.toFixed(1)})</p>
       <p>Grade: ${report.grade_before} → ${report.grade_after}</p>
       <p>Changes: ${report.changes.length}</p>
       <p>Cycles: ${report.cycle_count}</p>
@@ -105,7 +105,7 @@ ${tabNames.map((name, i) => `  <div class="tab${i === 0 ? ' active' : ''}" data-
   <div class="card"><h3>Dimension Scores</h3>
     <table>
       <tr><th>Dimension</th><th>Before</th><th>After</th><th>Delta</th><th>%</th></tr>
-${report.score_comparisons.map((s) => `      <tr><td>${escapeHtml(s.dimension)}</td><td>${s.before.toFixed(1)}</td><td>${s.after.toFixed(1)}</td><td class="${deltaClass(s.delta)}">${s.delta >= 0 ? '+' : ''}${s.delta.toFixed(1)}</td><td class="${deltaClass(s.delta_pct)}">${s.delta_pct >= 0 ? '+' : ''}${s.delta_pct.toFixed(1)}%</td></tr>`).join("\n")}
+${report.score_comparisons.map((s) => `      <tr><td>${escapeHtml(s.dimension)}</td><td>${s.before.toFixed(1)}</td><td>${s.after.toFixed(1)}</td><td class="${deltaClass(s.delta)}">${s.delta >= 0 ? "+" : ""}${s.delta.toFixed(1)}</td><td class="${deltaClass(s.delta_pct)}">${s.delta_pct >= 0 ? "+" : ""}${s.delta_pct.toFixed(1)}%</td></tr>`).join("\n")}
     </table>
   </div>
   <div class="card"><h3>Bar Chart</h3><canvas id="bar-chart"></canvas></div>
@@ -114,12 +114,16 @@ ${report.score_comparisons.map((s) => `      <tr><td>${escapeHtml(s.dimension)}<
 <!-- Tab 2: Changes -->
 <div class="panel" id="panel-2">
   <div class="card"><h3>All Changes (${report.changes.length})</h3>
-${report.changes.map((ch) => `    <div class="change-entry">
+${report.changes
+	.map(
+		(ch) => `    <div class="change-entry">
       <span class="change-type ${ch.change_type}">${ch.change_type}</span>
       <strong>${escapeHtml(ch.file_path)}</strong>
       <p style="color:var(--text-dim);font-size:0.9em">${escapeHtml(ch.summary)}</p>
-      ${ch.affected_dimensions.length > 0 ? `<p style="font-size:0.8em">Affected: ${ch.affected_dimensions.join(', ')}</p>` : ''}
-    </div>`).join("\n")}
+      ${ch.affected_dimensions.length > 0 ? `<p style="font-size:0.8em">Affected: ${ch.affected_dimensions.join(", ")}</p>` : ""}
+    </div>`,
+	)
+	.join("\n")}
   </div>
 </div>
 
@@ -140,7 +144,9 @@ ${[3, 4, 5, 6].map((i) => `<div class="panel" id="panel-${i}"><div class="card">
   </div>
 </div>
 
-${hasCycles ? `<!-- Tab 9: Cycle History -->
+${
+	hasCycles
+		? `<!-- Tab 9: Cycle History -->
 <div class="panel" id="panel-9">
   <div class="card"><h3>Score Progression</h3><canvas id="cycle-chart"></canvas></div>
   <div class="card"><h3>Cycle Details</h3>
@@ -149,7 +155,9 @@ ${hasCycles ? `<!-- Tab 9: Cycle History -->
 ${(cycle_history ?? []).map((ch) => `      <tr><td>${ch.cycle_number}</td><td>${ch.overall_score.toFixed(1)}</td><td>${ch.grade}</td><td>${ch.evaluated_at.slice(0, 19)}</td></tr>`).join("\n")}
     </table>
   </div>
-</div>` : ''}
+</div>`
+		: ""
+}
 
 <script>
 // Tab switching
@@ -192,14 +200,18 @@ new Chart(document.getElementById('bar-chart'), {
   options: { scales: { x: { ticks: { color: '#999' } }, y: { min: 0, max: 100, ticks: { color: '#999' } } }, plugins: { legend: { labels: { color: '#eee' } } } }
 });
 
-${hasCycles ? `// Cycle History Chart
+${
+	hasCycles
+		? `// Cycle History Chart
 const cycleLabels = ${JSON.stringify((cycle_history ?? []).map((c) => `Cycle ${c.cycle_number}`))};
 const cycleScores = ${JSON.stringify((cycle_history ?? []).map((c) => c.overall_score))};
 new Chart(document.getElementById('cycle-chart'), {
   type: 'line',
   data: { labels: cycleLabels, datasets: [{ label: 'Overall Score', data: cycleScores, borderColor: '#e94560', tension: 0.3, fill: false }] },
   options: { scales: { y: { min: 0, max: 100 } }, plugins: { legend: { labels: { color: '#eee' } } } }
-});` : ''}
+});`
+		: ""
+}
 </script>
 </body>
 </html>`;

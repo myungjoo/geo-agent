@@ -28,12 +28,7 @@ export const LLMAuthConfigSchema = z.discriminatedUnion("method", [
 
 export type LLMAuthConfig = z.infer<typeof LLMAuthConfigSchema>;
 
-export const ModelRoleSchema = z.enum([
-	"orchestration",
-	"validation_target",
-	"utility",
-	"both",
-]);
+export const ModelRoleSchema = z.enum(["orchestration", "validation_target", "utility", "both"]);
 
 export type ModelRole = z.infer<typeof ModelRoleSchema>;
 

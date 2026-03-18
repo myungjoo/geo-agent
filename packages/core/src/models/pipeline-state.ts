@@ -41,16 +41,8 @@ export const RetryPolicySchema = z.object({
 	initial_delay_ms: z.number().int().positive().default(1000),
 	backoff_multiplier: z.number().positive().default(2.0),
 	max_delay_ms: z.number().int().positive().default(30000),
-	retryable_errors: z.array(z.string()).default([
-		"rate_limit",
-		"timeout",
-		"server_error",
-	]),
-	non_retryable: z.array(z.string()).default([
-		"auth_error",
-		"invalid_request",
-		"content_filter",
-	]),
+	retryable_errors: z.array(z.string()).default(["rate_limit", "timeout", "server_error"]),
+	non_retryable: z.array(z.string()).default(["auth_error", "invalid_request", "content_filter"]),
 });
 
 export type RetryPolicy = z.infer<typeof RetryPolicySchema>;

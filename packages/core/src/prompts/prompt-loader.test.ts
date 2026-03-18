@@ -1,23 +1,20 @@
-import { describe, it, expect, afterEach } from "vitest";
-import path from "node:path";
-import os from "node:os";
-import fs from "node:fs";
 import crypto from "node:crypto";
-import {
-	loadPrompt,
-	savePrompt,
-	resetPrompt,
-	loadAllPrompts,
-	injectSlots,
-} from "./prompt-loader.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import type { AgentId, AgentPromptConfig } from "../models/agent-prompt-config.js";
 import { DEFAULT_PROMPTS } from "./defaults.js";
-import type { AgentPromptConfig, AgentId } from "../models/agent-prompt-config.js";
+import {
+	injectSlots,
+	loadAllPrompts,
+	loadPrompt,
+	resetPrompt,
+	savePrompt,
+} from "./prompt-loader.js";
 
 function makeTmpDir(): string {
-	const dir = path.join(
-		os.tmpdir(),
-		`geo-prompt-test-${crypto.randomBytes(8).toString("hex")}`,
-	);
+	const dir = path.join(os.tmpdir(), `geo-prompt-test-${crypto.randomBytes(8).toString("hex")}`);
 	fs.mkdirSync(dir, { recursive: true });
 	return dir;
 }
@@ -57,8 +54,8 @@ describe("loadPrompt", () => {
 		const result = loadPrompt(workspace, "orchestrator");
 
 		expect(result.agent_id).toBe("orchestrator");
-		expect(result.display_name).toBe(DEFAULT_PROMPTS["orchestrator"].display_name);
-		expect(result.system_instruction).toBe(DEFAULT_PROMPTS["orchestrator"].system_instruction);
+		expect(result.display_name).toBe(DEFAULT_PROMPTS.orchestrator.display_name);
+		expect(result.system_instruction).toBe(DEFAULT_PROMPTS.orchestrator.system_instruction);
 	});
 
 	it("returns prompt with is_customized: false for defaults", () => {
@@ -125,10 +122,7 @@ describe("loadPrompt", () => {
 		});
 		const promptDir = path.join(workspace, "prompts");
 		fs.mkdirSync(promptDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(promptDir, "orchestrator.json"),
-			JSON.stringify(custom, null, 2),
-		);
+		fs.writeFileSync(path.join(promptDir, "orchestrator.json"), JSON.stringify(custom, null, 2));
 
 		const result = loadPrompt(workspace, "orchestrator");
 
@@ -148,10 +142,7 @@ describe("loadPrompt", () => {
 		});
 		const promptDir = path.join(workspace, "prompts");
 		fs.mkdirSync(promptDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(promptDir, "analysis.json"),
-			JSON.stringify(custom, null, 2),
-		);
+		fs.writeFileSync(path.join(promptDir, "analysis.json"), JSON.stringify(custom, null, 2));
 
 		const result = loadPrompt(workspace, "analysis");
 
@@ -164,16 +155,13 @@ describe("loadPrompt", () => {
 		const workspace = trackTmpDir();
 		const promptDir = path.join(workspace, "prompts");
 		fs.mkdirSync(promptDir, { recursive: true });
-		fs.writeFileSync(
-			path.join(promptDir, "orchestrator.json"),
-			"{ this is not valid JSON !!!",
-		);
+		fs.writeFileSync(path.join(promptDir, "orchestrator.json"), "{ this is not valid JSON !!!");
 
 		const result = loadPrompt(workspace, "orchestrator");
 
 		expect(result.agent_id).toBe("orchestrator");
 		expect(result.is_customized).toBe(false);
-		expect(result.display_name).toBe(DEFAULT_PROMPTS["orchestrator"].display_name);
+		expect(result.display_name).toBe(DEFAULT_PROMPTS.orchestrator.display_name);
 	});
 
 	it("throws error for unknown agent ID", () => {
@@ -272,7 +260,7 @@ describe("resetPrompt", () => {
 
 		const result = resetPrompt(workspace, "orchestrator");
 
-		expect(result.display_name).toBe(DEFAULT_PROMPTS["orchestrator"].display_name);
+		expect(result.display_name).toBe(DEFAULT_PROMPTS.orchestrator.display_name);
 		expect(result.temperature).toBe(0.3);
 		expect(result.is_customized).toBe(false);
 	});
@@ -350,32 +338,23 @@ describe("loadAllPrompts", () => {
 
 describe("injectSlots", () => {
 	it("replaces single slot", () => {
-		const result = injectSlots(
-			"Hello {{NAME}}, welcome!",
-			{ "{{NAME}}": "World" },
-		);
+		const result = injectSlots("Hello {{NAME}}, welcome!", { "{{NAME}}": "World" });
 
 		expect(result).toBe("Hello World, welcome!");
 	});
 
 	it("replaces multiple slots", () => {
-		const result = injectSlots(
-			"{{GREETING}} {{NAME}}, you have {{COUNT}} messages.",
-			{
-				"{{GREETING}}": "Hi",
-				"{{NAME}}": "Alice",
-				"{{COUNT}}": "5",
-			},
-		);
+		const result = injectSlots("{{GREETING}} {{NAME}}, you have {{COUNT}} messages.", {
+			"{{GREETING}}": "Hi",
+			"{{NAME}}": "Alice",
+			"{{COUNT}}": "5",
+		});
 
 		expect(result).toBe("Hi Alice, you have 5 messages.");
 	});
 
 	it("replaces same slot appearing multiple times", () => {
-		const result = injectSlots(
-			"{{X}} and {{X}} and {{X}}",
-			{ "{{X}}": "A" },
-		);
+		const result = injectSlots("{{X}} and {{X}} and {{X}}", { "{{X}}": "A" });
 
 		expect(result).toBe("A and A and A");
 	});
@@ -395,10 +374,7 @@ describe("injectSlots", () => {
 	});
 
 	it("handles slot value containing special regex characters", () => {
-		const result = injectSlots(
-			"Pattern: {{PATTERN}}",
-			{ "{{PATTERN}}": "price is $100.00 (USD)" },
-		);
+		const result = injectSlots("Pattern: {{PATTERN}}", { "{{PATTERN}}": "price is $100.00 (USD)" });
 
 		expect(result).toBe("Pattern: price is $100.00 (USD)");
 	});
@@ -446,7 +422,7 @@ describe("Integration", () => {
 		resetPrompt(workspace, "analysis");
 		const loaded = loadPrompt(workspace, "analysis");
 
-		expect(loaded.display_name).toBe(DEFAULT_PROMPTS["analysis"].display_name);
+		expect(loaded.display_name).toBe(DEFAULT_PROMPTS.analysis.display_name);
 		expect(loaded.temperature).toBe(0.3);
 		expect(loaded.is_customized).toBe(false);
 	});
@@ -479,7 +455,7 @@ describe("Integration", () => {
 		expect(validation.is_customized).toBe(true);
 
 		const analysis = all.find((p) => p.agent_id === "analysis")!;
-		expect(analysis.display_name).toBe(DEFAULT_PROMPTS["analysis"].display_name);
+		expect(analysis.display_name).toBe(DEFAULT_PROMPTS.analysis.display_name);
 		expect(analysis.is_customized).toBe(false);
 
 		const strategy = all.find((p) => p.agent_id === "strategy")!;

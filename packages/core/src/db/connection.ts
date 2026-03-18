@@ -1,9 +1,9 @@
-import { createClient, type Client } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
-import path from "node:path";
 import fs from "node:fs";
-import * as schema from "./schema.js";
+import path from "node:path";
+import { type Client, createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
 import type { AppSettings } from "../config/settings.js";
+import * as schema from "./schema.js";
 
 export type GeoDatabase = ReturnType<typeof drizzle<typeof schema>>;
 
@@ -126,9 +126,9 @@ export function createDatabase(settings: AppSettings): GeoDatabase {
 
 	// Enable WAL mode, foreign keys, and auto-create tables (Bug #5 fix)
 	// These are fire-and-forget — for immediate use, call ensureTables()
-	const initPromise = client.executeMultiple(
-		"PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;"
-	).then(() => client.executeMultiple(CREATE_TABLES_SQL));
+	const initPromise = client
+		.executeMultiple("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
+		.then(() => client.executeMultiple(CREATE_TABLES_SQL));
 
 	const db = drizzle(client, { schema }) as GeoDatabase & { _initPromise?: Promise<void> };
 	db._initPromise = initPromise;

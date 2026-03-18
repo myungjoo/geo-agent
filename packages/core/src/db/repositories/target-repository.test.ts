@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach } from "vitest";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
+import { beforeEach, describe, expect, it } from "vitest";
+import type { CreateTarget } from "../../models/target-profile.js";
 import * as schema from "../schema.js";
 import { TargetRepository } from "./target-repository.js";
-import type { CreateTarget } from "../../models/target-profile.js";
 
 const CREATE_TABLE_SQL = `
 CREATE TABLE targets (
@@ -68,10 +68,12 @@ describe("TargetRepository", () => {
 		});
 
 		it("3. returns TargetProfile objects with correct types", async () => {
-			await repo.create(createMinimalInput({
-				topics: ["seo", "ai"],
-				competitors: [{ url: "https://rival.com", name: "Rival", relationship: "direct" }],
-			}));
+			await repo.create(
+				createMinimalInput({
+					topics: ["seo", "ai"],
+					competitors: [{ url: "https://rival.com", name: "Rival", relationship: "direct" }],
+				}),
+			);
 
 			const result = await repo.findAll();
 			expect(result).toHaveLength(1);
@@ -166,7 +168,7 @@ describe("TargetRepository", () => {
 			expect(target.id).toBeDefined();
 			expect(typeof target.id).toBe("string");
 			expect(target.id).toMatch(
-				/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+				/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
 			);
 		});
 
@@ -202,7 +204,9 @@ describe("TargetRepository", () => {
 
 	describe("BUG: JSON double-serialization (#1)", () => {
 		it("14. topics array round-trips correctly", async () => {
-			const target = await repo.create(createMinimalInput({ topics: ["seo", "content-marketing"] }));
+			const target = await repo.create(
+				createMinimalInput({ topics: ["seo", "content-marketing"] }),
+			);
 			const found = await repo.findById(target.id);
 			expect(Array.isArray(found!.topics)).toBe(true);
 			expect(found!.topics).toEqual(["seo", "content-marketing"]);
@@ -244,9 +248,14 @@ describe("TargetRepository", () => {
 		});
 
 		it("18. empty arrays round-trip correctly", async () => {
-			const target = await repo.create(createMinimalInput({
-				topics: [], target_queries: [], competitors: [], llm_priorities: [],
-			}));
+			const target = await repo.create(
+				createMinimalInput({
+					topics: [],
+					target_queries: [],
+					competitors: [],
+					llm_priorities: [],
+				}),
+			);
 			const found = await repo.findById(target.id);
 			expect(found!.topics).toEqual([]);
 			expect(found!.target_queries).toEqual([]);
@@ -271,9 +280,13 @@ describe("TargetRepository", () => {
 
 	describe("update()", () => {
 		it("20. updates only specified fields", async () => {
-			const target = await repo.create(createMinimalInput({
-				name: "Original Name", description: "Original Description", audience: "Original Audience",
-			}));
+			const target = await repo.create(
+				createMinimalInput({
+					name: "Original Name",
+					description: "Original Description",
+					audience: "Original Audience",
+				}),
+			);
 			const updated = await repo.update(target.id, { name: "Updated Name" });
 			expect(updated!.name).toBe("Updated Name");
 			expect(updated!.description).toBe("Original Description");
@@ -342,13 +355,18 @@ describe("TargetRepository", () => {
 
 	describe("Integration", () => {
 		it("30. full CRUD lifecycle", async () => {
-			const created = await repo.create(createMinimalInput({ name: "Lifecycle Target", topics: ["lifecycle"] }));
+			const created = await repo.create(
+				createMinimalInput({ name: "Lifecycle Target", topics: ["lifecycle"] }),
+			);
 			expect(created.id).toBeDefined();
 
 			const found = await repo.findById(created.id);
 			expect(found!.id).toBe(created.id);
 
-			const updated = await repo.update(created.id, { name: "Updated Lifecycle", description: "Desc" });
+			const updated = await repo.update(created.id, {
+				name: "Updated Lifecycle",
+				description: "Desc",
+			});
 			expect(updated!.name).toBe("Updated Lifecycle");
 
 			expect(await repo.findAll()).toHaveLength(1);

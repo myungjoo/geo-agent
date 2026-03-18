@@ -1,40 +1,33 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-	// Site Type
-	SiteTypeSchema,
-	SITE_TYPE_LABELS,
-	type SiteType,
-
+	CLASSIFICATION_SIGNALS,
 	// Classification
 	ClassificationSignalSchema,
-	CLASSIFICATION_SIGNALS,
-
-	// Scoring
-	ScoringDimensionSchema,
-	DEFAULT_SCORING_DIMENSIONS,
-
-	// Probe
-	ProbeVerdictSchema,
-	ProbeResultSchema,
-
-	// Grade & Score
-	GradeSchema,
-	calculateGrade,
-	calculateOverallScore,
-
-	// Evaluation Result
-	EvaluationResultSchema,
-	type EvaluationResult,
-
+	type CycleControl,
+	CycleControlSchema,
 	// Cycle Control
 	CycleStopReasonSchema,
-	CycleControlSchema,
-	shouldStopCycle,
-	type CycleControl,
-
+	DEFAULT_SCORING_DIMENSIONS,
+	type EvaluationResult,
+	// Evaluation Result
+	EvaluationResultSchema,
+	// Grade & Score
+	GradeSchema,
+	ProbeResultSchema,
+	// Probe
+	ProbeVerdictSchema,
+	SITE_TYPE_LABELS,
+	// Scoring
+	ScoringDimensionSchema,
+	type SiteType,
+	// Site Type
+	SiteTypeSchema,
 	// Template Registry
 	TEMPLATE_REGISTRY,
+	calculateGrade,
+	calculateOverallScore,
 	getTemplate,
+	shouldStopCycle,
 } from "./index.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -249,12 +242,8 @@ describe("ScoringDimensionSchema", () => {
 	});
 
 	it("rejects weight out of range", () => {
-		expect(() =>
-			ScoringDimensionSchema.parse({ id: "S1", name: "t", weight: -0.1 }),
-		).toThrow();
-		expect(() =>
-			ScoringDimensionSchema.parse({ id: "S1", name: "t", weight: 1.1 }),
-		).toThrow();
+		expect(() => ScoringDimensionSchema.parse({ id: "S1", name: "t", weight: -0.1 })).toThrow();
+		expect(() => ScoringDimensionSchema.parse({ id: "S1", name: "t", weight: 1.1 })).toThrow();
 	});
 
 	it("rejects score out of range", () => {
@@ -314,24 +303,15 @@ describe("DEFAULT_SCORING_DIMENSIONS", () => {
 
 	it("weights sum to 1.0 for each type", () => {
 		for (const t of types) {
-			const sum = DEFAULT_SCORING_DIMENSIONS[t].reduce(
-				(acc, d) => acc + d.weight,
-				0,
-			);
+			const sum = DEFAULT_SCORING_DIMENSIONS[t].reduce((acc, d) => acc + d.weight, 0);
 			expect(sum).toBeCloseTo(1.0, 10);
 		}
 	});
 
 	it("all types share identical weights", () => {
-		const mfgWeights = DEFAULT_SCORING_DIMENSIONS.manufacturer.map(
-			(d) => d.weight,
-		);
-		const resWeights = DEFAULT_SCORING_DIMENSIONS.research.map(
-			(d) => d.weight,
-		);
-		const genWeights = DEFAULT_SCORING_DIMENSIONS.generic.map(
-			(d) => d.weight,
-		);
+		const mfgWeights = DEFAULT_SCORING_DIMENSIONS.manufacturer.map((d) => d.weight);
+		const resWeights = DEFAULT_SCORING_DIMENSIONS.research.map((d) => d.weight);
+		const genWeights = DEFAULT_SCORING_DIMENSIONS.generic.map((d) => d.weight);
 		expect(mfgWeights).toEqual(resWeights);
 		expect(resWeights).toEqual(genWeights);
 	});
@@ -399,9 +379,7 @@ describe("ProbeResultSchema", () => {
 
 	it("accepts probe result with notes", () => {
 		const result = makeProbeResult({ notes: "스펙 JS 렌더링 후만 노출" });
-		expect(ProbeResultSchema.parse(result).notes).toBe(
-			"스펙 JS 렌더링 후만 노출",
-		);
+		expect(ProbeResultSchema.parse(result).notes).toBe("스펙 JS 렌더링 후만 노출");
 	});
 
 	it("notes is optional", () => {
@@ -411,9 +389,7 @@ describe("ProbeResultSchema", () => {
 
 	it("rejects missing required fields", () => {
 		expect(() => ProbeResultSchema.parse({ probe_id: "P-01" })).toThrow();
-		expect(() =>
-			ProbeResultSchema.parse({ verdict: "PASS", found: 0, total: 0 }),
-		).toThrow();
+		expect(() => ProbeResultSchema.parse({ verdict: "PASS", found: 0, total: 0 })).toThrow();
 	});
 
 	it("accepts FAIL with found=0", () => {
@@ -435,13 +411,7 @@ describe("ProbeResultSchema", () => {
 
 describe("GradeSchema", () => {
 	it("accepts all valid grades", () => {
-		const grades = [
-			"Excellent",
-			"Good",
-			"Needs Improvement",
-			"Poor",
-			"Critical",
-		];
+		const grades = ["Excellent", "Good", "Needs Improvement", "Poor", "Critical"];
 		for (const g of grades) {
 			expect(GradeSchema.parse(g)).toBe(g);
 		}
@@ -571,46 +541,32 @@ describe("EvaluationResultSchema", () => {
 
 	it("accepts all site types", () => {
 		for (const t of ["manufacturer", "research", "generic"] as const) {
-			const parsed = EvaluationResultSchema.parse(
-				makeEvaluationResult({ site_type: t }),
-			);
+			const parsed = EvaluationResultSchema.parse(makeEvaluationResult({ site_type: t }));
 			expect(parsed.site_type).toBe(t);
 		}
 	});
 
 	it("accepts both evaluation targets", () => {
 		expect(
-			EvaluationResultSchema.parse(
-				makeEvaluationResult({ evaluation_target: "original" }),
-			).evaluation_target,
+			EvaluationResultSchema.parse(makeEvaluationResult({ evaluation_target: "original" }))
+				.evaluation_target,
 		).toBe("original");
 		expect(
-			EvaluationResultSchema.parse(
-				makeEvaluationResult({ evaluation_target: "clone" }),
-			).evaluation_target,
+			EvaluationResultSchema.parse(makeEvaluationResult({ evaluation_target: "clone" }))
+				.evaluation_target,
 		).toBe("clone");
 	});
 
 	it("rejects invalid evaluation target", () => {
 		expect(() =>
-			EvaluationResultSchema.parse(
-				makeEvaluationResult({ evaluation_target: "modified" } as any),
-			),
+			EvaluationResultSchema.parse(makeEvaluationResult({ evaluation_target: "modified" } as any)),
 		).toThrow();
 	});
 
 	it("accepts all valid grades", () => {
-		const grades = [
-			"Excellent",
-			"Good",
-			"Needs Improvement",
-			"Poor",
-			"Critical",
-		] as const;
+		const grades = ["Excellent", "Good", "Needs Improvement", "Poor", "Critical"] as const;
 		for (const g of grades) {
-			expect(
-				EvaluationResultSchema.parse(makeEvaluationResult({ grade: g })).grade,
-			).toBe(g);
+			expect(EvaluationResultSchema.parse(makeEvaluationResult({ grade: g })).grade).toBe(g);
 		}
 	});
 
@@ -642,17 +598,12 @@ describe("EvaluationResultSchema", () => {
 			],
 		});
 		const parsed = EvaluationResultSchema.parse(result);
-		expect(parsed.top_improvements[0].affected_dimensions).toEqual([
-			"S2",
-			"S3",
-		]);
+		expect(parsed.top_improvements[0].affected_dimensions).toEqual(["S2", "S3"]);
 	});
 
 	it("rejects missing required fields", () => {
 		expect(() => EvaluationResultSchema.parse({})).toThrow();
-		expect(() =>
-			EvaluationResultSchema.parse({ run_id: "test" }),
-		).toThrow();
+		expect(() => EvaluationResultSchema.parse({ run_id: "test" })).toThrow();
 	});
 
 	it("accepts cycle_number > 0 for intermediate results", () => {
@@ -733,19 +684,13 @@ describe("CycleControlSchema", () => {
 	});
 
 	it("rejects target_score out of range", () => {
-		expect(() =>
-			CycleControlSchema.parse({ target_score: -1 }),
-		).toThrow();
-		expect(() =>
-			CycleControlSchema.parse({ target_score: 101 }),
-		).toThrow();
+		expect(() => CycleControlSchema.parse({ target_score: -1 })).toThrow();
+		expect(() => CycleControlSchema.parse({ target_score: 101 })).toThrow();
 	});
 
 	it("accepts boundary target_score values", () => {
 		expect(CycleControlSchema.parse({ target_score: 0 }).target_score).toBe(0);
-		expect(
-			CycleControlSchema.parse({ target_score: 100 }).target_score,
-		).toBe(100);
+		expect(CycleControlSchema.parse({ target_score: 100 }).target_score).toBe(100);
 	});
 });
 
@@ -968,15 +913,11 @@ describe("getTemplate", () => {
 	});
 
 	it("throws for unknown site type", () => {
-		expect(() => getTemplate("ecommerce" as any)).toThrow(
-			"Unknown site type: ecommerce",
-		);
+		expect(() => getTemplate("ecommerce" as any)).toThrow("Unknown site type: ecommerce");
 	});
 
 	it("returned template has correct scoring dimensions", () => {
 		const t = getTemplate("manufacturer");
-		expect(t.scoring_dimensions).toEqual(
-			DEFAULT_SCORING_DIMENSIONS.manufacturer,
-		);
+		expect(t.scoring_dimensions).toEqual(DEFAULT_SCORING_DIMENSIONS.manufacturer);
 	});
 });

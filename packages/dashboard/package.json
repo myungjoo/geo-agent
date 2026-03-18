@@ -1,28 +1,28 @@
 {
-  "name": "@geo-agent/dashboard",
-  "version": "0.1.0",
-  "description": "GEO Agent localhost web dashboard",
-  "type": "module",
-  "main": "dist/server.js",
-  "types": "dist/server.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/server.js",
-      "types": "./dist/server.d.ts"
-    }
-  },
-  "scripts": {
-    "build": "tsc -b",
-    "dev": "node --import tsx src/server.ts",
-    "test": "vitest run",
-    "clean": "rimraf dist .tsbuildinfo"
-  },
-  "dependencies": {
-    "@geo-agent/core": "*",
-    "@hono/node-server": "^1.13.0",
-    "hono": "^4.6.0"
-  },
-  "devDependencies": {
-    "tsx": "^4.19.0"
-  }
+	"name": "@geo-agent/dashboard",
+	"version": "0.1.0",
+	"description": "GEO Agent localhost web dashboard",
+	"type": "module",
+	"main": "dist/server.js",
+	"types": "dist/server.d.ts",
+	"exports": {
+		".": {
+			"import": "./dist/server.js",
+			"types": "./dist/server.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "tsc -b",
+		"dev": "node --import tsx src/server.ts",
+		"test": "vitest run",
+		"clean": "rimraf dist .tsbuildinfo"
+	},
+	"dependencies": {
+		"@geo-agent/core": "*",
+		"@hono/node-server": "^1.13.0",
+		"hono": "^4.6.0"
+	},
+	"devDependencies": {
+		"tsx": "^4.19.0"
+	}
 }

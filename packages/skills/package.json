@@ -1,17 +1,17 @@
 {
-  "name": "@geo-agent/skills",
-  "version": "0.1.0",
-  "description": "GEO Agent skill system (bundled + workspace skills)",
-  "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "scripts": {
-    "build": "tsc -b",
-    "dev": "tsc -b --watch",
-    "test": "vitest run",
-    "clean": "rimraf dist .tsbuildinfo"
-  },
-  "dependencies": {
-    "@geo-agent/core": "*"
-  }
+	"name": "@geo-agent/skills",
+	"version": "0.1.0",
+	"description": "GEO Agent skill system (bundled + workspace skills)",
+	"type": "module",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"scripts": {
+		"build": "tsc -b",
+		"dev": "tsc -b --watch",
+		"test": "vitest run",
+		"clean": "rimraf dist .tsbuildinfo"
+	},
+	"dependencies": {
+		"@geo-agent/core": "*"
+	}
 }

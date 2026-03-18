@@ -39,11 +39,7 @@ export class ArchiveBuilder {
 		optimizedFiles: Map<string, string>,
 		diffs: Map<string, string>,
 	): ArchiveResult {
-		const archiveDir = path.join(
-			this.reportsDir,
-			report.target_id,
-			report.report_id,
-		);
+		const archiveDir = path.join(this.reportsDir, report.target_id, report.report_id);
 
 		const origDir = path.join(archiveDir, "original");
 		const optDir = path.join(archiveDir, "optimized");
@@ -117,7 +113,8 @@ export class ArchiveBuilder {
 	listArchives(targetId: string): string[] {
 		const targetDir = path.join(this.reportsDir, targetId);
 		if (!fs.existsSync(targetDir)) return [];
-		return fs.readdirSync(targetDir, { withFileTypes: true })
+		return fs
+			.readdirSync(targetDir, { withFileTypes: true })
 			.filter((d) => d.isDirectory())
 			.map((d) => d.name);
 	}

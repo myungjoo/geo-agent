@@ -1,13 +1,11 @@
-import { z } from "zod";
-import path from "node:path";
-import os from "node:os";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { z } from "zod";
 
 export const AppSettingsSchema = z.object({
 	/** Workspace root directory */
-	workspace_dir: z.string().default(
-		path.join(os.homedir(), ".geo-agent"),
-	),
+	workspace_dir: z.string().default(path.join(os.homedir(), ".geo-agent")),
 	/** SQLite database file path (relative to workspace) */
 	db_path: z.string().default("data/geo-agent.db"),
 	/** Dashboard server port */
@@ -15,9 +13,7 @@ export const AppSettingsSchema = z.object({
 	/** Default orchestration model */
 	default_model: z.string().default("gpt-4o"),
 	/** Log level */
-	log_level: z
-		.enum(["trace", "debug", "info", "warn", "error", "fatal"])
-		.default("info"),
+	log_level: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
 });
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>;

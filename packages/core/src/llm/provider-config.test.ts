@@ -1,22 +1,19 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
-import os from "node:os";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-	ProviderConfigManager,
 	DEFAULT_PROVIDERS,
 	LLMProviderIdSchema,
 	LLMProviderSettingsSchema,
+	ProviderConfigManager,
 } from "./provider-config.js";
 
 let tmpDirs: string[] = [];
 
 function makeTmpDir(): string {
-	const dir = path.join(
-		os.tmpdir(),
-		`geo-provider-test-${crypto.randomBytes(8).toString("hex")}`,
-	);
+	const dir = path.join(os.tmpdir(), `geo-provider-test-${crypto.randomBytes(8).toString("hex")}`);
 	fs.mkdirSync(dir, { recursive: true });
 	tmpDirs.push(dir);
 	return dir;
@@ -195,10 +192,7 @@ describe("ProviderConfigManager", () => {
 		});
 
 		it("returns defaults when config file is malformed JSON", () => {
-			fs.writeFileSync(
-				path.join(tmpDir, "llm-providers.json"),
-				"not valid json!!",
-			);
+			fs.writeFileSync(path.join(tmpDir, "llm-providers.json"), "not valid json!!");
 
 			const providers = manager.loadAll();
 			expect(providers).toHaveLength(6);
@@ -245,9 +239,7 @@ describe("ProviderConfigManager", () => {
 			expect(fs.existsSync(filePath)).toBe(true);
 
 			const raw = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-			const saved = raw.find(
-				(p: { provider_id: string }) => p.provider_id === "openai",
-			);
+			const saved = raw.find((p: { provider_id: string }) => p.provider_id === "openai");
 			expect(saved.api_key).toBe("sk-saved-key");
 			expect(saved.temperature).toBe(0.9);
 		});
@@ -341,9 +333,7 @@ describe("ProviderConfigManager", () => {
 		});
 
 		it("throws for unknown provider", () => {
-			expect(() =>
-				manager.reset("unknown" as never),
-			).toThrow("Unknown provider");
+			expect(() => manager.reset("unknown" as never)).toThrow("Unknown provider");
 		});
 	});
 
@@ -368,9 +358,7 @@ describe("ProviderConfigManager", () => {
 			expect(restoredOpenai?.api_key).toBeUndefined();
 			expect(restoredOpenai?.enabled).toBe(true);
 
-			const restoredAnthropic = restored.find(
-				(p) => p.provider_id === "anthropic",
-			);
+			const restoredAnthropic = restored.find((p) => p.provider_id === "anthropic");
 			expect(restoredAnthropic?.enabled).toBe(false);
 		});
 

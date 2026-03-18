@@ -1,15 +1,11 @@
-import { Hono } from "hono";
+import { type AppSettings, initWorkspace, loadSettings } from "@geo-agent/core";
 import { serve } from "@hono/node-server";
+import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { trimTrailingSlash } from "hono/trailing-slash";
-import { targetsRouter } from "./routes/targets.js";
-import { settingsRouter } from "./routes/settings.js";
 import { pipelineRouter } from "./routes/pipeline.js";
-import {
-	loadSettings,
-	initWorkspace,
-	type AppSettings,
-} from "@geo-agent/core";
+import { settingsRouter } from "./routes/settings.js";
+import { targetsRouter } from "./routes/targets.js";
 
 const app = new Hono();
 
@@ -34,18 +30,20 @@ app.route("/api/targets", pipelineRouter);
 app.route("/api/settings", settingsRouter);
 
 // Root redirect
-app.get("/", (c) => c.json({
-	name: "GEO Agent Dashboard",
-	version: "0.2.0",
-	endpoints: [
-		"/health",
-		"/api/targets",
-		"/api/targets/:id/pipeline",
-		"/api/targets/:id/cycle/status",
-		"/api/settings/agents/prompts",
-		"/api/settings/llm-providers",
-	],
-}));
+app.get("/", (c) =>
+	c.json({
+		name: "GEO Agent Dashboard",
+		version: "0.2.0",
+		endpoints: [
+			"/health",
+			"/api/targets",
+			"/api/targets/:id/pipeline",
+			"/api/targets/:id/cycle/status",
+			"/api/settings/agents/prompts",
+			"/api/settings/llm-providers",
+		],
+	}),
+);
 
 export { app };
 

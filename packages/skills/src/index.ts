@@ -49,7 +49,11 @@ export interface SkillRegistry {
 	/** Register a new skill */
 	registerSkill(skill: Skill): void;
 	/** Execute a skill by name */
-	executeSkill(name: string, context: SkillExecutionContext, params?: Record<string, unknown>): Promise<SkillResult>;
+	executeSkill(
+		name: string,
+		context: SkillExecutionContext,
+		params?: Record<string, unknown>,
+	): Promise<SkillResult>;
 }
 
 // ── Bundled Skills ─────────────────────────────────────────

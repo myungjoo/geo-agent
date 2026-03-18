@@ -71,36 +71,35 @@ export type ScoringDimension = z.infer<typeof ScoringDimensionSchema>;
  * 사이트 유형별 기본 채점 차원
  * 가중치 합계 = 1.0, 차원 ID/가중치는 동일, 이름만 유형별 차이
  */
-export const DEFAULT_SCORING_DIMENSIONS: Record<SiteType, ScoringDimension[]> =
-	{
-		manufacturer: [
-			{ id: "S1", name: "LLM 크롤링 접근성", weight: 0.15 },
-			{ id: "S2", name: "구조화 데이터 품질", weight: 0.25 },
-			{ id: "S3", name: "제품 스펙 기계가독성", weight: 0.2 },
-			{ id: "S4", name: "콘텐츠 팩트 밀도", weight: 0.1 },
-			{ id: "S5", name: "브랜드 메시지 긍정도·일관성", weight: 0.1 },
-			{ id: "S6", name: "AI 친화적 인프라", weight: 0.1 },
-			{ id: "S7", name: "콘텐츠 탐색 구조", weight: 0.1 },
-		],
-		research: [
-			{ id: "S1", name: "LLM 크롤링 접근성", weight: 0.15 },
-			{ id: "S2", name: "학술 데이터 구조화 품질", weight: 0.25 },
-			{ id: "S3", name: "논문 정보 기계가독성", weight: 0.2 },
-			{ id: "S4", name: "연구 콘텐츠 깊이", weight: 0.1 },
-			{ id: "S5", name: "연구소 신뢰도·권위 지표", weight: 0.1 },
-			{ id: "S6", name: "AI 친화적 인프라", weight: 0.1 },
-			{ id: "S7", name: "콘텐츠 탐색·연결 구조", weight: 0.1 },
-		],
-		generic: [
-			{ id: "S1", name: "LLM 크롤링 접근성", weight: 0.15 },
-			{ id: "S2", name: "구조화 데이터 품질", weight: 0.25 },
-			{ id: "S3", name: "콘텐츠 기계가독성", weight: 0.2 },
-			{ id: "S4", name: "콘텐츠 팩트 밀도", weight: 0.1 },
-			{ id: "S5", name: "브랜드/조직 신뢰도 지표", weight: 0.1 },
-			{ id: "S6", name: "AI 친화적 인프라", weight: 0.1 },
-			{ id: "S7", name: "콘텐츠 탐색 구조", weight: 0.1 },
-		],
-	};
+export const DEFAULT_SCORING_DIMENSIONS: Record<SiteType, ScoringDimension[]> = {
+	manufacturer: [
+		{ id: "S1", name: "LLM 크롤링 접근성", weight: 0.15 },
+		{ id: "S2", name: "구조화 데이터 품질", weight: 0.25 },
+		{ id: "S3", name: "제품 스펙 기계가독성", weight: 0.2 },
+		{ id: "S4", name: "콘텐츠 팩트 밀도", weight: 0.1 },
+		{ id: "S5", name: "브랜드 메시지 긍정도·일관성", weight: 0.1 },
+		{ id: "S6", name: "AI 친화적 인프라", weight: 0.1 },
+		{ id: "S7", name: "콘텐츠 탐색 구조", weight: 0.1 },
+	],
+	research: [
+		{ id: "S1", name: "LLM 크롤링 접근성", weight: 0.15 },
+		{ id: "S2", name: "학술 데이터 구조화 품질", weight: 0.25 },
+		{ id: "S3", name: "논문 정보 기계가독성", weight: 0.2 },
+		{ id: "S4", name: "연구 콘텐츠 깊이", weight: 0.1 },
+		{ id: "S5", name: "연구소 신뢰도·권위 지표", weight: 0.1 },
+		{ id: "S6", name: "AI 친화적 인프라", weight: 0.1 },
+		{ id: "S7", name: "콘텐츠 탐색·연결 구조", weight: 0.1 },
+	],
+	generic: [
+		{ id: "S1", name: "LLM 크롤링 접근성", weight: 0.15 },
+		{ id: "S2", name: "구조화 데이터 품질", weight: 0.25 },
+		{ id: "S3", name: "콘텐츠 기계가독성", weight: 0.2 },
+		{ id: "S4", name: "콘텐츠 팩트 밀도", weight: 0.1 },
+		{ id: "S5", name: "브랜드/조직 신뢰도 지표", weight: 0.1 },
+		{ id: "S6", name: "AI 친화적 인프라", weight: 0.1 },
+		{ id: "S7", name: "콘텐츠 탐색 구조", weight: 0.1 },
+	],
+};
 
 // ── Probe Verdict ───────────────────────────────────────────
 
@@ -118,13 +117,7 @@ export type ProbeResult = z.infer<typeof ProbeResultSchema>;
 
 // ── Evaluation Result ───────────────────────────────────────
 
-export const GradeSchema = z.enum([
-	"Excellent",
-	"Good",
-	"Needs Improvement",
-	"Poor",
-	"Critical",
-]);
+export const GradeSchema = z.enum(["Excellent", "Good", "Needs Improvement", "Poor", "Critical"]);
 export type Grade = z.infer<typeof GradeSchema>;
 
 export function calculateGrade(score: number): Grade {

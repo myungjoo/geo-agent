@@ -1,23 +1,23 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "composite": true,
-    "incremental": true,
-    "resolveJsonModule": true
-  },
-  "references": [
-    { "path": "packages/core" },
-    { "path": "packages/skills" },
-    { "path": "packages/cli" },
-    { "path": "packages/dashboard" }
-  ]
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"strict": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"declaration": true,
+		"declarationMap": true,
+		"sourceMap": true,
+		"composite": true,
+		"incremental": true,
+		"resolveJsonModule": true
+	},
+	"references": [
+		{ "path": "packages/core" },
+		{ "path": "packages/skills" },
+		{ "path": "packages/cli" },
+		{ "path": "packages/dashboard" }
+	]
 }

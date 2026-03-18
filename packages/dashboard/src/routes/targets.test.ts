@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
+import path from "node:path";
 import { createClient } from "@libsql/client";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 const testDir = path.join(os.tmpdir(), `geo-targets-test-${Date.now()}`);
 
@@ -105,9 +105,7 @@ describe("POST /api/targets", () => {
 			topics: ["seo", "geo", "llm"],
 			target_queries: ["what is geo optimization?", "best geo tools"],
 			audience: "marketing professionals",
-			competitors: [
-				{ url: "https://competitor.com", name: "Comp A", relationship: "direct" },
-			],
+			competitors: [{ url: "https://competitor.com", name: "Comp A", relationship: "direct" }],
 			business_goal: "Increase LLM citations by 50%",
 			llm_priorities: [
 				{ llm_service: "chatgpt", priority: "critical" },
@@ -441,7 +439,7 @@ describe("CORS", () => {
 		const res = await app.request("/api/targets", {
 			method: "OPTIONS",
 			headers: {
-				"Origin": "http://localhost:5173",
+				Origin: "http://localhost:5173",
 				"Access-Control-Request-Method": "POST",
 			},
 		});

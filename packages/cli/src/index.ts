@@ -1,15 +1,12 @@
 #!/usr/bin/env node
 
-import { Command } from "commander";
+import { initWorkspace, loadSettings } from "@geo-agent/core";
 import { startServer } from "@geo-agent/dashboard";
-import { loadSettings, initWorkspace } from "@geo-agent/core";
+import { Command } from "commander";
 
 const program = new Command();
 
-program
-	.name("geo")
-	.description("GEO Agent System CLI")
-	.version("0.1.0");
+program.name("geo").description("GEO Agent System CLI").version("0.1.0");
 
 // ── geo start ─────────────────────────────────────────────
 program

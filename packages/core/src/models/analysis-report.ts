@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { GeoScoreSchema } from "./geo-score.js";
-import { LLMProbeSchema } from "./llm-probe.js";
 import { InfoRecognitionItemSchema } from "./info-recognition.js";
+import { LLMProbeSchema } from "./llm-probe.js";
 
 export const StructureQualitySchema = z.object({
 	semantic_tag_ratio: z.number().min(0).max(1),

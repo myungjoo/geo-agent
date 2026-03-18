@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { PipelineStateMachine } from "./state-machine.js";
+import { describe, expect, it } from "vitest";
 import type { PipelineStage, PipelineState } from "../models/pipeline-state.js";
+import { PipelineStateMachine } from "./state-machine.js";
 
 const TARGET_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 const PIPELINE_ID = "11111111-2222-3333-4444-555555555555";
@@ -126,11 +126,7 @@ describe("PipelineStateMachine", () => {
 		});
 
 		it("returns false for any transition from terminal stages", () => {
-			for (const terminal of [
-				"COMPLETED",
-				"FAILED",
-				"PARTIAL_FAILURE",
-			] as PipelineStage[]) {
+			for (const terminal of ["COMPLETED", "FAILED", "PARTIAL_FAILURE"] as PipelineStage[]) {
 				const sm = PipelineStateMachine.fromState(buildState({ stage: terminal }));
 				expect(sm.canTransition("INIT")).toBe(false);
 				expect(sm.canTransition("ANALYZING")).toBe(false);
@@ -139,16 +135,12 @@ describe("PipelineStateMachine", () => {
 		});
 
 		it("returns true for VALIDATING → STRATEGIZING (loop back)", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "VALIDATING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "VALIDATING" }));
 			expect(sm.canTransition("STRATEGIZING")).toBe(true);
 		});
 
 		it("returns true for VALIDATING → PARTIAL_FAILURE", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "VALIDATING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "VALIDATING" }));
 			expect(sm.canTransition("PARTIAL_FAILURE")).toBe(true);
 		});
 	});
@@ -173,9 +165,7 @@ describe("PipelineStateMachine", () => {
 			const after = sm.getState().updated_at;
 			expect(after).toBeTruthy();
 			// updated_at should be >= before
-			expect(new Date(after).getTime()).toBeGreaterThanOrEqual(
-				new Date(before).getTime(),
-			);
+			expect(new Date(after).getTime()).toBeGreaterThanOrEqual(new Date(before).getTime());
 		});
 
 		it("returns a copy of the state", () => {
@@ -193,49 +183,33 @@ describe("PipelineStateMachine", () => {
 	describe("transition() — invalid", () => {
 		it("throws on INIT → COMPLETED", () => {
 			const sm = new PipelineStateMachine(TARGET_ID);
-			expect(() => sm.transition("COMPLETED")).toThrowError(
-				/Invalid transition.*INIT.*COMPLETED/,
-			);
+			expect(() => sm.transition("COMPLETED")).toThrowError(/Invalid transition.*INIT.*COMPLETED/);
 		});
 
 		it("throws on INIT → REPORTING", () => {
 			const sm = new PipelineStateMachine(TARGET_ID);
-			expect(() => sm.transition("REPORTING")).toThrowError(
-				/Invalid transition/,
-			);
+			expect(() => sm.transition("REPORTING")).toThrowError(/Invalid transition/);
 		});
 
 		it("throws on ANALYZING → OPTIMIZING (skipping stages)", () => {
 			const sm = new PipelineStateMachine(TARGET_ID);
 			sm.transition("ANALYZING");
-			expect(() => sm.transition("OPTIMIZING")).toThrowError(
-				/Invalid transition/,
-			);
+			expect(() => sm.transition("OPTIMIZING")).toThrowError(/Invalid transition/);
 		});
 
 		it("throws when transitioning from a terminal state", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "COMPLETED" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "COMPLETED" }));
 			expect(() => sm.transition("INIT")).toThrowError(/Invalid transition/);
 		});
 
 		it("throws on FAILED → anything", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "FAILED" }),
-			);
-			expect(() => sm.transition("ANALYZING")).toThrowError(
-				/Invalid transition/,
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "FAILED" }));
+			expect(() => sm.transition("ANALYZING")).toThrowError(/Invalid transition/);
 		});
 
 		it("throws on PARTIAL_FAILURE → anything", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "PARTIAL_FAILURE" }),
-			);
-			expect(() => sm.transition("STRATEGIZING")).toThrowError(
-				/Invalid transition/,
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "PARTIAL_FAILURE" }));
+			expect(() => sm.transition("STRATEGIZING")).toThrowError(/Invalid transition/);
 		});
 	});
 
@@ -261,9 +235,7 @@ describe("PipelineStateMachine", () => {
 		});
 
 		it("PARTIAL_FAILURE sets completed_at", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "VALIDATING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "VALIDATING" }));
 			sm.transition("PARTIAL_FAILURE");
 			expect(sm.getState().completed_at).not.toBeNull();
 			expect(sm.getState().completed_at).toBe(sm.getState().updated_at);
@@ -344,9 +316,9 @@ describe("PipelineStateMachine", () => {
 			const sm = new PipelineStateMachine(TARGET_ID);
 			const before = sm.getState().updated_at;
 			sm.incrementRetry();
-			expect(
-				new Date(sm.getState().updated_at).getTime(),
-			).toBeGreaterThanOrEqual(new Date(before).getTime());
+			expect(new Date(sm.getState().updated_at).getTime()).toBeGreaterThanOrEqual(
+				new Date(before).getTime(),
+			);
 		});
 	});
 
@@ -377,9 +349,9 @@ describe("PipelineStateMachine", () => {
 			const sm = new PipelineStateMachine(TARGET_ID);
 			const before = sm.getState().updated_at;
 			sm.setAnalysisReportRef(REF_UUID);
-			expect(
-				new Date(sm.getState().updated_at).getTime(),
-			).toBeGreaterThanOrEqual(new Date(before).getTime());
+			expect(new Date(sm.getState().updated_at).getTime()).toBeGreaterThanOrEqual(
+				new Date(before).getTime(),
+			);
 		});
 	});
 
@@ -447,23 +419,17 @@ describe("PipelineStateMachine", () => {
 
 	describe("isTerminal()", () => {
 		it("returns true for COMPLETED", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "COMPLETED" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "COMPLETED" }));
 			expect(sm.isTerminal()).toBe(true);
 		});
 
 		it("returns true for FAILED", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "FAILED" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "FAILED" }));
 			expect(sm.isTerminal()).toBe(true);
 		});
 
 		it("returns true for PARTIAL_FAILURE", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "PARTIAL_FAILURE" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "PARTIAL_FAILURE" }));
 			expect(sm.isTerminal()).toBe(true);
 		});
 
@@ -493,37 +459,27 @@ describe("PipelineStateMachine", () => {
 		});
 
 		it("returns [CLONING, FAILED] for ANALYZING", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "ANALYZING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "ANALYZING" }));
 			expect(sm.getAllowedTransitions()).toEqual(["CLONING", "FAILED"]);
 		});
 
 		it("returns [STRATEGIZING, FAILED] for CLONING", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "CLONING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "CLONING" }));
 			expect(sm.getAllowedTransitions()).toEqual(["STRATEGIZING", "FAILED"]);
 		});
 
 		it("returns [OPTIMIZING, FAILED] for STRATEGIZING", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "STRATEGIZING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "STRATEGIZING" }));
 			expect(sm.getAllowedTransitions()).toEqual(["OPTIMIZING", "FAILED"]);
 		});
 
 		it("returns [VALIDATING, FAILED] for OPTIMIZING", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "OPTIMIZING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "OPTIMIZING" }));
 			expect(sm.getAllowedTransitions()).toEqual(["VALIDATING", "FAILED"]);
 		});
 
 		it("returns [REPORTING, STRATEGIZING, FAILED, PARTIAL_FAILURE] for VALIDATING", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "VALIDATING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "VALIDATING" }));
 			expect(sm.getAllowedTransitions()).toEqual([
 				"REPORTING",
 				"STRATEGIZING",
@@ -533,18 +489,12 @@ describe("PipelineStateMachine", () => {
 		});
 
 		it("returns [COMPLETED, FAILED] for REPORTING", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "REPORTING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "REPORTING" }));
 			expect(sm.getAllowedTransitions()).toEqual(["COMPLETED", "FAILED"]);
 		});
 
 		it("returns [] for terminal stages", () => {
-			for (const stage of [
-				"COMPLETED",
-				"FAILED",
-				"PARTIAL_FAILURE",
-			] as PipelineStage[]) {
+			for (const stage of ["COMPLETED", "FAILED", "PARTIAL_FAILURE"] as PipelineStage[]) {
 				const sm = PipelineStateMachine.fromState(buildState({ stage }));
 				expect(sm.getAllowedTransitions()).toEqual([]);
 			}
@@ -555,17 +505,13 @@ describe("PipelineStateMachine", () => {
 
 	describe("VALIDATING → STRATEGIZING loop", () => {
 		it("allows transition from VALIDATING back to STRATEGIZING", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "VALIDATING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "VALIDATING" }));
 			const result = sm.transition("STRATEGIZING");
 			expect(result.stage).toBe("STRATEGIZING");
 		});
 
 		it("can loop multiple times: STRATEGIZING → … → VALIDATING → STRATEGIZING", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "STRATEGIZING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "STRATEGIZING" }));
 
 			// First pass
 			sm.transition("OPTIMIZING");
@@ -583,9 +529,7 @@ describe("PipelineStateMachine", () => {
 		});
 
 		it("can eventually proceed to REPORTING after looping", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "VALIDATING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "VALIDATING" }));
 			sm.transition("STRATEGIZING");
 			sm.transition("OPTIMIZING");
 			sm.transition("VALIDATING");
@@ -600,31 +544,23 @@ describe("PipelineStateMachine", () => {
 
 	describe("VALIDATING → PARTIAL_FAILURE", () => {
 		it("allows transition from VALIDATING to PARTIAL_FAILURE", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "VALIDATING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "VALIDATING" }));
 			const result = sm.transition("PARTIAL_FAILURE");
 			expect(result.stage).toBe("PARTIAL_FAILURE");
 		});
 
 		it("sets completed_at when entering PARTIAL_FAILURE", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "VALIDATING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "VALIDATING" }));
 			sm.transition("PARTIAL_FAILURE");
 			expect(sm.getState().completed_at).not.toBeNull();
 		});
 
 		it("PARTIAL_FAILURE is a terminal state — no further transitions", () => {
-			const sm = PipelineStateMachine.fromState(
-				buildState({ stage: "VALIDATING" }),
-			);
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "VALIDATING" }));
 			sm.transition("PARTIAL_FAILURE");
 			expect(sm.isTerminal()).toBe(true);
 			expect(sm.getAllowedTransitions()).toEqual([]);
-			expect(() => sm.transition("STRATEGIZING")).toThrowError(
-				/Invalid transition/,
-			);
+			expect(() => sm.transition("STRATEGIZING")).toThrowError(/Invalid transition/);
 		});
 
 		it("PARTIAL_FAILURE is only reachable from VALIDATING", () => {

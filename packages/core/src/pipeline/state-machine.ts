@@ -64,9 +64,7 @@ export class PipelineStateMachine {
 	/** 다음 스테이지로 전이 */
 	transition(nextStage: PipelineStage): PipelineState {
 		if (!this.canTransition(nextStage)) {
-			throw new Error(
-				`Invalid transition: ${this.state.stage} → ${nextStage}`,
-			);
+			throw new Error(`Invalid transition: ${this.state.stage} → ${nextStage}`);
 		}
 
 		this.state.stage = nextStage;

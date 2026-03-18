@@ -1,18 +1,18 @@
-import { Hono } from "hono";
 import {
-	loadSettings,
 	type AgentId,
 	AgentIdSchema,
-	ProviderConfigManager,
 	LLMProviderIdSchema,
+	ProviderConfigManager,
+	loadSettings,
 } from "@geo-agent/core";
-import {
-	loadPrompt,
-	savePrompt,
-	resetPrompt,
-	loadAllPrompts,
-} from "@geo-agent/core/prompts/prompt-loader.js";
 import { DEFAULT_PROMPTS } from "@geo-agent/core/prompts/defaults.js";
+import {
+	loadAllPrompts,
+	loadPrompt,
+	resetPrompt,
+	savePrompt,
+} from "@geo-agent/core/prompts/prompt-loader.js";
+import { Hono } from "hono";
 
 const settingsRouter = new Hono();
 
@@ -75,8 +75,12 @@ settingsRouter.post("/agents/prompts/:agent_id/reset", (c) => {
 // POST /api/settings/agents/prompts/reset-all — Reset all to default
 settingsRouter.post("/agents/prompts/reset-all", (c) => {
 	const agentIds: AgentId[] = [
-		"orchestrator", "analysis", "strategy",
-		"optimization", "validation", "monitoring",
+		"orchestrator",
+		"analysis",
+		"strategy",
+		"optimization",
+		"validation",
+		"monitoring",
 	];
 	const results = agentIds.map((id) => resetPrompt(getWorkspaceDir(), id));
 	return c.json(results);
@@ -101,7 +105,9 @@ settingsRouter.get("/llm-providers", (c) => {
 	// API 키는 마스킹하여 반환
 	const masked = providers.map((p) => ({
 		...p,
-		api_key: p.api_key ? `${p.api_key.slice(0, 4)}${"*".repeat(Math.max(0, (p.api_key?.length ?? 0) - 4))}` : undefined,
+		api_key: p.api_key
+			? `${p.api_key.slice(0, 4)}${"*".repeat(Math.max(0, (p.api_key?.length ?? 0) - 4))}`
+			: undefined,
 	}));
 	return c.json(masked);
 });

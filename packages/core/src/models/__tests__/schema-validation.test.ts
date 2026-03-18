@@ -1,19 +1,19 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-	ChangeTypeSchema,
-	GeoScoreSchema,
-	GEO_SCORE_WEIGHTS,
-	TargetProfileSchema,
-	CreateTargetSchema,
-	LLMProbeSchema,
-	InfoRecognitionScoreSchema,
-	ChangeImpactSchema,
-	PipelineStateSchema,
-	ErrorEventSchema,
-	LLMProviderConfigSchema,
 	AgentPromptConfigSchema,
+	ChangeImpactSchema,
+	ChangeTypeSchema,
+	CreateTargetSchema,
 	EffectivenessIndexSchema,
+	ErrorEventSchema,
+	GEO_SCORE_WEIGHTS,
+	GeoScoreSchema,
 	GeoTimeSeriesSchema,
+	InfoRecognitionScoreSchema,
+	LLMProbeSchema,
+	LLMProviderConfigSchema,
+	PipelineStateSchema,
+	TargetProfileSchema,
 } from "../index.js";
 
 describe("ChangeType", () => {
@@ -207,7 +207,12 @@ describe("AgentPromptConfig", () => {
 			display_name: "Orchestrator",
 			system_instruction: "You are the orchestrator...",
 			context_slots: [
-				{ slot_name: "{{TARGET_PROFILE}}", description: "Target JSON", source: "TargetProfile", required: true },
+				{
+					slot_name: "{{TARGET_PROFILE}}",
+					description: "Target JSON",
+					source: "TargetProfile",
+					required: true,
+				},
 			],
 			model_preference: null,
 			last_modified: "2026-03-17T00:00:00Z",

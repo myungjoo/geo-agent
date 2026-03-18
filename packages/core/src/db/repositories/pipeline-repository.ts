@@ -3,11 +3,11 @@
  *
  * Pipeline 실행 상태를 DB에 저장/조회/업데이트
  */
-import { eq, desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
+import type { PipelineStage, PipelineState } from "../../models/pipeline-state.js";
 import type { GeoDatabase } from "../connection.js";
 import { pipelineRuns } from "../schema.js";
-import type { PipelineState, PipelineStage } from "../../models/pipeline-state.js";
 
 export class PipelineRepository {
 	constructor(private db: GeoDatabase) {}
@@ -104,19 +104,26 @@ export class PipelineRepository {
 		return this.findById(pipelineId);
 	}
 
-	async setError(pipelineId: string, errorMessage: string, resumable = false): Promise<PipelineState | null> {
+	async setError(
+		pipelineId: string,
+		errorMessage: string,
+		resumable = false,
+	): Promise<PipelineState | null> {
 		const existing = await this.findById(pipelineId);
 		if (!existing) return null;
 
 		const now = new Date().toISOString();
-		await this.db.update(pipelineRuns).set({
-			stage: "FAILED",
-			error_message: errorMessage,
-			resumable,
-			resume_from_stage: resumable ? existing.stage : null,
-			completed_at: now,
-			updated_at: now,
-		}).where(eq(pipelineRuns.pipeline_id, pipelineId));
+		await this.db
+			.update(pipelineRuns)
+			.set({
+				stage: "FAILED",
+				error_message: errorMessage,
+				resumable,
+				resume_from_stage: resumable ? existing.stage : null,
+				completed_at: now,
+				updated_at: now,
+			})
+			.where(eq(pipelineRuns.pipeline_id, pipelineId));
 
 		return this.findById(pipelineId);
 	}
@@ -125,10 +132,13 @@ export class PipelineRepository {
 		const existing = await this.findById(pipelineId);
 		if (!existing) return -1;
 		const newCount = existing.retry_count + 1;
-		await this.db.update(pipelineRuns).set({
-			retry_count: newCount,
-			updated_at: new Date().toISOString(),
-		}).where(eq(pipelineRuns.pipeline_id, pipelineId));
+		await this.db
+			.update(pipelineRuns)
+			.set({
+				retry_count: newCount,
+				updated_at: new Date().toISOString(),
+			})
+			.where(eq(pipelineRuns.pipeline_id, pipelineId));
 		return newCount;
 	}
 
