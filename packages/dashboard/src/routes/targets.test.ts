@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
-import Database from "better-sqlite3";
+import { createClient } from "@libsql/client";
 
 const testDir = path.join(os.tmpdir(), `geo-targets-test-${Date.now()}`);
 
@@ -13,8 +13,6 @@ process.env.GEO_WORKSPACE = testDir;
 fs.mkdirSync(path.join(testDir, "data"), { recursive: true });
 fs.mkdirSync(path.join(testDir, "prompts"), { recursive: true });
 
-// createDatabase now auto-creates tables, but we still need the DB file
-// for the test to work with clearTargets()
 const dbPath = path.join(testDir, "data", "geo-agent.db");
 
 // Import app and initialize the targets router with shared DB
@@ -29,10 +27,10 @@ initTargetsRouter(db);
 
 // ── Helpers ────────────────────────────────────────────────────
 
-function clearTargets(): void {
-	const db = new Database(dbPath);
-	db.exec("DELETE FROM targets");
-	db.close();
+async function clearTargets(): Promise<void> {
+	const client = createClient({ url: `file:${dbPath}` });
+	await client.execute("DELETE FROM targets");
+	client.close();
 }
 
 async function createTarget(body: Record<string, unknown> = {}): Promise<Response> {
@@ -58,8 +56,8 @@ afterAll(() => {
 	}
 });
 
-beforeEach(() => {
-	clearTargets();
+beforeEach(async () => {
+	await clearTargets();
 });
 
 // ── GET /api/targets ───────────────────────────────────────────

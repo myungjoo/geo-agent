@@ -10,8 +10,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
 import * as schema from "./db/schema.js";
 import { TargetRepository } from "./db/repositories/target-repository.js";
 import type { CreateTarget } from "./models/target-profile.js";
@@ -21,7 +21,6 @@ import { createDatabase, ensureTables } from "./db/connection.js";
 // ─── Test helpers ─────────────────────────────────────────────────
 
 let tmpDirs: string[] = [];
-let sqlite: InstanceType<typeof Database> | null = null;
 
 function makeTmpDir(): string {
 	const dir = path.join(
@@ -33,30 +32,32 @@ function makeTmpDir(): string {
 	return dir;
 }
 
-function createTestDb() {
-	sqlite = new Database(":memory:");
-	sqlite.exec(`
-		CREATE TABLE targets (
-			id TEXT PRIMARY KEY,
-			url TEXT NOT NULL,
-			name TEXT NOT NULL,
-			description TEXT NOT NULL DEFAULT '',
-			topics TEXT NOT NULL DEFAULT '[]',
-			target_queries TEXT NOT NULL DEFAULT '[]',
-			audience TEXT NOT NULL DEFAULT '',
-			competitors TEXT NOT NULL DEFAULT '[]',
-			business_goal TEXT NOT NULL DEFAULT '',
-			llm_priorities TEXT NOT NULL DEFAULT '[]',
-			clone_base_path TEXT,
-			site_type TEXT NOT NULL DEFAULT 'generic',
-			notifications TEXT,
-			monitoring_interval TEXT NOT NULL DEFAULT 'daily',
-			status TEXT NOT NULL DEFAULT 'active',
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		);
-	`);
-	return drizzle(sqlite, { schema });
+const CREATE_TABLE_SQL = `
+	CREATE TABLE targets (
+		id TEXT PRIMARY KEY,
+		url TEXT NOT NULL,
+		name TEXT NOT NULL,
+		description TEXT NOT NULL DEFAULT '',
+		topics TEXT NOT NULL DEFAULT '[]',
+		target_queries TEXT NOT NULL DEFAULT '[]',
+		audience TEXT NOT NULL DEFAULT '',
+		competitors TEXT NOT NULL DEFAULT '[]',
+		business_goal TEXT NOT NULL DEFAULT '',
+		llm_priorities TEXT NOT NULL DEFAULT '[]',
+		clone_base_path TEXT,
+		site_type TEXT NOT NULL DEFAULT 'generic',
+		notifications TEXT,
+		monitoring_interval TEXT NOT NULL DEFAULT 'daily',
+		status TEXT NOT NULL DEFAULT 'active',
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	);
+`;
+
+async function createTestDb() {
+	const client = createClient({ url: ":memory:" });
+	await client.executeMultiple(CREATE_TABLE_SQL);
+	return drizzle(client, { schema });
 }
 
 function makeCreateTarget(overrides: Partial<CreateTarget> = {}): CreateTarget {
@@ -68,14 +69,6 @@ function makeCreateTarget(overrides: Partial<CreateTarget> = {}): CreateTarget {
 }
 
 afterEach(() => {
-	if (sqlite) {
-		try {
-			sqlite.close();
-		} catch {
-			// ignore
-		}
-		sqlite = null;
-	}
 	for (const dir of tmpDirs) {
 		try {
 			fs.rmSync(dir, { recursive: true, force: true });
@@ -99,7 +92,7 @@ describe("BUG #1: JSON fields returned as strings instead of parsed arrays/objec
 	// Expected: topics should be an actual array ["a", "b"]
 	// Actual: topics is the JSON string '["a","b"]'
 	it("BUG #1a [FIXED]: create() with topics array should return array, not string", async () => {
-		const db = createTestDb();
+		const db = await createTestDb();
 		const repo = new TargetRepository(db);
 
 		const input = makeCreateTarget({ topics: ["a", "b"] });
@@ -114,7 +107,7 @@ describe("BUG #1: JSON fields returned as strings instead of parsed arrays/objec
 	// Expected: competitors should be an actual array of objects
 	// Actual: competitors is a JSON string
 	it("BUG #1b [FIXED]: create() with competitors array should return array of objects", async () => {
-		const db = createTestDb();
+		const db = await createTestDb();
 		const repo = new TargetRepository(db);
 
 		const competitors = [
@@ -132,7 +125,7 @@ describe("BUG #1: JSON fields returned as strings instead of parsed arrays/objec
 	// Expected: topics should be [] (Array.isArray === true)
 	// Actual: topics is the string "[]"
 	it("BUG #1c [FIXED]: create() with empty topics [] should return empty array, not string '[]'", async () => {
-		const db = createTestDb();
+		const db = await createTestDb();
 		const repo = new TargetRepository(db);
 
 		const input = makeCreateTarget({ topics: [] });
@@ -147,7 +140,7 @@ describe("BUG #1: JSON fields returned as strings instead of parsed arrays/objec
 	// Expected: after update, topics should be an actual array
 	// Actual: topics is a JSON string
 	it("BUG #1d [FIXED]: update() with topics array should return array, not string", async () => {
-		const db = createTestDb();
+		const db = await createTestDb();
 		const repo = new TargetRepository(db);
 
 		const input = makeCreateTarget({ topics: ["original"] });
@@ -164,7 +157,7 @@ describe("BUG #1: JSON fields returned as strings instead of parsed arrays/objec
 	// Expected: notifications should be an actual object
 	// Actual: notifications is a JSON string
 	it("BUG #1e [FIXED]: create() with notifications object should return object, not string", async () => {
-		const db = createTestDb();
+		const db = await createTestDb();
 		const repo = new TargetRepository(db);
 
 		const notifications = {
@@ -185,7 +178,7 @@ describe("BUG #1: JSON fields returned as strings instead of parsed arrays/objec
 	// Expected: llm_priorities should be an actual array
 	// Actual: llm_priorities is a JSON string
 	it("BUG #1f [FIXED]: create() with llm_priorities array should return array, not string", async () => {
-		const db = createTestDb();
+		const db = await createTestDb();
 		const repo = new TargetRepository(db);
 
 		const llm_priorities = [
@@ -214,7 +207,7 @@ describe("BUG #2: notifications null when not provided", () => {
 	// Expected: notifications should have default values from the schema
 	// Actual: notifications is null
 	it("BUG #2a [FIXED]: create() without notifications field should not return null", async () => {
-		const db = createTestDb();
+		const db = await createTestDb();
 		const repo = new TargetRepository(db);
 
 		const input = makeCreateTarget();
@@ -228,7 +221,7 @@ describe("BUG #2: notifications null when not provided", () => {
 	// Expected: notifications.on_score_drop should be true
 	// Actual: notifications is null, so accessing .on_score_drop throws
 	it("BUG #2b [FIXED]: create() without notifications should have default on_score_drop: true", async () => {
-		const db = createTestDb();
+		const db = await createTestDb();
 		const repo = new TargetRepository(db);
 
 		const input = makeCreateTarget();
@@ -284,14 +277,13 @@ describe("BUG #5 [FIXED]: DB tables auto-created on startup", () => {
 		const db = createDatabase(settings);
 		await ensureTables(db);
 
-		// Verify tables exist by opening the DB file directly
-		const freshSqlite = new Database(dbPath);
-		const tables = freshSqlite.prepare(
+		// Verify tables exist by querying sqlite_master via libsql
+		const verifyClient = createClient({ url: `file:${dbPath}` });
+		const result = await verifyClient.execute(
 			"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
-		).all() as { name: string }[];
-		freshSqlite.close();
+		);
+		const tableNames = result.rows.map((row) => row.name as string);
 
-		const tableNames = tables.map((t) => t.name);
 		expect(tableNames).toContain("targets");
 		expect(tableNames).toContain("content_snapshots");
 		expect(tableNames).toContain("change_records");
@@ -311,7 +303,7 @@ describe("BUG #6: DELETE returns true for non-existent target", () => {
 	// Expected: returns false when no row was deleted
 	// Actual: always returns true
 	it("BUG #6a [FIXED]: delete() with non-existent UUID should return false", async () => {
-		const db = createTestDb();
+		const db = await createTestDb();
 		const repo = new TargetRepository(db);
 
 		const result = await repo.delete("00000000-0000-0000-0000-000000000000");
@@ -323,7 +315,7 @@ describe("BUG #6: DELETE returns true for non-existent target", () => {
 	// BUG #6b: delete() with existing target should return true
 	// This test should PASS even with the bug, since the method always returns true
 	it("BUG #6b: delete() with existing target should return true", async () => {
-		const db = createTestDb();
+		const db = await createTestDb();
 		const repo = new TargetRepository(db);
 
 		const input = makeCreateTarget();

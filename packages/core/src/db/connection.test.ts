@@ -3,7 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
 import crypto from "node:crypto";
-import Database from "better-sqlite3";
+import { createClient } from "@libsql/client";
 import { createDatabase, ensureTables } from "./connection.js";
 import { AppSettingsSchema, type AppSettings } from "../config/settings.js";
 
@@ -105,26 +105,27 @@ describe("createDatabase", () => {
 			settings.workspace_dir,
 			settings.db_path,
 		);
-		const sqlite = new Database(dbPath);
-		const result = sqlite.pragma("journal_mode") as { journal_mode: string }[];
-		sqlite.close();
+		const client = createClient({ url: `file:${dbPath}` });
+		const result = await client.execute("PRAGMA journal_mode");
+		client.close();
 
-		expect(result[0].journal_mode).toBe("wal");
+		expect(result.rows[0].journal_mode).toBe("wal");
 	});
 
-	it("enables foreign keys", () => {
+	it("enables foreign keys", async () => {
 		const settings = makeSettings();
-		createDatabase(settings);
+		const db = createDatabase(settings);
+		await ensureTables(db);
 
 		const dbPath = path.join(
 			settings.workspace_dir,
 			settings.db_path,
 		);
-		const sqlite = new Database(dbPath);
-		const result = sqlite.pragma("foreign_keys") as { foreign_keys: number }[];
-		sqlite.close();
+		const client = createClient({ url: `file:${dbPath}` });
+		const result = await client.execute("PRAGMA foreign_keys");
+		client.close();
 
-		expect(result[0].foreign_keys).toBe(1);
+		expect(Number(result.rows[0].foreign_keys)).toBe(1);
 	});
 
 	it("returns a drizzle instance with select and insert methods", () => {
@@ -155,13 +156,13 @@ describe("createDatabase — auto-table creation (Bug #5)", () => {
 		await ensureTables(db);
 
 		const dbPath = path.join(settings.workspace_dir, settings.db_path);
-		const sqlite = new Database(dbPath);
-		const tables = sqlite.prepare(
+		const client = createClient({ url: `file:${dbPath}` });
+		const result = await client.execute(
 			"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-		).all() as { name: string }[];
-		sqlite.close();
+		);
+		client.close();
 
-		const names = tables.map((t) => t.name);
+		const names = result.rows.map((r) => r.name as string);
 		expect(names).toContain("targets");
 		expect(names).toContain("content_snapshots");
 		expect(names).toContain("change_records");
@@ -179,13 +180,13 @@ describe("createDatabase — auto-table creation (Bug #5)", () => {
 		await ensureTables(db2);
 
 		const dbPath = path.join(settings.workspace_dir, settings.db_path);
-		const sqlite = new Database(dbPath);
-		const tables = sqlite.prepare(
+		const client = createClient({ url: `file:${dbPath}` });
+		const result = await client.execute(
 			"SELECT name FROM sqlite_master WHERE type='table' AND name='targets'",
-		).all() as { name: string }[];
-		sqlite.close();
+		);
+		client.close();
 
-		expect(tables).toHaveLength(1);
+		expect(result.rows).toHaveLength(1);
 	});
 
 	it("targets table has correct columns", async () => {
@@ -194,11 +195,11 @@ describe("createDatabase — auto-table creation (Bug #5)", () => {
 		await ensureTables(db);
 
 		const dbPath = path.join(settings.workspace_dir, settings.db_path);
-		const sqlite = new Database(dbPath);
-		const columns = sqlite.prepare("PRAGMA table_info(targets)").all() as { name: string }[];
-		sqlite.close();
+		const client = createClient({ url: `file:${dbPath}` });
+		const result = await client.execute("PRAGMA table_info(targets)");
+		client.close();
 
-		const colNames = columns.map((c) => c.name);
+		const colNames = result.rows.map((r) => r.name as string);
 		expect(colNames).toContain("id");
 		expect(colNames).toContain("url");
 		expect(colNames).toContain("name");
@@ -216,11 +217,11 @@ describe("createDatabase — auto-table creation (Bug #5)", () => {
 		await ensureTables(db);
 
 		const dbPath = path.join(settings.workspace_dir, settings.db_path);
-		const sqlite = new Database(dbPath);
-		const columns = sqlite.prepare("PRAGMA table_info(pipeline_runs)").all() as { name: string }[];
-		sqlite.close();
+		const client = createClient({ url: `file:${dbPath}` });
+		const result = await client.execute("PRAGMA table_info(pipeline_runs)");
+		client.close();
 
-		const colNames = columns.map((c) => c.name);
+		const colNames = result.rows.map((r) => r.name as string);
 		expect(colNames).toContain("pipeline_id");
 		expect(colNames).toContain("target_id");
 		expect(colNames).toContain("stage");

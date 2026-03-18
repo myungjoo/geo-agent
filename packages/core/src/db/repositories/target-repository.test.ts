@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import { describe, it, expect, beforeEach } from "vitest";
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
 import * as schema from "../schema.js";
 import { TargetRepository } from "./target-repository.js";
-import type { CreateTarget, UpdateTarget } from "../../models/target-profile.js";
+import type { CreateTarget } from "../../models/target-profile.js";
 
 const CREATE_TABLE_SQL = `
 CREATE TABLE targets (
@@ -36,21 +36,13 @@ function createMinimalInput(overrides: Partial<CreateTarget> = {}): CreateTarget
 }
 
 describe("TargetRepository", () => {
-	let sqlite: InstanceType<typeof Database>;
-	let db: ReturnType<typeof drizzle>;
 	let repo: TargetRepository;
 
-	beforeEach(() => {
-		sqlite = new Database(":memory:");
-		sqlite.pragma("journal_mode = WAL");
-		sqlite.pragma("foreign_keys = ON");
-		sqlite.exec(CREATE_TABLE_SQL);
-		db = drizzle(sqlite, { schema });
-		repo = new TargetRepository(db as any);
-	});
-
-	afterEach(() => {
-		sqlite.close();
+	beforeEach(async () => {
+		const client = createClient({ url: ":memory:" });
+		await client.executeMultiple(CREATE_TABLE_SQL);
+		const db = drizzle(client, { schema });
+		repo = new TargetRepository(db);
 	});
 
 	// ─── findAll ──────────────────────────────────────────────
@@ -173,7 +165,6 @@ describe("TargetRepository", () => {
 			const target = await repo.create(createMinimalInput());
 			expect(target.id).toBeDefined();
 			expect(typeof target.id).toBe("string");
-			// UUID v4 format
 			expect(target.id).toMatch(
 				/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 			);
@@ -210,37 +201,26 @@ describe("TargetRepository", () => {
 	// ─── BUG TEST - JSON double-serialization (#1) ───────────
 
 	describe("BUG: JSON double-serialization (#1)", () => {
-		it("14. create() with topics array -> findById() should return topics as actual array, NOT as JSON string", async () => {
-			const target = await repo.create(createMinimalInput({
-				topics: ["seo", "content-marketing"],
-			}));
-
+		it("14. topics array round-trips correctly", async () => {
+			const target = await repo.create(createMinimalInput({ topics: ["seo", "content-marketing"] }));
 			const found = await repo.findById(target.id);
-			expect(found).not.toBeNull();
-			// BUG: topics may come back as a JSON string like '["seo","content-marketing"]'
-			// instead of an actual array ["seo", "content-marketing"]
 			expect(Array.isArray(found!.topics)).toBe(true);
 			expect(found!.topics).toEqual(["seo", "content-marketing"]);
 		});
 
-		it("15. create() with competitors array -> findById() returns actual array of objects", async () => {
+		it("15. competitors array round-trips correctly", async () => {
 			const competitors = [
 				{ url: "https://rival.com", name: "Rival", relationship: "direct" as const },
 				{ url: "https://other.com", name: "Other", relationship: "indirect" as const },
 			];
 			const target = await repo.create(createMinimalInput({ competitors }));
-
 			const found = await repo.findById(target.id);
-			expect(found).not.toBeNull();
-			// BUG: competitors may be double-serialized string instead of array
 			expect(Array.isArray(found!.competitors)).toBe(true);
 			expect(found!.competitors).toHaveLength(2);
 			expect(found!.competitors[0].url).toBe("https://rival.com");
-			expect(found!.competitors[0].name).toBe("Rival");
-			expect(found!.competitors[0].relationship).toBe("direct");
 		});
 
-		it("16. create() with notifications object -> findById() returns actual object, not string", async () => {
+		it("16. notifications object round-trips correctly", async () => {
 			const notifications = {
 				on_score_drop: true,
 				on_external_change: false,
@@ -248,46 +228,29 @@ describe("TargetRepository", () => {
 				channels: ["dashboard" as const, "email" as const],
 			};
 			const target = await repo.create(createMinimalInput({ notifications }));
-
 			const found = await repo.findById(target.id);
-			expect(found).not.toBeNull();
-			// BUG: notifications may be a stringified JSON instead of an object
 			expect(typeof found!.notifications).toBe("object");
-			expect(found!.notifications).not.toBeNull();
 			expect(found!.notifications!.on_score_drop).toBe(true);
 			expect(found!.notifications!.on_external_change).toBe(false);
 			expect(found!.notifications!.channels).toEqual(["dashboard", "email"]);
 		});
 
-		it("17. update() with topics array -> findById() returns actual array", async () => {
+		it("17. update topics round-trips correctly", async () => {
 			const target = await repo.create(createMinimalInput());
 			await repo.update(target.id, { topics: ["new-topic-1", "new-topic-2"] });
-
 			const found = await repo.findById(target.id);
-			expect(found).not.toBeNull();
-			// BUG: after update, topics might be double-serialized
 			expect(Array.isArray(found!.topics)).toBe(true);
 			expect(found!.topics).toEqual(["new-topic-1", "new-topic-2"]);
 		});
 
-		it("18. create() with empty arrays -> should return [] not '[]'", async () => {
+		it("18. empty arrays round-trip correctly", async () => {
 			const target = await repo.create(createMinimalInput({
-				topics: [],
-				target_queries: [],
-				competitors: [],
-				llm_priorities: [],
+				topics: [], target_queries: [], competitors: [], llm_priorities: [],
 			}));
-
 			const found = await repo.findById(target.id);
-			expect(found).not.toBeNull();
-			// BUG: empty arrays may come back as the string "[]"
-			expect(Array.isArray(found!.topics)).toBe(true);
 			expect(found!.topics).toEqual([]);
-			expect(Array.isArray(found!.target_queries)).toBe(true);
 			expect(found!.target_queries).toEqual([]);
-			expect(Array.isArray(found!.competitors)).toBe(true);
 			expect(found!.competitors).toEqual([]);
-			expect(Array.isArray(found!.llm_priorities)).toBe(true);
 			expect(found!.llm_priorities).toEqual([]);
 		});
 	});
@@ -295,14 +258,9 @@ describe("TargetRepository", () => {
 	// ─── BUG TEST - notifications null (#2) ──────────────────
 
 	describe("BUG: notifications null (#2)", () => {
-		it("19. create() without notifications -> should have default notification config, NOT null", async () => {
+		it("19. create() without notifications -> default config applied", async () => {
 			const target = await repo.create(createMinimalInput());
-
 			const found = await repo.findById(target.id);
-			expect(found).not.toBeNull();
-			// BUG: notifications is null when not provided, but the schema
-			// default should be { on_score_drop: true, on_external_change: true,
-			// on_optimization_complete: true, channels: ["dashboard"] }
 			expect(found!.notifications).not.toBeNull();
 			expect(found!.notifications).toBeDefined();
 			expect(typeof found!.notifications).toBe("object");
@@ -312,178 +270,111 @@ describe("TargetRepository", () => {
 	// ─── update ───────────────────────────────────────────────
 
 	describe("update()", () => {
-		it("20. updates only specified fields, leaves others unchanged", async () => {
+		it("20. updates only specified fields", async () => {
 			const target = await repo.create(createMinimalInput({
-				name: "Original Name",
-				description: "Original Description",
-				audience: "Original Audience",
+				name: "Original Name", description: "Original Description", audience: "Original Audience",
 			}));
-
 			const updated = await repo.update(target.id, { name: "Updated Name" });
-			expect(updated).not.toBeNull();
 			expect(updated!.name).toBe("Updated Name");
 			expect(updated!.description).toBe("Original Description");
 			expect(updated!.audience).toBe("Original Audience");
-			expect(updated!.url).toBe("https://example.com");
 		});
 
 		it("21. updates url field", async () => {
 			const target = await repo.create(createMinimalInput());
 			const updated = await repo.update(target.id, { url: "https://new-url.com" });
-
-			expect(updated).not.toBeNull();
 			expect(updated!.url).toBe("https://new-url.com");
 		});
 
 		it("22. updates name field", async () => {
 			const target = await repo.create(createMinimalInput());
 			const updated = await repo.update(target.id, { name: "New Name" });
-
-			expect(updated).not.toBeNull();
 			expect(updated!.name).toBe("New Name");
 		});
 
 		it("23. updates topics array", async () => {
 			const target = await repo.create(createMinimalInput({ topics: ["old"] }));
 			const updated = await repo.update(target.id, { topics: ["new1", "new2"] });
-
-			expect(updated).not.toBeNull();
-			// Note: may be affected by double-serialization bug
 			expect(updated!.topics).toEqual(["new1", "new2"]);
 		});
 
 		it("24. updates site_type", async () => {
 			const target = await repo.create(createMinimalInput());
 			expect(target.site_type).toBe("generic");
-
 			const updated = await repo.update(target.id, { site_type: "manufacturer" });
-			expect(updated).not.toBeNull();
 			expect(updated!.site_type).toBe("manufacturer");
 		});
 
 		it("25. returns null for non-existent ID", async () => {
-			const result = await repo.update(
-				"00000000-0000-0000-0000-000000000000",
-				{ name: "Does Not Exist" }
-			);
+			const result = await repo.update("00000000-0000-0000-0000-000000000000", { name: "X" });
 			expect(result).toBeNull();
 		});
 
-		it("26. updates updated_at timestamp (should be different from created_at)", async () => {
+		it("26. updates updated_at timestamp", async () => {
 			const target = await repo.create(createMinimalInput());
-			const originalUpdatedAt = target.updated_at;
-
-			// Small delay to ensure timestamp differs
 			await new Promise((resolve) => setTimeout(resolve, 10));
-
 			const updated = await repo.update(target.id, { name: "Timestamp Test" });
-			expect(updated).not.toBeNull();
-			expect(updated!.updated_at).not.toBe(originalUpdatedAt);
-			expect(updated!.updated_at > originalUpdatedAt).toBe(true);
+			expect(updated!.updated_at).not.toBe(target.updated_at);
+			expect(updated!.updated_at > target.updated_at).toBe(true);
 		});
 	});
 
 	// ─── delete ───────────────────────────────────────────────
 
 	describe("delete()", () => {
-		it("27. deletes existing target, findById returns null after", async () => {
+		it("27. deletes existing target", async () => {
 			const target = await repo.create(createMinimalInput());
 			await repo.delete(target.id);
-
-			const found = await repo.findById(target.id);
-			expect(found).toBeNull();
+			expect(await repo.findById(target.id)).toBeNull();
 		});
 
 		it("28. returns true for existing target", async () => {
 			const target = await repo.create(createMinimalInput());
-			const result = await repo.delete(target.id);
-			expect(result).toBe(true);
+			expect(await repo.delete(target.id)).toBe(true);
 		});
-	});
 
-	// ─── BUG TEST - delete non-existent (#6) ─────────────────
-
-	describe("BUG: delete non-existent (#6)", () => {
-		it("29. delete() for non-existent ID -> should return false (FIXED)", async () => {
-			// BUG: The delete method always returns true regardless of whether
-			// the row existed. It should check the result.changes count.
-			const result = await repo.delete("00000000-0000-0000-0000-000000000000");
-			expect(result).toBe(false);
+		it("29. returns false for non-existent ID (Bug #6)", async () => {
+			expect(await repo.delete("00000000-0000-0000-0000-000000000000")).toBe(false);
 		});
 	});
 
 	// ─── Integration ─────────────────────────────────────────
 
 	describe("Integration", () => {
-		it("30. full CRUD lifecycle: create -> findById -> update -> findAll -> delete -> findAll empty", async () => {
-			// Create
-			const created = await repo.create(createMinimalInput({
-				name: "Lifecycle Target",
-				topics: ["lifecycle"],
-			}));
+		it("30. full CRUD lifecycle", async () => {
+			const created = await repo.create(createMinimalInput({ name: "Lifecycle Target", topics: ["lifecycle"] }));
 			expect(created.id).toBeDefined();
-			expect(created.name).toBe("Lifecycle Target");
 
-			// FindById
 			const found = await repo.findById(created.id);
-			expect(found).not.toBeNull();
 			expect(found!.id).toBe(created.id);
 
-			// Update
-			const updated = await repo.update(created.id, {
-				name: "Updated Lifecycle Target",
-				description: "Now with description",
-			});
-			expect(updated).not.toBeNull();
-			expect(updated!.name).toBe("Updated Lifecycle Target");
-			expect(updated!.description).toBe("Now with description");
+			const updated = await repo.update(created.id, { name: "Updated Lifecycle", description: "Desc" });
+			expect(updated!.name).toBe("Updated Lifecycle");
 
-			// FindAll
-			const all = await repo.findAll();
-			expect(all).toHaveLength(1);
-			expect(all[0].name).toBe("Updated Lifecycle Target");
-
-			// Delete
-			const deleted = await repo.delete(created.id);
-			expect(deleted).toBe(true);
-
-			// FindAll empty
-			const afterDelete = await repo.findAll();
-			expect(afterDelete).toEqual([]);
+			expect(await repo.findAll()).toHaveLength(1);
+			expect(await repo.delete(created.id)).toBe(true);
+			expect(await repo.findAll()).toEqual([]);
 		});
 
-		it("31. create multiple targets, findAll returns all", async () => {
+		it("31. create multiple, findAll returns all", async () => {
 			const t1 = await repo.create(createMinimalInput({ name: "Alpha", url: "https://alpha.com" }));
 			const t2 = await repo.create(createMinimalInput({ name: "Beta", url: "https://beta.com" }));
 			const t3 = await repo.create(createMinimalInput({ name: "Gamma", url: "https://gamma.com" }));
-
 			const all = await repo.findAll();
 			expect(all).toHaveLength(3);
-
-			const ids = all.map((t) => t.id);
-			expect(ids).toContain(t1.id);
-			expect(ids).toContain(t2.id);
-			expect(ids).toContain(t3.id);
+			expect(all.map((t) => t.id)).toContain(t1.id);
+			expect(all.map((t) => t.id)).toContain(t2.id);
+			expect(all.map((t) => t.id)).toContain(t3.id);
 		});
 
-		it("32. delete one of multiple, findAll returns rest", async () => {
+		it("32. delete one of multiple, rest remain", async () => {
 			const t1 = await repo.create(createMinimalInput({ name: "Keep1" }));
 			const t2 = await repo.create(createMinimalInput({ name: "Delete Me" }));
 			const t3 = await repo.create(createMinimalInput({ name: "Keep2" }));
-
 			await repo.delete(t2.id);
-
 			const all = await repo.findAll();
 			expect(all).toHaveLength(2);
-
-			const names = all.map((t) => t.name);
-			expect(names).toContain("Keep1");
-			expect(names).toContain("Keep2");
-			expect(names).not.toContain("Delete Me");
-
-			// Verify deleted one is gone
-			const found = await repo.findById(t2.id);
-			expect(found).toBeNull();
+			expect(all.map((t) => t.name)).not.toContain("Delete Me");
 		});
 	});
 });

@@ -4,7 +4,7 @@ run/
 # Node.js
 node_modules/
 dist/
-.tsbuildinfo
+*.tsbuildinfo
 
 # Environment
 .env

@@ -5,6 +5,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
 	type SiteType,
 	SiteTypeSchema,
@@ -35,7 +36,7 @@ export class TemplateEngine {
 		// evaluation-templates 디렉토리는 core 패키지 내에 위치
 		this.templatesDir = corePackagePath
 			? path.join(corePackagePath, "src", "prompts", "evaluation-templates")
-			: path.join(path.dirname(new URL(import.meta.url).pathname), "evaluation-templates");
+			: path.join(path.dirname(fileURLToPath(import.meta.url)), "evaluation-templates");
 	}
 
 	/** 사이트 유형에 해당하는 템플릿 로드 */

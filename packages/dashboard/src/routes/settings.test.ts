@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
-import Database from "better-sqlite3";
 
 const testDir = path.join(os.tmpdir(), `geo-settings-test-${Date.now()}`);
 
@@ -13,33 +12,11 @@ process.env.GEO_WORKSPACE = testDir;
 fs.mkdirSync(path.join(testDir, "data"), { recursive: true });
 fs.mkdirSync(path.join(testDir, "prompts"), { recursive: true });
 
-// Create the SQLite DB with the targets table (required by drizzle schema)
-const dbPath = path.join(testDir, "data", "geo-agent.db");
-const sqlite = new Database(dbPath);
-sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("foreign_keys = ON");
-sqlite.exec(`
-	CREATE TABLE IF NOT EXISTS targets (
-		id TEXT PRIMARY KEY,
-		url TEXT NOT NULL,
-		name TEXT NOT NULL,
-		description TEXT NOT NULL DEFAULT '',
-		topics TEXT NOT NULL DEFAULT '[]',
-		target_queries TEXT NOT NULL DEFAULT '[]',
-		audience TEXT NOT NULL DEFAULT '',
-		competitors TEXT NOT NULL DEFAULT '[]',
-		business_goal TEXT NOT NULL DEFAULT '',
-		llm_priorities TEXT NOT NULL DEFAULT '[]',
-		deployment_mode TEXT NOT NULL DEFAULT 'suggestion_only',
-		deployment_config TEXT,
-		notifications TEXT,
-		monitoring_interval TEXT NOT NULL DEFAULT 'daily',
-		status TEXT NOT NULL DEFAULT 'active',
-		created_at TEXT NOT NULL,
-		updated_at TEXT NOT NULL
-	);
-`);
-sqlite.close();
+// Create DB using production createDatabase (auto-creates tables via libsql)
+const { createDatabase, loadSettings, ensureTables } = await import("@geo-agent/core");
+const settings = loadSettings();
+const db = createDatabase(settings);
+await ensureTables(db);
 
 // Now import the app (loadSettings will read GEO_WORKSPACE)
 const { app } = await import("../server.js");
