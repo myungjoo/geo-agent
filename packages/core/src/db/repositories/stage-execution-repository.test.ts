@@ -162,6 +162,37 @@ describe("StageExecutionRepository", () => {
 		});
 	});
 
+	describe("deleteByPipelineId", () => {
+		it("deletes all stages for a pipeline and returns count", async () => {
+			await repo.create(FAKE_PIPELINE_ID, "ANALYZING", 0, "A");
+			await repo.create(FAKE_PIPELINE_ID, "CLONING", 0, "B");
+			await repo.create(FAKE_PIPELINE_ID, "STRATEGIZING", 0, "C");
+
+			const deleted = await repo.deleteByPipelineId(FAKE_PIPELINE_ID);
+			expect(deleted).toBe(3);
+
+			const remaining = await repo.findByPipelineId(FAKE_PIPELINE_ID);
+			expect(remaining).toEqual([]);
+		});
+
+		it("returns 0 for unknown pipeline", async () => {
+			const deleted = await repo.deleteByPipelineId("nonexistent");
+			expect(deleted).toBe(0);
+		});
+
+		it("does not affect other pipelines", async () => {
+			await repo.create(FAKE_PIPELINE_ID, "ANALYZING", 0, "A");
+			await repo.create("other-pipeline", "ANALYZING", 0, "B");
+
+			await repo.deleteByPipelineId(FAKE_PIPELINE_ID);
+
+			const mine = await repo.findByPipelineId(FAKE_PIPELINE_ID);
+			const other = await repo.findByPipelineId("other-pipeline");
+			expect(mine).toEqual([]);
+			expect(other.length).toBe(1);
+		});
+	});
+
 	describe("full lifecycle", () => {
 		it("create → complete → findByPipelineId shows completed", async () => {
 			const exec = await repo.create(FAKE_PIPELINE_ID, "ANALYZING", 0, "Crawling");

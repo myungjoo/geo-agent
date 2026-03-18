@@ -142,6 +142,19 @@ export class PipelineRepository {
 		return newCount;
 	}
 
+	/**
+	 * 파이프라인 레코드 삭제.
+	 * @returns 삭제 성공 여부
+	 */
+	async deleteById(pipelineId: string): Promise<boolean> {
+		const existing = await this.findById(pipelineId);
+		if (!existing) return false;
+		await this.db
+			.delete(pipelineRuns)
+			.where(eq(pipelineRuns.pipeline_id, pipelineId));
+		return true;
+	}
+
 	private toModel(row: typeof pipelineRuns.$inferSelect): PipelineState {
 		return {
 			pipeline_id: row.pipeline_id,

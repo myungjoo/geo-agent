@@ -191,6 +191,28 @@ async function executePipelineAsync(
 	}
 }
 
+// DELETE /api/targets/:id/pipeline/:pipelineId — 파이프라인 + 스테이지 실행 기록 삭제
+pipelineRouter.delete("/:id/pipeline/:pipelineId", async (c) => {
+	const repo = getRepo();
+	const stageRepo = getStageRepo();
+	const pipelineId = c.req.param("pipelineId");
+
+	// Prevent deleting running pipelines
+	const pipeline = await repo.findById(pipelineId);
+	if (!pipeline) {
+		return c.json({ error: "Pipeline not found" }, 404);
+	}
+	if (runningPipelines.has(pipeline.target_id)) {
+		return c.json({ error: "Cannot delete a running pipeline" }, 409);
+	}
+
+	// Delete stage executions first (FK dependency), then pipeline record
+	const deletedStages = await stageRepo.deleteByPipelineId(pipelineId);
+	const deleted = await repo.deleteById(pipelineId);
+
+	return c.json({ deleted, deleted_stages: deletedStages });
+});
+
 // PUT /api/targets/:id/pipeline/:pipelineId/stage — 스테이지 변경
 pipelineRouter.put("/:id/pipeline/:pipelineId/stage", async (c) => {
 	const repo = getRepo();

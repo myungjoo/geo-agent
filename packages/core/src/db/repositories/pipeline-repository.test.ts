@@ -425,6 +425,32 @@ describe("PipelineRepository", () => {
 		});
 	});
 
+	describe("deleteById()", () => {
+		it("deletes existing pipeline and returns true", async () => {
+			const pipeline = await repo.create(FAKE_TARGET_ID);
+			const result = await repo.deleteById(pipeline.pipeline_id);
+			expect(result).toBe(true);
+
+			const found = await repo.findById(pipeline.pipeline_id);
+			expect(found).toBeNull();
+		});
+
+		it("returns false for nonexistent pipeline", async () => {
+			const result = await repo.deleteById("nonexistent-id");
+			expect(result).toBe(false);
+		});
+
+		it("does not affect other pipelines", async () => {
+			const p1 = await repo.create(FAKE_TARGET_ID);
+			const p2 = await repo.create(FAKE_TARGET_ID);
+
+			await repo.deleteById(p1.pipeline_id);
+
+			expect(await repo.findById(p1.pipeline_id)).toBeNull();
+			expect(await repo.findById(p2.pipeline_id)).not.toBeNull();
+		});
+	});
+
 	// ─── Integration / Edge Cases ────────────────────────────
 
 	describe("Integration", () => {
