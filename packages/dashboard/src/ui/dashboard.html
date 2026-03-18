@@ -612,7 +612,7 @@ var sseSource = null;
 function initSSE() {
 	if (sseSource) return;
 	try {
-		sseSource = new EventSource('/api/events');
+		sseSource = new EventSource('/events');
 
 		sseSource.addEventListener('pipeline:stage', function(e) {
 			var data = JSON.parse(e.data);

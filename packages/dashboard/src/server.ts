@@ -75,19 +75,12 @@ app.onError((err, c) => {
 // Health check
 app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
 
-// API routes
-app.route("/api/targets", targetsRouter);
-app.route("/api/targets", pipelineRouter);
-app.route("/api/settings", settingsRouter);
-
 // SSE endpoint — real-time pipeline events
-app.get("/api/events", (c) => {
+app.get("/events", (c) => {
 	const stream = new ReadableStream({
 		start(controller) {
 			const clientId = `sse-${++sseClientIdCounter}`;
 			sseClients.push({ id: clientId, controller });
-
-			// Send initial heartbeat
 			controller.enqueue(new TextEncoder().encode(": heartbeat\n\n"));
 		},
 		cancel() {
@@ -95,15 +88,16 @@ app.get("/api/events", (c) => {
 		},
 	});
 
-	return new Response(stream, {
-		headers: {
-			"Content-Type": "text/event-stream",
-			"Cache-Control": "no-cache",
-			Connection: "keep-alive",
-			"Access-Control-Allow-Origin": "*",
-		},
-	});
+	c.header("Content-Type", "text/event-stream");
+	c.header("Cache-Control", "no-cache");
+	c.header("Connection", "keep-alive");
+	return c.body(stream);
 });
+
+// API routes
+app.route("/api/targets", targetsRouter);
+app.route("/api/targets", pipelineRouter);
+app.route("/api/settings", settingsRouter);
 
 // Dashboard UI — serve single HTML SPA
 let dashboardHtmlCache: string | null = null;
