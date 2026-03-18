@@ -3,9 +3,11 @@ import { z } from "zod";
 export const PipelineStageSchema = z.enum([
 	"INIT",
 	"ANALYZING",
+	"CLONING",
 	"STRATEGIZING",
 	"OPTIMIZING",
 	"VALIDATING",
+	"REPORTING",
 	"COMPLETED",
 	"FAILED",
 	"PARTIAL_FAILURE",

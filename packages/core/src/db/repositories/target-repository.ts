@@ -40,8 +40,8 @@ export class TargetRepository {
 			competitors: input.competitors ?? [],
 			business_goal: input.business_goal ?? "",
 			llm_priorities: input.llm_priorities ?? [],
-			deployment_mode: input.deployment_mode ?? "suggestion_only",
-			deployment_config: input.deployment_config ?? null,
+			clone_base_path: input.clone_base_path ?? null,
+			site_type: input.site_type ?? "generic",
 			notifications: input.notifications ?? DEFAULT_NOTIFICATIONS,
 			monitoring_interval: input.monitoring_interval ?? "daily",
 			status: "active",
@@ -77,10 +77,10 @@ export class TargetRepository {
 			updates.business_goal = input.business_goal;
 		if (input.llm_priorities !== undefined)
 			updates.llm_priorities = input.llm_priorities;
-		if (input.deployment_mode !== undefined)
-			updates.deployment_mode = input.deployment_mode;
-		if (input.deployment_config !== undefined)
-			updates.deployment_config = input.deployment_config;
+		if (input.clone_base_path !== undefined)
+			updates.clone_base_path = input.clone_base_path;
+		if (input.site_type !== undefined)
+			updates.site_type = input.site_type;
 		if (input.notifications !== undefined)
 			updates.notifications = input.notifications;
 		if (input.monitoring_interval !== undefined)
@@ -109,14 +109,13 @@ export class TargetRepository {
 			competitors: row.competitors as TargetProfile["competitors"],
 			business_goal: row.business_goal,
 			llm_priorities: row.llm_priorities as TargetProfile["llm_priorities"],
-			deployment_mode: row.deployment_mode as TargetProfile["deployment_mode"],
-			deployment_config: row.deployment_config as TargetProfile["deployment_config"],
+			clone_base_path: row.clone_base_path,
+			site_type: row.site_type as TargetProfile["site_type"],
 			notifications: row.notifications as TargetProfile["notifications"],
 			monitoring_interval: row.monitoring_interval as TargetProfile["monitoring_interval"],
 			status: row.status as TargetProfile["status"],
 			created_at: row.created_at,
 			updated_at: row.updated_at,
-			status: row.status as TargetProfile["status"],
 		};
 	}
 }

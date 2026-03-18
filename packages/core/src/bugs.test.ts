@@ -47,8 +47,8 @@ function createTestDb() {
 			competitors TEXT NOT NULL DEFAULT '[]',
 			business_goal TEXT NOT NULL DEFAULT '',
 			llm_priorities TEXT NOT NULL DEFAULT '[]',
-			deployment_mode TEXT NOT NULL DEFAULT 'suggestion_only',
-			deployment_config TEXT,
+			clone_base_path TEXT,
+			site_type TEXT NOT NULL DEFAULT 'generic',
 			notifications TEXT,
 			monitoring_interval TEXT NOT NULL DEFAULT 'daily',
 			status TEXT NOT NULL DEFAULT 'active',
@@ -199,25 +199,6 @@ describe("BUG #1: JSON fields returned as strings instead of parsed arrays/objec
 		expect(result.llm_priorities).toEqual(llm_priorities);
 	});
 
-	// BUG #1g: deployment_config object double-serialization
-	// Expected: deployment_config should be an actual object
-	// Actual: deployment_config is a JSON string or null string
-	it("BUG #1g [FIXED]: create() with deployment_config object should return object, not string", async () => {
-		const db = createTestDb();
-		const repo = new TargetRepository(db);
-
-		const deployment_config = {
-			type: "git" as const,
-			endpoint: "https://github.com/example/repo",
-			credentials_ref: "vault:git-creds",
-		};
-		const input = makeCreateTarget({ deployment_config });
-		const result = await repo.create(input);
-
-		expect(typeof result.deployment_config).toBe("object");
-		expect(typeof result.deployment_config).not.toBe("string");
-		expect(result.deployment_config).toEqual(deployment_config);
-	});
 });
 
 // ─── BUG #2: notifications null when not provided ────────────────

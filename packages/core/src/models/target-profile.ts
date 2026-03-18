@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SiteTypeSchema } from "../prompts/evaluation-templates/index.js";
 
 export const CompetitorEntrySchema = z.object({
 	url: z.string().url(),
@@ -14,14 +15,6 @@ export const LLMPrioritySchema = z.object({
 });
 
 export type LLMPriority = z.infer<typeof LLMPrioritySchema>;
-
-export const DeploymentConfigSchema = z.object({
-	type: z.enum(["git", "ftp", "wordpress_api", "custom_api"]),
-	endpoint: z.string(),
-	credentials_ref: z.string(),
-});
-
-export type DeploymentConfig = z.infer<typeof DeploymentConfigSchema>;
 
 export const NotificationConfigSchema = z.object({
 	on_score_drop: z.boolean().default(true),
@@ -49,9 +42,9 @@ export const TargetProfileSchema = z.object({
 	// LLM settings
 	llm_priorities: z.array(LLMPrioritySchema).default([]),
 
-	// Deployment
-	deployment_mode: z.enum(["direct", "cms_api", "suggestion_only"]).default("suggestion_only"),
-	deployment_config: DeploymentConfigSchema.optional(),
+	// Clone & Site Type (읽기 전용 원칙)
+	clone_base_path: z.string().nullable().default(null),
+	site_type: SiteTypeSchema.default("generic"),
 
 	// Notifications
 	notifications: NotificationConfigSchema.default({}),
@@ -77,8 +70,8 @@ export const CreateTargetSchema = TargetProfileSchema.pick({
 	competitors: z.array(CompetitorEntrySchema).optional(),
 	business_goal: z.string().optional(),
 	llm_priorities: z.array(LLMPrioritySchema).optional(),
-	deployment_mode: z.enum(["direct", "cms_api", "suggestion_only"]).optional(),
-	deployment_config: DeploymentConfigSchema.optional(),
+	clone_base_path: z.string().nullable().optional(),
+	site_type: SiteTypeSchema.optional(),
 	notifications: NotificationConfigSchema.optional(),
 	monitoring_interval: z.string().optional(),
 });

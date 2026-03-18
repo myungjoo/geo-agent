@@ -24,6 +24,7 @@ import {
 
 	// Evaluation Result
 	EvaluationResultSchema,
+	type EvaluationResult,
 
 	// Cycle Control
 	CycleStopReasonSchema,
@@ -40,17 +41,17 @@ import {
 
 const NOW = "2026-03-18T12:00:00Z";
 
-function makeProbeResult(overrides = {}) {
+function makeProbeResult(overrides: Record<string, unknown> = {}) {
 	return {
 		probe_id: "P-01",
-		verdict: "PASS",
+		verdict: "PASS" as const,
 		found: 4,
 		total: 4,
 		...overrides,
 	};
 }
 
-function makeEvaluationResult(overrides = {}) {
+function makeEvaluationResult(overrides: Partial<EvaluationResult> = {}): EvaluationResult {
 	return {
 		run_id: "2026-03-18-001",
 		site_name: "Samsung",
@@ -569,7 +570,7 @@ describe("EvaluationResultSchema", () => {
 	});
 
 	it("accepts all site types", () => {
-		for (const t of ["manufacturer", "research", "generic"]) {
+		for (const t of ["manufacturer", "research", "generic"] as const) {
 			const parsed = EvaluationResultSchema.parse(
 				makeEvaluationResult({ site_type: t }),
 			);
@@ -593,7 +594,7 @@ describe("EvaluationResultSchema", () => {
 	it("rejects invalid evaluation target", () => {
 		expect(() =>
 			EvaluationResultSchema.parse(
-				makeEvaluationResult({ evaluation_target: "modified" }),
+				makeEvaluationResult({ evaluation_target: "modified" } as any),
 			),
 		).toThrow();
 	});
@@ -605,7 +606,7 @@ describe("EvaluationResultSchema", () => {
 			"Needs Improvement",
 			"Poor",
 			"Critical",
-		];
+		] as const;
 		for (const g of grades) {
 			expect(
 				EvaluationResultSchema.parse(makeEvaluationResult({ grade: g })).grade,
@@ -615,7 +616,7 @@ describe("EvaluationResultSchema", () => {
 
 	it("rejects invalid grade", () => {
 		expect(() =>
-			EvaluationResultSchema.parse(makeEvaluationResult({ grade: "Bad" })),
+			EvaluationResultSchema.parse(makeEvaluationResult({ grade: "Bad" } as any)),
 		).toThrow();
 	});
 

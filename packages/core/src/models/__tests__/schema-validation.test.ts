@@ -83,7 +83,7 @@ describe("TargetProfile", () => {
 
 	it("should accept a minimal target profile with defaults", () => {
 		const target = TargetProfileSchema.parse(validTarget);
-		expect(target.deployment_mode).toBe("suggestion_only");
+		expect(target.site_type).toBe("generic");
 		expect(target.status).toBe("active");
 		expect(target.topics).toEqual([]);
 	});

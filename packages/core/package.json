@@ -21,6 +21,18 @@
     "./prompts/defaults.js": {
       "import": "./dist/prompts/defaults.js",
       "types": "./dist/prompts/defaults.d.ts"
+    },
+    "./llm/provider-config.js": {
+      "import": "./dist/llm/provider-config.js",
+      "types": "./dist/llm/provider-config.d.ts"
+    },
+    "./llm/geo-llm-client.js": {
+      "import": "./dist/llm/geo-llm-client.js",
+      "types": "./dist/llm/geo-llm-client.d.ts"
+    },
+    "./prompts/template-engine.js": {
+      "import": "./dist/prompts/template-engine.js",
+      "types": "./dist/prompts/template-engine.d.ts"
     }
   },
   "scripts": {

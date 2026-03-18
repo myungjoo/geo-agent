@@ -17,8 +17,8 @@ CREATE TABLE targets (
 	competitors TEXT NOT NULL DEFAULT '[]',
 	business_goal TEXT NOT NULL DEFAULT '',
 	llm_priorities TEXT NOT NULL DEFAULT '[]',
-	deployment_mode TEXT NOT NULL DEFAULT 'suggestion_only',
-	deployment_config TEXT,
+	clone_base_path TEXT,
+	site_type TEXT NOT NULL DEFAULT 'generic',
 	notifications TEXT,
 	monitoring_interval TEXT NOT NULL DEFAULT 'daily',
 	status TEXT NOT NULL DEFAULT 'active',
@@ -91,7 +91,7 @@ describe("TargetRepository", () => {
 			expect(typeof target.description).toBe("string");
 			expect(typeof target.audience).toBe("string");
 			expect(typeof target.business_goal).toBe("string");
-			expect(typeof target.deployment_mode).toBe("string");
+			expect(typeof target.site_type).toBe("string");
 			expect(typeof target.monitoring_interval).toBe("string");
 			expect(typeof target.status).toBe("string");
 			expect(typeof target.created_at).toBe("string");
@@ -149,12 +149,7 @@ describe("TargetRepository", () => {
 					{ llm_service: "chatgpt", priority: "critical" },
 					{ llm_service: "perplexity", priority: "important" },
 				],
-				deployment_mode: "cms_api",
-				deployment_config: {
-					type: "git",
-					endpoint: "https://github.com/repo",
-					credentials_ref: "cred-123",
-				},
+				site_type: "manufacturer",
 				notifications: {
 					on_score_drop: true,
 					on_external_change: false,
@@ -170,7 +165,7 @@ describe("TargetRepository", () => {
 			expect(target.description).toBe("A fully specified target");
 			expect(target.audience).toBe("developers");
 			expect(target.business_goal).toBe("increase visibility");
-			expect(target.deployment_mode).toBe("cms_api");
+			expect(target.site_type).toBe("manufacturer");
 			expect(target.monitoring_interval).toBe("6h");
 		});
 
@@ -201,9 +196,9 @@ describe("TargetRepository", () => {
 			expect(target.status).toBe("active");
 		});
 
-		it("12. sets deployment_mode to 'suggestion_only' by default", async () => {
+		it("12. sets site_type to 'generic' by default", async () => {
 			const target = await repo.create(createMinimalInput());
-			expect(target.deployment_mode).toBe("suggestion_only");
+			expect(target.site_type).toBe("generic");
 		});
 
 		it("13. sets monitoring_interval to 'daily' by default", async () => {
@@ -357,13 +352,13 @@ describe("TargetRepository", () => {
 			expect(updated!.topics).toEqual(["new1", "new2"]);
 		});
 
-		it("24. updates deployment_mode", async () => {
+		it("24. updates site_type", async () => {
 			const target = await repo.create(createMinimalInput());
-			expect(target.deployment_mode).toBe("suggestion_only");
+			expect(target.site_type).toBe("generic");
 
-			const updated = await repo.update(target.id, { deployment_mode: "direct" });
+			const updated = await repo.update(target.id, { site_type: "manufacturer" });
 			expect(updated).not.toBeNull();
-			expect(updated!.deployment_mode).toBe("direct");
+			expect(updated!.site_type).toBe("manufacturer");
 		});
 
 		it("25. returns null for non-existent ID", async () => {

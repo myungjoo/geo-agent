@@ -3,6 +3,8 @@ import {
 	loadSettings,
 	type AgentId,
 	AgentIdSchema,
+	ProviderConfigManager,
+	LLMProviderIdSchema,
 } from "@geo-agent/core";
 import {
 	loadPrompt,
@@ -88,6 +90,95 @@ settingsRouter.get("/agents/prompts/:agent_id/default", (c) => {
 		return c.json({ error: "Invalid agent ID" }, 400);
 	}
 	return c.json({ ...defaults, last_modified: "default" });
+});
+
+// ── LLM Providers ─────────────────────────────────────────
+
+// GET /api/settings/llm-providers — List all provider settings
+settingsRouter.get("/llm-providers", (c) => {
+	const manager = new ProviderConfigManager(getWorkspaceDir());
+	const providers = manager.loadAll();
+	// API 키는 마스킹하여 반환
+	const masked = providers.map((p) => ({
+		...p,
+		api_key: p.api_key ? `${p.api_key.slice(0, 4)}${"*".repeat(Math.max(0, (p.api_key?.length ?? 0) - 4))}` : undefined,
+	}));
+	return c.json(masked);
+});
+
+// GET /api/settings/llm-providers/:provider_id — Get specific provider
+settingsRouter.get("/llm-providers/:provider_id", (c) => {
+	const providerId = c.req.param("provider_id");
+	const parsed = LLMProviderIdSchema.safeParse(providerId);
+	if (!parsed.success) {
+		return c.json({ error: "Invalid provider ID" }, 400);
+	}
+	const manager = new ProviderConfigManager(getWorkspaceDir());
+	const provider = manager.load(parsed.data);
+	// API 키 마스킹
+	if (provider.api_key) {
+		provider.api_key = `${provider.api_key.slice(0, 4)}${"*".repeat(Math.max(0, provider.api_key.length - 4))}`;
+	}
+	return c.json(provider);
+});
+
+// PUT /api/settings/llm-providers/:provider_id — Update provider
+settingsRouter.put("/llm-providers/:provider_id", async (c) => {
+	const providerId = c.req.param("provider_id");
+	const parsed = LLMProviderIdSchema.safeParse(providerId);
+	if (!parsed.success) {
+		return c.json({ error: "Invalid provider ID" }, 400);
+	}
+
+	const body = await c.req.json();
+	const manager = new ProviderConfigManager(getWorkspaceDir());
+	const existing = manager.load(parsed.data);
+	const updated = { ...existing, ...body, provider_id: parsed.data };
+	manager.save(updated);
+	return c.json({ ...updated, api_key: updated.api_key ? "***" : undefined });
+});
+
+// POST /api/settings/llm-providers/:provider_id/enable — Enable provider
+settingsRouter.post("/llm-providers/:provider_id/enable", (c) => {
+	const providerId = c.req.param("provider_id");
+	const parsed = LLMProviderIdSchema.safeParse(providerId);
+	if (!parsed.success) {
+		return c.json({ error: "Invalid provider ID" }, 400);
+	}
+	const manager = new ProviderConfigManager(getWorkspaceDir());
+	const result = manager.setEnabled(parsed.data, true);
+	return c.json(result);
+});
+
+// POST /api/settings/llm-providers/:provider_id/disable — Disable provider
+settingsRouter.post("/llm-providers/:provider_id/disable", (c) => {
+	const providerId = c.req.param("provider_id");
+	const parsed = LLMProviderIdSchema.safeParse(providerId);
+	if (!parsed.success) {
+		return c.json({ error: "Invalid provider ID" }, 400);
+	}
+	const manager = new ProviderConfigManager(getWorkspaceDir());
+	const result = manager.setEnabled(parsed.data, false);
+	return c.json(result);
+});
+
+// POST /api/settings/llm-providers/:provider_id/reset — Reset to default
+settingsRouter.post("/llm-providers/:provider_id/reset", (c) => {
+	const providerId = c.req.param("provider_id");
+	const parsed = LLMProviderIdSchema.safeParse(providerId);
+	if (!parsed.success) {
+		return c.json({ error: "Invalid provider ID" }, 400);
+	}
+	const manager = new ProviderConfigManager(getWorkspaceDir());
+	const result = manager.reset(parsed.data);
+	return c.json(result);
+});
+
+// POST /api/settings/llm-providers/reset-all — Reset all providers
+settingsRouter.post("/llm-providers/reset-all", (c) => {
+	const manager = new ProviderConfigManager(getWorkspaceDir());
+	const results = manager.resetAll();
+	return c.json(results);
 });
 
 export { settingsRouter };

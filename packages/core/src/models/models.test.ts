@@ -29,7 +29,6 @@ import {
 	// Target & Content
 	CompetitorEntrySchema,
 	LLMPrioritySchema,
-	DeploymentConfigSchema,
 	NotificationConfigSchema,
 	TargetProfileSchema,
 	CreateTargetSchema,
@@ -608,25 +607,6 @@ describe("TargetProfile", () => {
 		});
 	});
 
-	describe("DeploymentConfigSchema", () => {
-		it("accepts valid object", () => {
-			const data = { type: "git", endpoint: "https://repo.git", credentials_ref: "ref1" };
-			expect(DeploymentConfigSchema.safeParse(data).success).toBe(true);
-		});
-
-		it.each(["git", "ftp", "wordpress_api", "custom_api"])("accepts type: %s", (t) => {
-			expect(
-				DeploymentConfigSchema.safeParse({ type: t, endpoint: "ep", credentials_ref: "cr" }).success,
-			).toBe(true);
-		});
-
-		it("rejects invalid type", () => {
-			expect(
-				DeploymentConfigSchema.safeParse({ type: "ssh", endpoint: "ep", credentials_ref: "cr" }).success,
-			).toBe(false);
-		});
-	});
-
 	describe("NotificationConfigSchema", () => {
 		it("applies all defaults when given empty object", () => {
 			const result = NotificationConfigSchema.safeParse({});
@@ -674,7 +654,7 @@ describe("TargetProfile", () => {
 				expect(result.data.description).toBe("");
 				expect(result.data.topics).toEqual([]);
 				expect(result.data.status).toBe("active");
-				expect(result.data.deployment_mode).toBe("suggestion_only");
+				expect(result.data.site_type).toBe("generic");
 				expect(result.data.monitoring_interval).toBe("6h");
 			}
 		});
@@ -689,8 +669,8 @@ describe("TargetProfile", () => {
 				competitors: [{ url: URL_VALID, name: "Rival", relationship: "direct" }],
 				business_goal: "leads",
 				llm_priorities: [{ llm_service: "chatgpt", priority: "critical" }],
-				deployment_mode: "direct",
-				deployment_config: { type: "git", endpoint: "ep", credentials_ref: "cr" },
+				clone_base_path: null,
+				site_type: "manufacturer",
 				notifications: { on_score_drop: false, channels: ["email"] },
 				status: "paused",
 				monitoring_interval: "12h",
@@ -742,7 +722,7 @@ describe("TargetProfile", () => {
 				name: "Site",
 				description: "A site",
 				topics: ["tech"],
-				deployment_mode: "direct",
+				site_type: "manufacturer",
 			});
 			expect(result.success).toBe(true);
 		});

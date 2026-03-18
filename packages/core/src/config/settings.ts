@@ -63,6 +63,8 @@ export function initWorkspace(settings: AppSettings): void {
 		path.join(settings.workspace_dir, "prompts"),
 		path.join(settings.workspace_dir, "snapshots"),
 		path.join(settings.workspace_dir, "patches"),
+		path.join(settings.workspace_dir, "clones"),
+		path.join(settings.workspace_dir, "reports"),
 	];
 	for (const dir of dirs) {
 		fs.mkdirSync(dir, { recursive: true });
