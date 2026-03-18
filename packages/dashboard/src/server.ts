@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { cors } from "hono/cors";
+import { trimTrailingSlash } from "hono/trailing-slash";
 import { targetsRouter } from "./routes/targets.js";
 import { settingsRouter } from "./routes/settings.js";
 import { pipelineRouter } from "./routes/pipeline.js";
@@ -14,6 +15,15 @@ const app = new Hono();
 
 // Middleware
 app.use("*", cors());
+app.use(trimTrailingSlash());
+
+// Error handler (Bug #4: malformed JSON → 400)
+app.onError((err, c) => {
+	if (err instanceof SyntaxError && err.message.includes("JSON")) {
+		return c.json({ error: "Invalid JSON in request body" }, 400);
+	}
+	return c.json({ error: "Internal server error" }, 500);
+});
 
 // Health check
 app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
@@ -48,13 +58,22 @@ export async function startServer(port?: number): Promise<{ settings: AppSetting
 
 	const serverPort = port ?? settings.port;
 
-	console.log(`🌐 GEO Agent Dashboard starting on http://localhost:${serverPort}`);
+	return new Promise((resolve, reject) => {
+		const server = serve({
+			fetch: app.fetch,
+			port: serverPort,
+		});
 
-	serve({
-		fetch: app.fetch,
-		port: serverPort,
+		server.on("listening", () => {
+			console.log(`✅ GEO Agent Dashboard running on http://localhost:${serverPort}`);
+			resolve({ settings });
+		});
+
+		server.on("error", (err: NodeJS.ErrnoException) => {
+			if (err.code === "EADDRINUSE") {
+				console.error(`❌ Port ${serverPort} is already in use.`);
+			}
+			reject(err);
+		});
 	});
-
-	console.log(`✅ GEO Agent Dashboard running on http://localhost:${serverPort}`);
-	return { settings };
 }

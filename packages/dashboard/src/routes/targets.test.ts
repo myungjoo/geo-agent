@@ -20,10 +20,11 @@ const dbPath = path.join(testDir, "data", "geo-agent.db");
 // Import app and initialize the targets router with shared DB
 const { app } = await import("../server.js");
 const { initTargetsRouter } = await import("./targets.js");
-const { createDatabase, loadSettings } = await import("@geo-agent/core");
+const { createDatabase, loadSettings, ensureTables } = await import("@geo-agent/core");
 
 const settings = loadSettings();
 const db = createDatabase(settings);
+await ensureTables(db);
 initTargetsRouter(db);
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -114,12 +115,8 @@ describe("POST /api/targets", () => {
 				{ llm_service: "chatgpt", priority: "critical" },
 				{ llm_service: "claude", priority: "important" },
 			],
-			deployment_mode: "suggestion_only",
-			deployment_config: {
-				type: "git",
-				endpoint: "https://github.com/repo",
-				credentials_ref: "git-creds",
-			},
+			site_type: "generic",
+			clone_base_path: null,
 			notifications: {
 				on_score_drop: true,
 				on_external_change: false,
@@ -624,22 +621,14 @@ describe("All JSON fields round-trip via API (Bug #1)", () => {
 		expect(body.llm_priorities[0].llm_service).toBe("chatgpt");
 	});
 
-	it("deployment_config object survives create → get cycle", async () => {
-		const deployment_config = {
-			type: "git",
-			endpoint: "https://github.com/repo",
-			credentials_ref: "vault:creds",
-		};
-		const createRes = await createTarget({ deployment_config });
+	it("site_type survives create → get cycle", async () => {
+		const createRes = await createTarget({ site_type: "manufacturer" });
 		const created = await createRes.json();
 
 		const getRes = await app.request(`/api/targets/${created.id}`, { method: "GET" });
 		const body = await getRes.json();
 
-		expect(typeof body.deployment_config).toBe("object");
-		expect(body.deployment_config).not.toBeNull();
-		expect(body.deployment_config.type).toBe("git");
-		expect(body.deployment_config.endpoint).toBe("https://github.com/repo");
+		expect(body.site_type).toBe("manufacturer");
 	});
 
 	it("target_queries array survives create → get cycle", async () => {

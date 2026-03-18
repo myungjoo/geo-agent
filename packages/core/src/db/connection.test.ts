@@ -4,7 +4,7 @@ import os from "node:os";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import Database from "better-sqlite3";
-import { createDatabase } from "./connection.js";
+import { createDatabase, ensureTables } from "./connection.js";
 import { AppSettingsSchema, type AppSettings } from "../config/settings.js";
 
 function makeTmpDir(): string {
@@ -96,9 +96,10 @@ describe("createDatabase", () => {
 		expect(fs.statSync(expectedDir).isDirectory()).toBe(true);
 	});
 
-	it("enables WAL journal mode", () => {
+	it("enables WAL journal mode", async () => {
 		const settings = makeSettings();
-		createDatabase(settings);
+		const db = createDatabase(settings);
+		await ensureTables(db);
 
 		const dbPath = path.join(
 			settings.workspace_dir,
@@ -148,9 +149,10 @@ describe("createDatabase", () => {
 // ─── Bug #5 regression: auto-table creation ───────────────────────
 
 describe("createDatabase — auto-table creation (Bug #5)", () => {
-	it("creates all 7 required tables on a fresh DB", () => {
+	it("creates all 7 required tables on a fresh DB", async () => {
 		const settings = makeSettings();
-		createDatabase(settings);
+		const db = createDatabase(settings);
+		await ensureTables(db);
 
 		const dbPath = path.join(settings.workspace_dir, settings.db_path);
 		const sqlite = new Database(dbPath);
@@ -169,10 +171,12 @@ describe("createDatabase — auto-table creation (Bug #5)", () => {
 		expect(names).toContain("error_events");
 	});
 
-	it("is idempotent — calling twice does not error or duplicate tables", () => {
+	it("is idempotent — calling twice does not error or duplicate tables", async () => {
 		const settings = makeSettings();
-		createDatabase(settings);
-		createDatabase(settings);
+		const db1 = createDatabase(settings);
+		await ensureTables(db1);
+		const db2 = createDatabase(settings);
+		await ensureTables(db2);
 
 		const dbPath = path.join(settings.workspace_dir, settings.db_path);
 		const sqlite = new Database(dbPath);
@@ -184,9 +188,10 @@ describe("createDatabase — auto-table creation (Bug #5)", () => {
 		expect(tables).toHaveLength(1);
 	});
 
-	it("targets table has correct columns", () => {
+	it("targets table has correct columns", async () => {
 		const settings = makeSettings();
-		createDatabase(settings);
+		const db = createDatabase(settings);
+		await ensureTables(db);
 
 		const dbPath = path.join(settings.workspace_dir, settings.db_path);
 		const sqlite = new Database(dbPath);
@@ -205,9 +210,10 @@ describe("createDatabase — auto-table creation (Bug #5)", () => {
 		expect(colNames).toContain("updated_at");
 	});
 
-	it("pipeline_runs table has correct columns", () => {
+	it("pipeline_runs table has correct columns", async () => {
 		const settings = makeSettings();
-		createDatabase(settings);
+		const db = createDatabase(settings);
+		await ensureTables(db);
 
 		const dbPath = path.join(settings.workspace_dir, settings.db_path);
 		const sqlite = new Database(dbPath);

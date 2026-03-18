@@ -16,7 +16,7 @@ import * as schema from "./db/schema.js";
 import { TargetRepository } from "./db/repositories/target-repository.js";
 import type { CreateTarget } from "./models/target-profile.js";
 import { loadSettings, AppSettingsSchema, initWorkspace, saveSettings } from "./config/settings.js";
-import { createDatabase } from "./db/connection.js";
+import { createDatabase, ensureTables } from "./db/connection.js";
 
 // ─── Test helpers ─────────────────────────────────────────────────
 
@@ -272,7 +272,7 @@ describe("BUG #4 [FIXED]: Malformed JSON body returns 400", () => {
 // instance but never runs migrations or CREATE TABLE statements.
 
 describe("BUG #5 [FIXED]: DB tables auto-created on startup", () => {
-	it("BUG #5 [FIXED]: createDatabase() on fresh DB file should create targets table", () => {
+	it("BUG #5 [FIXED]: createDatabase() on fresh DB file should create targets table", async () => {
 		const tmpDir = makeTmpDir();
 		const dbPath = path.join(tmpDir, "test.db");
 		const settings = AppSettingsSchema.parse({
@@ -281,7 +281,8 @@ describe("BUG #5 [FIXED]: DB tables auto-created on startup", () => {
 		});
 
 		// Use createDatabase which now auto-creates tables
-		createDatabase(settings);
+		const db = createDatabase(settings);
+		await ensureTables(db);
 
 		// Verify tables exist by opening the DB file directly
 		const freshSqlite = new Database(dbPath);
