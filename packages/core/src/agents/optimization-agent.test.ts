@@ -180,4 +180,91 @@ describe("Optimization Agent", () => {
 			expect(result.failed_tasks[0].error).toContain("Read failed");
 		});
 	});
+
+	describe("runOptimization — multi-page support (KI-003)", () => {
+		function makeMultiPageInput(tasks: OptimizationTask[]): OptimizationInput {
+			const files: Record<string, string> = {
+				"index.html": "<html><head><title>Home</title></head><body><p>Home page</p></body></html>",
+				"products.html":
+					"<html><head><title>Products</title></head><body><p>Product list</p></body></html>",
+				"about.html": "<html><head><title>About</title></head><body><p>About us</p></body></html>",
+			};
+			return {
+				plan: makePlan(tasks),
+				readFile: vi.fn(async (path: string) => {
+					if (files[path]) return files[path];
+					throw new Error(`File not found: ${path}`);
+				}),
+				writeFile: vi.fn(async () => {}),
+				listFiles: vi.fn(async () => Object.keys(files)),
+			};
+		}
+
+		it("METADATA applies meta description to ALL html files", async () => {
+			const input = makeMultiPageInput([
+				makeTask({ change_type: "METADATA", title: "Meta description 추가" }),
+			]);
+			const result = await runOptimization(input);
+			expect(result.applied_tasks).toHaveLength(1);
+			expect(result.files_modified).toContain("index.html");
+			expect(result.files_modified).toContain("products.html");
+			expect(result.files_modified).toContain("about.html");
+			expect(result.files_modified.length).toBe(3);
+		});
+
+		it("SCHEMA_MARKUP adds JSON-LD to ALL html files without it", async () => {
+			const input = makeMultiPageInput([
+				makeTask({ change_type: "SCHEMA_MARKUP", title: "JSON-LD 추가" }),
+			]);
+			const result = await runOptimization(input);
+			expect(result.files_modified).toContain("index.html");
+			expect(result.files_modified).toContain("products.html");
+			expect(result.files_modified).toContain("about.html");
+		});
+
+		it("SEMANTIC_STRUCTURE adds H1 to ALL html files missing it", async () => {
+			const input = makeMultiPageInput([
+				makeTask({ change_type: "SEMANTIC_STRUCTURE", title: "헤딩 계층 구조 수정" }),
+			]);
+			const result = await runOptimization(input);
+			expect(result.files_modified).toContain("index.html");
+			expect(result.files_modified).toContain("products.html");
+			expect(result.files_modified).toContain("about.html");
+		});
+
+		it("skips HTML files that already have the target element", async () => {
+			const files: Record<string, string> = {
+				"index.html":
+					'<html><head><title>Home</title><meta name="description" content="existing"></head><body></body></html>',
+				"products.html": "<html><head><title>Products</title></head><body></body></html>",
+			};
+			const input: OptimizationInput = {
+				plan: makePlan([makeTask({ change_type: "METADATA", title: "Meta description 추가" })]),
+				readFile: vi.fn(async (path: string) => {
+					if (files[path]) return files[path];
+					throw new Error(`File not found: ${path}`);
+				}),
+				writeFile: vi.fn(async () => {}),
+				listFiles: vi.fn(async () => Object.keys(files)),
+			};
+			const result = await runOptimization(input);
+			// index.html already has meta description, products.html doesn't
+			expect(result.files_modified).toContain("products.html");
+			expect(result.files_modified).not.toContain("index.html");
+		});
+
+		it("OG tags applied to all pages", async () => {
+			const input = makeMultiPageInput([
+				makeTask({ change_type: "METADATA", title: "Open Graph 메타태그 추가" }),
+			]);
+			const result = await runOptimization(input);
+			expect(result.files_modified.length).toBe(3);
+			// Verify writeFile was called with OG content for each
+			const writeCalls = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+			const ogWrites = writeCalls.filter(
+				(c: [string, string]) => c[1] && c[1].includes("og:title"),
+			);
+			expect(ogWrites.length).toBe(3);
+		});
+	});
 });

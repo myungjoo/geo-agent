@@ -35,40 +35,23 @@ type TaskOptimizer = (
 	deps?: { chatLLM?: (req: LLMRequest) => Promise<LLMResponse> },
 ) => Promise<{ success: boolean; files_modified: string[]; error?: string }>;
 
+/** Helper: get all HTML files from clone */
+async function getHtmlFiles(input: OptimizationInput): Promise<string[]> {
+	const files = await input.listFiles();
+	const htmlFiles = files.filter((f) => f.endsWith(".html") || f.endsWith(".htm"));
+	return htmlFiles.length > 0 ? htmlFiles : ["index.html"];
+}
+
 async function optimizeMetadata(
 	task: OptimizationTask,
 	input: OptimizationInput,
 ): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
-	const files = await input.listFiles();
-	const htmlFile = files.find((f) => f.endsWith(".html") || f.endsWith(".htm")) ?? "index.html";
+	const htmlFiles = await getHtmlFiles(input);
+	const modified: string[] = [];
 
 	try {
-		let html = await input.readFile(htmlFile);
-		const modified: string[] = [];
-
-		if (task.title.includes("Meta description") || task.title.includes("메타")) {
-			if (!/<meta\s+name=["']description["']/i.test(html)) {
-				html = html.replace(
-					"</head>",
-					'<meta name="description" content="Optimized page description for LLM discoverability">\n</head>',
-				);
-				modified.push(htmlFile);
-			}
-		}
-
-		if (task.title.includes("Open Graph") || task.title.includes("OG")) {
-			if (!/<meta\s+property=["']og:/i.test(html)) {
-				const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || "Page";
-				html = html.replace(
-					"</head>",
-					`<meta property="og:title" content="${title.trim()}">\n<meta property="og:type" content="website">\n</head>`,
-				);
-				modified.push(htmlFile);
-			}
-		}
-
+		// robots.txt는 전역 파일 — 한 번만 생성
 		if (task.title.includes("robots.txt") || task.title.includes("봇 허용")) {
-			// robots.txt는 별도 파일로 생성
 			await input.writeFile(
 				"robots.txt",
 				"User-agent: *\nAllow: /\n\nUser-agent: GPTBot\nAllow: /\n\nUser-agent: ClaudeBot\nAllow: /\n",
@@ -76,8 +59,36 @@ async function optimizeMetadata(
 			modified.push("robots.txt");
 		}
 
-		if (modified.length > 0 && modified.includes(htmlFile)) {
-			await input.writeFile(htmlFile, html);
+		// 모든 HTML 파일에 메타태그 적용
+		for (const htmlFile of htmlFiles) {
+			let html = await input.readFile(htmlFile);
+			let fileModified = false;
+
+			if (task.title.includes("Meta description") || task.title.includes("메타")) {
+				if (!/<meta\s+name=["']description["']/i.test(html)) {
+					html = html.replace(
+						"</head>",
+						'<meta name="description" content="Optimized page description for LLM discoverability">\n</head>',
+					);
+					fileModified = true;
+				}
+			}
+
+			if (task.title.includes("Open Graph") || task.title.includes("OG")) {
+				if (!/<meta\s+property=["']og:/i.test(html)) {
+					const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || "Page";
+					html = html.replace(
+						"</head>",
+						`<meta property="og:title" content="${title.trim()}">\n<meta property="og:type" content="website">\n</head>`,
+					);
+					fileModified = true;
+				}
+			}
+
+			if (fileModified) {
+				await input.writeFile(htmlFile, html);
+				modified.push(htmlFile);
+			}
 		}
 
 		return { success: modified.length > 0, files_modified: modified };
@@ -87,33 +98,35 @@ async function optimizeMetadata(
 }
 
 async function optimizeSchemaMarkup(
-	task: OptimizationTask,
+	_task: OptimizationTask,
 	input: OptimizationInput,
 ): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
-	const files = await input.listFiles();
-	const htmlFile = files.find((f) => f.endsWith(".html") || f.endsWith(".htm")) ?? "index.html";
+	const htmlFiles = await getHtmlFiles(input);
+	const modified: string[] = [];
 
 	try {
-		let html = await input.readFile(htmlFile);
+		for (const htmlFile of htmlFiles) {
+			let html = await input.readFile(htmlFile);
 
-		if (!/<script\s+type=["']application\/ld\+json["']/i.test(html)) {
-			const jsonLd = {
-				"@context": "https://schema.org",
-				"@type": "WebPage",
-				name: (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1]?.trim() || "Page",
-				description:
-					(html.match(/<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i) || [])[1] ||
-					"",
-			};
-			html = html.replace(
-				"</head>",
-				`<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>\n</head>`,
-			);
-			await input.writeFile(htmlFile, html);
-			return { success: true, files_modified: [htmlFile] };
+			if (!/<script\s+type=["']application\/ld\+json["']/i.test(html)) {
+				const jsonLd = {
+					"@context": "https://schema.org",
+					"@type": "WebPage",
+					name: (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1]?.trim() || "Page",
+					description:
+						(html.match(/<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i) || [])[1] ||
+						"",
+				};
+				html = html.replace(
+					"</head>",
+					`<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>\n</head>`,
+				);
+				await input.writeFile(htmlFile, html);
+				modified.push(htmlFile);
+			}
 		}
 
-		return { success: false, files_modified: [] };
+		return { success: modified.length > 0, files_modified: modified };
 	} catch (err) {
 		return { success: false, files_modified: [], error: (err as Error).message };
 	}
@@ -138,27 +151,29 @@ async function optimizeSemanticStructure(
 	task: OptimizationTask,
 	input: OptimizationInput,
 ): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
-	const files = await input.listFiles();
-	const htmlFile = files.find((f) => f.endsWith(".html") || f.endsWith(".htm")) ?? "index.html";
+	const htmlFiles = await getHtmlFiles(input);
+	const modified: string[] = [];
 
 	try {
-		let html = await input.readFile(htmlFile);
-		let modified = false;
+		for (const htmlFile of htmlFiles) {
+			let html = await input.readFile(htmlFile);
+			let fileModified = false;
 
-		// Add H1 if missing
-		if (task.title.includes("헤딩") && !/<h1[\s>]/i.test(html)) {
-			const title =
-				(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1]?.trim() || "Page Title";
-			html = html.replace(/<body[^>]*>/i, (match) => `${match}\n<h1>${title}</h1>`);
-			modified = true;
+			// Add H1 if missing
+			if (task.title.includes("헤딩") && !/<h1[\s>]/i.test(html)) {
+				const title =
+					(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1]?.trim() || "Page Title";
+				html = html.replace(/<body[^>]*>/i, (match) => `${match}\n<h1>${title}</h1>`);
+				fileModified = true;
+			}
+
+			if (fileModified) {
+				await input.writeFile(htmlFile, html);
+				modified.push(htmlFile);
+			}
 		}
 
-		if (modified) {
-			await input.writeFile(htmlFile, html);
-			return { success: true, files_modified: [htmlFile] };
-		}
-
-		return { success: false, files_modified: [] };
+		return { success: modified.length > 0, files_modified: modified };
 	} catch (err) {
 		return { success: false, files_modified: [], error: (err as Error).message };
 	}
