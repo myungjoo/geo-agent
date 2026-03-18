@@ -27,10 +27,7 @@ let sharedStageRepo: StageExecutionRepository | null = null;
 let sharedTargetRepo: TargetRepository | null = null;
 let sharedSettings: AppSettings | null = null;
 
-export function initPipelineRouter(
-	db: GeoDatabase,
-	settings?: AppSettings,
-): void {
+export function initPipelineRouter(db: GeoDatabase, settings?: AppSettings): void {
 	sharedPipelineRepo = new PipelineRepository(db);
 	sharedStageRepo = new StageExecutionRepository(db);
 	sharedTargetRepo = new TargetRepository(db);
@@ -117,12 +114,7 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 		const stageCallbacks: StageCallbacks = {
 			onStageStart: async (_pipelineId, stage, cycle, promptSummary) => {
 				await repo.updateStage(pipeline.pipeline_id, stage as never);
-				const exec = await stageRepo.create(
-					pipeline.pipeline_id,
-					stage,
-					cycle,
-					promptSummary,
-				);
+				const exec = await stageRepo.create(pipeline.pipeline_id, stage, cycle, promptSummary);
 				return exec.id;
 			},
 			onStageComplete: async (executionId, resultSummary, resultFull) => {
@@ -143,12 +135,15 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 				const client = new GeoLLMClient(workspaceDir);
 				chatLLM = (req) => client.chat(req);
 				console.log(
-					`🤖 LLM enabled: ${enabledProviders.filter((p) => p.api_key).map((p) => p.provider_id).join(", ")}`,
+					`🤖 LLM enabled: ${enabledProviders
+						.filter((p) => p.api_key)
+						.map((p) => p.provider_id)
+						.join(", ")}`,
 				);
 			} else {
 				console.log(
 					"⚠️ No LLM API key configured — running pipeline in rule-based mode. " +
-					"Configure via Dashboard > LLM Providers tab.",
+						"Configure via Dashboard > LLM Providers tab.",
 				);
 			}
 		} catch (err) {
@@ -175,11 +170,9 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 
 		// Fire-and-forget: execute pipeline in background
 		runningPipelines.add(targetId);
-		executePipelineAsync(pipeline.pipeline_id, targetId, config, deps, repo).finally(
-			() => {
-				runningPipelines.delete(targetId);
-			},
-		);
+		executePipelineAsync(pipeline.pipeline_id, targetId, config, deps, repo).finally(() => {
+			runningPipelines.delete(targetId);
+		});
 
 		return c.json(pipeline, 201);
 	}
@@ -303,9 +296,8 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 	// Find ANALYZING and latest VALIDATING stages
 	const analyzingStage = stages.find((s) => s.stage === "ANALYZING" && s.result_full);
 	const validatingStages = stages.filter((s) => s.stage === "VALIDATING" && s.result_full);
-	const latestValidating = validatingStages.length > 0
-		? validatingStages[validatingStages.length - 1]
-		: null;
+	const latestValidating =
+		validatingStages.length > 0 ? validatingStages[validatingStages.length - 1] : null;
 
 	if (!analyzingStage?.result_full) {
 		return c.json({ error: "No evaluation data available" }, 404);
@@ -329,7 +321,7 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 
 	const initialScore = (initial.score as number) ?? 0;
 	const finalScore = final_data
-		? (final_data.after as number) ?? (final_data.delta as number ?? 0) + initialScore
+		? ((final_data.after as number) ?? ((final_data.delta as number) ?? 0) + initialScore)
 		: initialScore;
 
 	return c.json({
@@ -342,6 +334,7 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 		dimensions: initial.dimensions ?? [],
 		multi_page: initial.multi_page ?? null,
 		eval_data: initial.eval_data ?? null,
+		synthetic_probes: initial.synthetic_probes ?? null,
 		validation: final_data,
 		stages: stages.map((s) => ({
 			stage: s.stage,

@@ -17,6 +17,7 @@ import { ReportBuilder } from "../report/report-generator.js";
 import { type AnalysisOutput, runAnalysis } from "./analysis-agent.js";
 import { type OptimizationResult, runOptimization } from "./optimization-agent.js";
 import { type StrategyOutput, runStrategy } from "./strategy-agent.js";
+import { type ProbeContext, type SyntheticProbeRunResult, runProbes } from "./synthetic-probes.js";
 import type { CrawlData } from "./types.js";
 import { type ValidationOutput, runValidation } from "./validation-agent.js";
 
@@ -123,6 +124,7 @@ export async function runPipeline(
 	}> = [];
 	let initialScore = 0;
 	let cycleCount = 0;
+	let probeResults: SyntheticProbeRunResult | null = null;
 
 	const orchestrator = new Orchestrator({
 		maxRetries: config.max_retries ?? 3,
@@ -182,13 +184,48 @@ export async function runPipeline(
 				currentGrade = analysisOutput.geo_scores.grade;
 				currentDimensions = analysisOutput.geo_scores.dimensions;
 				initialScore = currentScore;
+
+				// Run Synthetic Probes if LLM is available
+				if (deps.chatLLM) {
+					try {
+						const productInfos = analysisOutput.eval_data?.product_info ?? [];
+						const productNames = productInfos
+							.map((pi) => pi.info.product_name)
+							.filter((n): n is string => n !== null);
+						const productPrices = productInfos.flatMap((pi) => pi.info.prices);
+						const brandName = new URL(config.target_url).hostname.replace("www.", "").split(".")[0];
+						const probeContext: ProbeContext = {
+							site_name: analysisOutput.crawl_data.title || new URL(config.target_url).hostname,
+							site_url: config.target_url,
+							site_type: analysisOutput.classification.site_type,
+							topics: analysisOutput.report.content_analysis?.key_topics_found ?? [],
+							products: productNames,
+							prices: productPrices,
+							brand: brandName,
+						};
+						probeResults = await runProbes(
+							probeContext,
+							{ chatLLM: deps.chatLLM },
+							{ delayMs: 500 },
+						);
+					} catch (probeErr) {
+						console.warn(
+							"⚠️ Synthetic Probes failed (non-fatal):",
+							probeErr instanceof Error ? probeErr.message : String(probeErr),
+						);
+					}
+				}
+
 				return analysisOutput;
 			},
 			(out) => {
 				const pageInfo = out.multi_page
 					? `, ${out.multi_page.page_scores.length + 1} pages crawled`
 					: "";
-				return `Score: ${out.geo_scores.overall_score}/100 (${out.geo_scores.grade}), Site: ${out.classification.site_type} (confidence: ${out.classification.confidence.toFixed(2)})${pageInfo}`;
+				const probeInfo = probeResults
+					? `, Probes: ${probeResults.summary.pass}P/${probeResults.summary.partial}A/${probeResults.summary.fail}F (citation ${Math.round(probeResults.summary.citation_rate * 100)}%)`
+					: "";
+				return `Score: ${out.geo_scores.overall_score}/100 (${out.geo_scores.grade}), Site: ${out.classification.site_type} (confidence: ${out.classification.confidence.toFixed(2)})${pageInfo}${probeInfo}`;
 			},
 			(out) => ({
 				score: out.geo_scores.overall_score,
@@ -204,10 +241,7 @@ export async function runPipeline(
 							aggregate_score: out.multi_page.aggregate_score,
 							aggregate_grade: out.multi_page.aggregate_grade,
 							page_count: out.multi_page.page_scores.length + 1,
-							pages: [
-								out.multi_page.homepage_scores,
-								...out.multi_page.page_scores,
-							].map((p) => ({
+							pages: [out.multi_page.homepage_scores, ...out.multi_page.page_scores].map((p) => ({
 								url: p.url,
 								filename: p.filename,
 								score: p.scores.overall_score,
@@ -217,6 +251,7 @@ export async function runPipeline(
 						}
 					: null,
 				eval_data: out.eval_data,
+				synthetic_probes: probeResults,
 			}),
 		);
 	});
@@ -286,8 +321,7 @@ export async function runPipeline(
 			"OPTIMIZING",
 			`Applying ${strategyOutput?.plan.tasks.length ?? 0} tasks: ${taskTitles.slice(0, 300)}`,
 			async () => {
-				if (!strategyOutput || !cloneManager)
-					throw new Error("Strategy or clone missing");
+				if (!strategyOutput || !cloneManager) throw new Error("Strategy or clone missing");
 
 				const tid = config.target_id;
 				optimizationResult = await runOptimization(
@@ -367,9 +401,7 @@ export async function runPipeline(
 									const allFiles = cloneManager!.listWorkingFiles(config.target_id);
 									for (const f of allFiles) {
 										if (f.endsWith(".html") && f !== "index.html") {
-											const pageData = analysisOutput?.all_pages?.find(
-												(p) => p.filename === f,
-											);
+											const pageData = analysisOutput?.all_pages?.find((p) => p.filename === f);
 											pages.push({
 												filename: f,
 												crawl_data: fileAsCrawlData(
@@ -398,7 +430,7 @@ export async function runPipeline(
 				return validationOutput;
 			},
 			(out) =>
-				`Score: ${out.after_score} (delta: ${out.delta >= 0 ? "+" : ""}${out.delta}), ${out.needs_more_cycles ? "continuing" : out.stop_reason ?? "done"}`,
+				`Score: ${out.after_score} (delta: ${out.delta >= 0 ? "+" : ""}${out.delta}), ${out.needs_more_cycles ? "continuing" : (out.stop_reason ?? "done")}`,
 			(out) => ({
 				after: out.after_score,
 				delta: out.delta,
@@ -430,21 +462,13 @@ export async function runPipeline(
 					.setGrades(analysisOutput?.geo_scores.grade ?? "Unknown", currentGrade);
 
 				for (const dim of currentDimensions) {
-					const before = analysisOutput?.geo_scores.dimensions.find(
-						(d) => d.id === dim.id,
-					);
-					builder.addScoreComparison(
-						`${dim.id} ${dim.label}`,
-						before?.score ?? 0,
-						dim.score,
-					);
+					const before = analysisOutput?.geo_scores.dimensions.find((d) => d.id === dim.id);
+					builder.addScoreComparison(`${dim.id} ${dim.label}`, before?.score ?? 0, dim.score);
 				}
 
 				if (optimizationResult) {
 					for (const taskId of optimizationResult.applied_tasks) {
-						const task = strategyOutput?.plan.tasks.find(
-							(t) => t.task_id === taskId,
-						);
+						const task = strategyOutput?.plan.tasks.find((t) => t.task_id === taskId);
 						if (task) {
 							builder.addChange({
 								file_path: task.target_element ?? "unknown",
@@ -474,24 +498,13 @@ export async function runPipeline(
 					const optFiles = new Map<string, string>();
 
 					if (cloneManager) {
-						const origHtml = cloneManager.readOriginalFile(
-							config.target_id,
-							"index.html",
-						);
+						const origHtml = cloneManager.readOriginalFile(config.target_id, "index.html");
 						if (origHtml) origFiles.set("index.html", origHtml);
-						const workHtml = cloneManager.readWorkingFile(
-							config.target_id,
-							"index.html",
-						);
+						const workHtml = cloneManager.readWorkingFile(config.target_id, "index.html");
 						if (workHtml) optFiles.set("index.html", workHtml);
 					}
 
-					const archiveResult = archiveBuilder.build(
-						report,
-						origFiles,
-						optFiles,
-						new Map(),
-					);
+					const archiveResult = archiveBuilder.build(report, origFiles, optFiles, new Map());
 					reportPath = archiveResult.archive_path;
 				} catch {
 					// Archive generation failure is non-fatal
@@ -499,8 +512,7 @@ export async function runPipeline(
 
 				return { initial: initialScore, final: currentScore };
 			},
-			(out) =>
-				`Report: ${out.initial}→${out.final} (+${out.final - out.initial})`,
+			(out) => `Report: ${out.initial}→${out.final} (+${out.final - out.initial})`,
 		);
 	});
 

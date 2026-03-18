@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { LLMRequest, LLMResponse } from "../llm/geo-llm-client.js";
 import { type PipelineConfig, type PipelineDeps, runPipeline } from "./pipeline-runner.js";
 import type { CrawlData } from "./types.js";
 
@@ -159,5 +160,84 @@ describe("Pipeline Runner — E2E", () => {
 		// Score reaches 80+ on second scoreTarget call → no more cycles
 		const result = await runPipeline(makeConfig({ target_score: 55, max_cycles: 1 }), deps);
 		expect(result.success).toBe(true);
+	});
+});
+
+// ── Synthetic Probes Integration ────────────────────────
+
+function mockChatLLM(): (req: LLMRequest) => Promise<LLMResponse> {
+	return vi.fn().mockImplementation(async (req: LLMRequest) => ({
+		content: `example.com은 삼성전자와 유사한 전자 제품을 취급하는 사이트입니다. ${req.prompt}에 대한 답변입니다. Test Page에서 자세한 정보를 확인할 수 있습니다.`,
+		model: "test-model",
+		provider: "test-provider",
+		latency_ms: 50,
+		usage: { prompt_tokens: 10, completion_tokens: 50, total_tokens: 60 },
+	}));
+}
+
+describe("Pipeline Runner — Synthetic Probes", () => {
+	it("runs probes when chatLLM is provided", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+		const config = makeConfig({ target_score: 60, max_cycles: 1 });
+
+		const result = await runPipeline(config, deps);
+		expect(result.success).toBe(true);
+		// chatLLM should have been called for probes (8 probes)
+		expect(deps.chatLLM).toHaveBeenCalled();
+	});
+
+	it("skips probes when chatLLM is not provided", async () => {
+		const deps = makeDeps();
+		// No chatLLM → probes should not run, pipeline should still succeed
+		const config = makeConfig({ target_score: 60, max_cycles: 1 });
+		const result = await runPipeline(config, deps);
+		expect(result.success).toBe(true);
+	});
+
+	it("pipeline succeeds even if probes fail", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = vi.fn().mockRejectedValue(new Error("LLM API error"));
+		const config = makeConfig({ target_score: 60, max_cycles: 1 });
+
+		const result = await runPipeline(config, deps);
+		// Pipeline should succeed — probes failure is non-fatal
+		expect(result.success).toBe(true);
+	});
+
+	it("tracks probe results with stageCallbacks", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+
+		const stageResults: Array<{ stage: string; resultFull?: unknown }> = [];
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			stageCallbacks: {
+				onStageStart: async (_pid, stage, _cycle, _prompt) => {
+					return `exec-${stage}`;
+				},
+				onStageComplete: async (execId, _summary, resultFull) => {
+					stageResults.push({
+						stage: execId.replace("exec-", ""),
+						resultFull,
+					});
+				},
+				onStageFail: async () => {},
+			},
+		});
+
+		await runPipeline(config, deps);
+
+		const analyzingResult = stageResults.find((s) => s.stage === "ANALYZING");
+		expect(analyzingResult).toBeDefined();
+		const full = analyzingResult?.resultFull as Record<string, unknown>;
+		expect(full).toBeDefined();
+		expect(full.synthetic_probes).toBeDefined();
+
+		const probes = full.synthetic_probes as { summary: { total: number; citation_rate: number } };
+		expect(probes.summary.total).toBe(8);
+		expect(probes.summary.citation_rate).toBeGreaterThanOrEqual(0);
 	});
 });

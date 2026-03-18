@@ -809,6 +809,7 @@ function buildEvalSubTabs(data) {
 		{ id: 'recommendations', icon: '🎯', label: '개선 권고' },
 		{ id: 'evidence', icon: '🔬', label: '실증 데이터' },
 		{ id: 'roadmap', icon: '🗺️', label: '개선 로드맵' },
+		{ id: 'probes', icon: '🧪', label: 'Synthetic Probes' },
 		{ id: 'pipeline', icon: '⏱️', label: '실행 요약' },
 	];
 	var html = '';
@@ -903,6 +904,9 @@ function renderEvalSubTab(tabId, data, container) {
 		break;
 	case 'roadmap':
 		html = renderRoadmapTab(ed);
+		break;
+	case 'probes':
+		html = renderProbesTab(data);
 		break;
 	case 'pipeline':
 		html = renderPipelineTab(data);
@@ -1329,6 +1333,67 @@ function renderRoadmapTab(ed) {
 	html += renderSprintGroup('🔴 Sprint 1 — 즉시 실행 (1~2주)', 'var(--danger)', sprint1);
 	html += renderSprintGroup('🟡 Sprint 2 — 1~3개월', 'var(--warning)', sprint2);
 	html += renderSprintGroup('🟢 Sprint 3 — 분기 내', 'var(--success)', sprint3);
+	html += '</div>';
+	return html;
+}
+
+// ── Tab: Synthetic Probes ────────────────────────────
+function renderProbesTab(data) {
+	var probes = data.synthetic_probes;
+	if (!probes || !probes.probes || probes.probes.length === 0) {
+		return '<div class="card"><div class="empty">Synthetic Probe 결과 없음 — LLM API Key 설정 후 파이프라인 실행 시 프로브가 실행됩니다.</div></div>';
+	}
+	var html = '';
+	// Summary card
+	var s = probes.summary;
+	html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🧪 Synthetic Probes 요약</h3>';
+	html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:16px;">';
+	html += '<div style="text-align:center;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);">';
+	html += '<div style="font-size:24px;font-weight:700;color:var(--primary);">' + s.total + '</div><div style="font-size:11px;color:var(--text-muted);">Total</div></div>';
+	html += '<div style="text-align:center;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);">';
+	html += '<div style="font-size:24px;font-weight:700;color:#22c55e;">' + s.pass + '</div><div style="font-size:11px;color:var(--text-muted);">PASS</div></div>';
+	html += '<div style="text-align:center;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);">';
+	html += '<div style="font-size:24px;font-weight:700;color:#f59e0b;">' + s.partial + '</div><div style="font-size:11px;color:var(--text-muted);">PARTIAL</div></div>';
+	html += '<div style="text-align:center;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);">';
+	html += '<div style="font-size:24px;font-weight:700;color:#ef4444;">' + s.fail + '</div><div style="font-size:11px;color:var(--text-muted);">FAIL</div></div>';
+	html += '<div style="text-align:center;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);">';
+	html += '<div style="font-size:24px;font-weight:700;color:var(--primary);">' + Math.round(s.citation_rate * 100) + '%</div><div style="font-size:11px;color:var(--text-muted);">Citation Rate</div></div>';
+	html += '<div style="text-align:center;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);">';
+	html += '<div style="font-size:24px;font-weight:700;color:var(--primary);">' + Math.round(s.average_accuracy * 100) + '%</div><div style="font-size:11px;color:var(--text-muted);">Avg Accuracy</div></div>';
+	html += '</div></div>';
+
+	// Individual probes table
+	html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">📋 프로브별 상세 결과</h3>';
+	html += '<table class="eval-table"><thead><tr><th>ID</th><th>이름</th><th>카테고리</th><th>인용</th><th>정확도</th><th>판정</th><th>모델</th><th>지연(ms)</th></tr></thead><tbody>';
+	for (var i = 0; i < probes.probes.length; i++) {
+		var p = probes.probes[i];
+		var vColor = p.verdict === 'PASS' ? '#22c55e' : p.verdict === 'PARTIAL' ? '#f59e0b' : '#ef4444';
+		var vBg = p.verdict === 'PASS' ? 'rgba(34,197,94,0.1)' : p.verdict === 'PARTIAL' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)';
+		html += '<tr>';
+		html += '<td><code>' + escHtml(p.probe_id) + '</code></td>';
+		html += '<td>' + escHtml(p.probe_name) + '</td>';
+		html += '<td><span style="font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(99,102,241,0.1);color:#818cf8;">' + escHtml(p.category) + '</span></td>';
+		html += '<td>' + (p.cited ? '✅' : '❌') + '</td>';
+		html += '<td>' + Math.round(p.accuracy * 100) + '%</td>';
+		html += '<td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:' + vBg + ';color:' + vColor + ';font-weight:600;">' + p.verdict + '</span></td>';
+		html += '<td style="font-size:11px;">' + escHtml(p.model || '-') + '</td>';
+		html += '<td>' + (p.latency_ms || '-') + '</td>';
+		html += '</tr>';
+	}
+	html += '</tbody></table></div>';
+
+	// Query/Response details (expandable)
+	html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">💬 프로브 질의 & 응답</h3>';
+	for (var j = 0; j < probes.probes.length; j++) {
+		var pr = probes.probes[j];
+		var vCol = pr.verdict === 'PASS' ? '#22c55e' : pr.verdict === 'PARTIAL' ? '#f59e0b' : '#ef4444';
+		html += '<details style="margin-bottom:8px;border:1px solid var(--border);border-radius:8px;padding:0;">';
+		html += '<summary style="padding:10px 14px;cursor:pointer;font-size:13px;"><span style="color:' + vCol + ';font-weight:600;">[' + pr.verdict + ']</span> ' + escHtml(pr.probe_id) + ' ' + escHtml(pr.probe_name) + '</summary>';
+		html += '<div style="padding:10px 14px;border-top:1px solid var(--border);">';
+		html += '<div style="margin-bottom:8px;"><strong style="font-size:12px;">질의:</strong><div style="background:var(--bg-primary);padding:8px;border-radius:4px;font-size:12px;margin-top:4px;">' + escHtml(pr.query) + '</div></div>';
+		html += '<div><strong style="font-size:12px;">응답:</strong><div style="background:var(--bg-primary);padding:8px;border-radius:4px;font-size:12px;margin-top:4px;max-height:200px;overflow-y:auto;white-space:pre-wrap;">' + escHtml(pr.response) + '</div></div>';
+		html += '</div></details>';
+	}
 	html += '</div>';
 	return html;
 }

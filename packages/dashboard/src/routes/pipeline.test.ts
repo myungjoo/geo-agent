@@ -19,7 +19,9 @@ const dbPath = path.join(testDir, "data", "geo-agent.db");
 const { app } = await import("../server.js");
 const { initTargetsRouter } = await import("./targets.js");
 const { initPipelineRouter } = await import("./pipeline.js");
-const { createDatabase, loadSettings, ensureTables, StageExecutionRepository } = await import("@geo-agent/core");
+const { createDatabase, loadSettings, ensureTables, StageExecutionRepository } = await import(
+	"@geo-agent/core"
+);
 
 const settings = loadSettings();
 const db = createDatabase(settings);
@@ -749,10 +751,10 @@ describe("LLM integration in pipeline execution", () => {
 	it("pipeline starts successfully without LLM API key (rule-based mode)", async () => {
 		// Default config has no API key set — should still start pipeline
 		const targetId = await getTargetId();
-		const res = await app.request(
-			`/api/targets/${targetId}/pipeline?execute=true`,
-			{ method: "POST", headers: { "Content-Type": "application/json" } },
-		);
+		const res = await app.request(`/api/targets/${targetId}/pipeline?execute=true`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+		});
 		expect(res.status).toBe(201);
 		const body = await res.json();
 		expect(body.pipeline_id).toBeDefined();
@@ -761,10 +763,10 @@ describe("LLM integration in pipeline execution", () => {
 
 	it("pipeline creates DB record even when LLM is not configured", async () => {
 		const targetId = await getTargetId();
-		await app.request(
-			`/api/targets/${targetId}/pipeline?execute=true`,
-			{ method: "POST", headers: { "Content-Type": "application/json" } },
-		);
+		await app.request(`/api/targets/${targetId}/pipeline?execute=true`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+		});
 		// Verify pipeline was created in DB
 		const listRes = await app.request(`/api/targets/${targetId}/pipeline`);
 		const pipelines = await listRes.json();
@@ -831,9 +833,7 @@ describe("LLM integration in pipeline execution", () => {
 		const client = new GeoLLMClient(testDir);
 
 		// chat() should throw an error (authentication failure, network error, etc.)
-		await expect(
-			client.chat({ prompt: "test" }),
-		).rejects.toThrow();
+		await expect(client.chat({ prompt: "test" })).rejects.toThrow();
 
 		// Clean up
 		configManager.save({ ...openai, enabled: true, api_key: undefined });
@@ -854,5 +854,84 @@ describe("LLM integration in pipeline execution", () => {
 
 		// Restore defaults
 		configManager.resetAll();
+	});
+});
+
+describe("Evaluation API — synthetic_probes", () => {
+	it("returns synthetic_probes field in evaluation response", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		// Manually insert stage execution with synthetic_probes in result_full
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "ANALYZING", 0, "test prompt");
+		const probeData = {
+			score: 65,
+			grade: "Needs Improvement",
+			site_type: "manufacturer",
+			dimensions: [{ id: "S1", label: "Crawl", score: 70 }],
+			synthetic_probes: {
+				probes: [
+					{
+						probe_id: "P-01",
+						probe_name: "제품 스펙",
+						category: "accuracy",
+						query: "제품 스펙 알려줘",
+						response: "Galaxy S25는 example.com에서 구매 가능합니다.",
+						cited: true,
+						accuracy: 0.65,
+						verdict: "PASS",
+						latency_ms: 120,
+						model: "gpt-4o",
+						provider: "openai",
+					},
+				],
+				summary: {
+					total: 1,
+					pass: 1,
+					partial: 0,
+					fail: 0,
+					citation_rate: 1.0,
+					average_accuracy: 0.65,
+				},
+			},
+		};
+		await stageRepo.complete(exec.id, "Score: 65", probeData);
+
+		// Query evaluation endpoint
+		const evalRes = await app.request(
+			`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/evaluation`,
+		);
+		expect(evalRes.status).toBe(200);
+
+		const evalBody = await evalRes.json();
+		expect(evalBody.synthetic_probes).toBeDefined();
+		expect(evalBody.synthetic_probes.summary.total).toBe(1);
+		expect(evalBody.synthetic_probes.summary.citation_rate).toBe(1.0);
+		expect(evalBody.synthetic_probes.probes[0].probe_id).toBe("P-01");
+	});
+
+	it("returns null synthetic_probes when not available", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		// Insert stage execution WITHOUT synthetic_probes
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "ANALYZING", 0, "test");
+		await stageRepo.complete(exec.id, "Score: 50", {
+			score: 50,
+			grade: "Needs Improvement",
+			site_type: "generic",
+			dimensions: [],
+		});
+
+		const evalRes = await app.request(
+			`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/evaluation`,
+		);
+		expect(evalRes.status).toBe(200);
+		const evalBody = await evalRes.json();
+		expect(evalBody.synthetic_probes).toBeNull();
 	});
 });
