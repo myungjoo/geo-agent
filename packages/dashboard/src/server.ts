@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { type AppSettings, initWorkspace, loadSettings } from "@geo-agent/core";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
@@ -6,6 +9,9 @@ import { trimTrailingSlash } from "hono/trailing-slash";
 import { pipelineRouter } from "./routes/pipeline.js";
 import { settingsRouter } from "./routes/settings.js";
 import { targetsRouter } from "./routes/targets.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = new Hono();
 
@@ -29,13 +35,44 @@ app.route("/api/targets", targetsRouter);
 app.route("/api/targets", pipelineRouter);
 app.route("/api/settings", settingsRouter);
 
-// Root redirect
+// Dashboard UI — serve single HTML SPA
+let dashboardHtmlCache: string | null = null;
+
+function getDashboardHtml(): string {
+	if (!dashboardHtmlCache) {
+		// Try src/ first (dev), then fall back to dist/ (built)
+		const candidates = [
+			join(__dirname, "ui", "dashboard.html"),
+			join(__dirname, "..", "src", "ui", "dashboard.html"),
+		];
+		for (const p of candidates) {
+			try {
+				dashboardHtmlCache = readFileSync(p, "utf-8");
+				break;
+			} catch {
+				// try next
+			}
+		}
+		if (!dashboardHtmlCache) {
+			dashboardHtmlCache = "<html><body><h1>Dashboard HTML not found</h1></body></html>";
+		}
+	}
+	return dashboardHtmlCache;
+}
+
+app.get("/dashboard", (c) => {
+	return c.html(getDashboardHtml());
+});
+
+// Root — API info + dashboard link
 app.get("/", (c) =>
 	c.json({
 		name: "GEO Agent Dashboard",
-		version: "0.2.0",
+		version: "0.3.0",
+		dashboard: "/dashboard",
 		endpoints: [
 			"/health",
+			"/dashboard",
 			"/api/targets",
 			"/api/targets/:id/pipeline",
 			"/api/targets/:id/cycle/status",

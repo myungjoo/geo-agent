@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEO Agent Dashboard</title>
+<style>
+:root {
+	--bg: #0A0E1A;
+	--surface: #111827;
+	--surface2: #1F2937;
+	--border: #374151;
+	--primary: #3B82F6;
+	--primary-hover: #2563EB;
+	--danger: #EF4444;
+	--danger-hover: #DC2626;
+	--success: #10B981;
+	--warning: #F59E0B;
+	--text: #F3F4F6;
+	--text-muted: #9CA3AF;
+	--radius: 8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+	background: var(--bg);
+	color: var(--text);
+	min-height: 100vh;
+}
+.header {
+	background: var(--surface);
+	border-bottom: 1px solid var(--border);
+	padding: 12px 24px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+.header h1 { font-size: 18px; font-weight: 600; }
+.header .status { font-size: 12px; color: var(--text-muted); }
+.nav {
+	background: var(--surface);
+	border-bottom: 1px solid var(--border);
+	display: flex;
+	gap: 0;
+}
+.nav button {
+	background: none;
+	border: none;
+	color: var(--text-muted);
+	padding: 12px 24px;
+	cursor: pointer;
+	font-size: 14px;
+	border-bottom: 2px solid transparent;
+	transition: all 0.2s;
+}
+.nav button:hover { color: var(--text); background: var(--surface2); }
+.nav button.active { color: var(--primary); border-bottom-color: var(--primary); }
+.main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+.card {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	padding: 20px;
+	margin-bottom: 16px;
+}
+.card h2 { font-size: 16px; margin-bottom: 12px; }
+.card h3 { font-size: 14px; color: var(--text-muted); margin-bottom: 8px; }
+.btn {
+	padding: 8px 16px;
+	border: none;
+	border-radius: var(--radius);
+	cursor: pointer;
+	font-size: 13px;
+	font-weight: 500;
+	transition: background 0.2s;
+}
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-danger { background: var(--danger); color: white; }
+.btn-danger:hover { background: var(--danger-hover); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--surface2); color: var(--text); }
+input, textarea, select {
+	background: var(--surface2);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	color: var(--text);
+	padding: 8px 12px;
+	font-size: 13px;
+	width: 100%;
+}
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--primary); }
+textarea { resize: vertical; min-height: 80px; font-family: monospace; }
+label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+.form-group { margin-bottom: 12px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-muted); font-weight: 500; font-size: 12px; text-transform: uppercase; }
+tr:hover td { background: var(--surface2); }
+.badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 12px;
+	font-size: 11px;
+	font-weight: 600;
+}
+.badge-blue { background: #1E3A5F; color: #60A5FA; }
+.badge-green { background: #064E3B; color: #34D399; }
+.badge-yellow { background: #78350F; color: #FBBF24; }
+.badge-red { background: #7F1D1D; color: #F87171; }
+.badge-gray { background: #374151; color: #9CA3AF; }
+.empty { text-align: center; color: var(--text-muted); padding: 40px; }
+.actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+.modal-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(0,0,0,0.6);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 100;
+}
+.modal {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	padding: 24px;
+	width: 560px;
+	max-height: 80vh;
+	overflow-y: auto;
+}
+.modal h2 { margin-bottom: 16px; }
+.hidden { display: none !important; }
+.toast {
+	position: fixed;
+	bottom: 24px;
+	right: 24px;
+	padding: 12px 20px;
+	border-radius: var(--radius);
+	font-size: 13px;
+	z-index: 200;
+	animation: fadeIn 0.3s;
+}
+.toast-success { background: #064E3B; color: #34D399; border: 1px solid #065F46; }
+.toast-error { background: #7F1D1D; color: #F87171; border: 1px solid #991B1B; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.stage-badge { font-size: 12px; padding: 3px 10px; border-radius: 4px; font-weight: 600; }
+.stage-INIT { background: #374151; color: #D1D5DB; }
+.stage-ANALYZING { background: #1E3A5F; color: #60A5FA; }
+.stage-CLONING { background: #312E81; color: #A5B4FC; }
+.stage-STRATEGIZING { background: #78350F; color: #FBBF24; }
+.stage-OPTIMIZING { background: #064E3B; color: #34D399; }
+.stage-VALIDATING { background: #701A75; color: #E879F9; }
+.stage-REPORTING { background: #1E3A5F; color: #67E8F9; }
+.stage-COMPLETED { background: #064E3B; color: #6EE7B7; }
+.stage-FAILED { background: #7F1D1D; color: #FCA5A5; }
+.toggle { position: relative; width: 40px; height: 22px; cursor: pointer; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle .slider {
+	position: absolute; inset: 0; background: var(--border);
+	border-radius: 11px; transition: 0.3s;
+}
+.toggle .slider::before {
+	content: ''; position: absolute; width: 16px; height: 16px;
+	left: 3px; bottom: 3px; background: white;
+	border-radius: 50%; transition: 0.3s;
+}
+.toggle input:checked + .slider { background: var(--primary); }
+.toggle input:checked + .slider::before { transform: translateX(18px); }
+</style>
+</head>
+<body>
+<div class="header">
+	<h1>GEO Agent Dashboard</h1>
+	<div class="status" id="connectionStatus">Connecting...</div>
+</div>
+<div class="nav">
+	<button class="active" data-tab="targets">Targets</button>
+	<button data-tab="pipelines">Pipelines</button>
+	<button data-tab="prompts">Agent Prompts</button>
+	<button data-tab="llm">LLM Providers</button>
+</div>
+<div class="main">
+	<!-- Targets Tab -->
+	<div id="tab-targets">
+		<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+			<h2 style="font-size:18px;">Targets</h2>
+			<button class="btn btn-primary" onclick="showCreateTarget()">+ New Target</button>
+		</div>
+		<div class="card" style="padding:0;">
+			<table>
+				<thead><tr><th>Name</th><th>URL</th><th>Type</th><th>Status</th><th>Created</th><th></th></tr></thead>
+				<tbody id="targetsBody"></tbody>
+			</table>
+		</div>
+	</div>
+
+	<!-- Pipelines Tab -->
+	<div id="tab-pipelines" class="hidden">
+		<h2 style="font-size:18px; margin-bottom:16px;">Pipeline Status</h2>
+		<div id="pipelinesContent"></div>
+	</div>
+
+	<!-- Agent Prompts Tab -->
+	<div id="tab-prompts" class="hidden">
+		<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+			<h2 style="font-size:18px;">Agent Prompts</h2>
+			<button class="btn btn-ghost" onclick="resetAllPrompts()">Reset All</button>
+		</div>
+		<div id="promptsContent"></div>
+	</div>
+
+	<!-- LLM Providers Tab -->
+	<div id="tab-llm" class="hidden">
+		<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+			<h2 style="font-size:18px;">LLM Providers</h2>
+			<button class="btn btn-ghost" onclick="resetAllProviders()">Reset All</button>
+		</div>
+		<div id="llmContent"></div>
+	</div>
+</div>
+
+<!-- Create/Edit Target Modal -->
+<div id="targetModal" class="modal-overlay hidden">
+	<div class="modal">
+		<h2 id="targetModalTitle">New Target</h2>
+		<input type="hidden" id="targetEditId">
+		<div class="form-group">
+			<label>Name *</label>
+			<input type="text" id="targetName" placeholder="e.g., Samsung Galaxy S25">
+		</div>
+		<div class="form-group">
+			<label>URL *</label>
+			<input type="url" id="targetUrl" placeholder="https://www.samsung.com/smartphones/galaxy-s25/">
+		</div>
+		<div class="form-row">
+			<div class="form-group">
+				<label>Site Type</label>
+				<select id="targetSiteType">
+					<option value="generic">Generic</option>
+					<option value="manufacturer">Manufacturer</option>
+					<option value="research">Research</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label>Brand</label>
+				<input type="text" id="targetBrand" placeholder="Samsung">
+			</div>
+		</div>
+		<div class="form-group">
+			<label>Topics (comma-separated)</label>
+			<input type="text" id="targetTopics" placeholder="smartphones, galaxy, 5G">
+		</div>
+		<div class="form-group">
+			<label>Target Score</label>
+			<input type="number" id="targetScore" placeholder="80" min="0" max="100">
+		</div>
+		<div class="actions">
+			<button class="btn btn-ghost" onclick="closeModal('targetModal')">Cancel</button>
+			<button class="btn btn-primary" onclick="saveTarget()">Save</button>
+		</div>
+	</div>
+</div>
+
+<!-- Edit Prompt Modal -->
+<div id="promptModal" class="modal-overlay hidden">
+	<div class="modal">
+		<h2 id="promptModalTitle">Edit Prompt</h2>
+		<input type="hidden" id="promptEditId">
+		<div class="form-group">
+			<label>System Prompt</label>
+			<textarea id="promptText" rows="12"></textarea>
+		</div>
+		<div class="actions">
+			<button class="btn btn-ghost" onclick="closeModal('promptModal')">Cancel</button>
+			<button class="btn btn-danger" onclick="resetPrompt()" style="margin-right:auto;">Reset to Default</button>
+			<button class="btn btn-primary" onclick="savePrompt()">Save</button>
+		</div>
+	</div>
+</div>
+
+<!-- Edit LLM Provider Modal -->
+<div id="llmModal" class="modal-overlay hidden">
+	<div class="modal">
+		<h2 id="llmModalTitle">Edit Provider</h2>
+		<input type="hidden" id="llmEditId">
+		<div class="form-group">
+			<label>API Key</label>
+			<input type="password" id="llmApiKey" placeholder="sk-...">
+		</div>
+		<div class="form-group">
+			<label>Default Model</label>
+			<input type="text" id="llmModel" placeholder="gpt-4o">
+		</div>
+		<div class="form-row">
+			<div class="form-group">
+				<label>Max Tokens</label>
+				<input type="number" id="llmMaxTokens" placeholder="4096">
+			</div>
+			<div class="form-group">
+				<label>Temperature</label>
+				<input type="number" id="llmTemp" placeholder="0.7" step="0.1" min="0" max="2">
+			</div>
+		</div>
+		<div class="actions">
+			<button class="btn btn-ghost" onclick="closeModal('llmModal')">Cancel</button>
+			<button class="btn btn-primary" onclick="saveLLMProvider()">Save</button>
+		</div>
+	</div>
+</div>
+
+<script>
+const API = window.location.origin;
+let targets = [];
+let prompts = [];
+let providers = [];
+
+// ── Navigation ──────────────────────────────────────
+document.querySelectorAll('.nav button').forEach(btn => {
+	btn.addEventListener('click', () => {
+		document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+		btn.classList.add('active');
+		document.querySelectorAll('.main > div[id^="tab-"]').forEach(t => t.classList.add('hidden'));
+		document.getElementById('tab-' + btn.dataset.tab).classList.remove('hidden');
+		if (btn.dataset.tab === 'targets') loadTargets();
+		if (btn.dataset.tab === 'pipelines') loadPipelines();
+		if (btn.dataset.tab === 'prompts') loadPrompts();
+		if (btn.dataset.tab === 'llm') loadLLMProviders();
+	});
+});
+
+// ── Toast ────────────────────────────────────────────
+function toast(msg, type = 'success') {
+	const el = document.createElement('div');
+	el.className = 'toast toast-' + type;
+	el.textContent = msg;
+	document.body.appendChild(el);
+	setTimeout(() => el.remove(), 3000);
+}
+
+// ── API helpers ──────────────────────────────────────
+async function api(path, opts = {}) {
+	const res = await fetch(API + path, {
+		headers: { 'Content-Type': 'application/json' },
+		...opts,
+		body: opts.body ? JSON.stringify(opts.body) : undefined,
+	});
+	if (!res.ok) {
+		const err = await res.json().catch(() => ({ error: res.statusText }));
+		throw new Error(err.error || 'Request failed');
+	}
+	return res.json();
+}
+
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+// ── Health Check ─────────────────────────────────────
+async function checkHealth() {
+	try {
+		const data = await api('/health');
+		document.getElementById('connectionStatus').textContent = 'Connected';
+		document.getElementById('connectionStatus').style.color = '#34D399';
+	} catch {
+		document.getElementById('connectionStatus').textContent = 'Disconnected';
+		document.getElementById('connectionStatus').style.color = '#F87171';
+	}
+}
+
+// ── Targets ──────────────────────────────────────────
+async function loadTargets() {
+	try {
+		targets = await api('/api/targets');
+		renderTargets();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+function renderTargets() {
+	const tbody = document.getElementById('targetsBody');
+	if (!targets.length) {
+		tbody.innerHTML = '<tr><td colspan="6" class="empty">No targets yet. Click "+ New Target" to add one.</td></tr>';
+		return;
+	}
+	tbody.innerHTML = targets.map(t => `<tr>
+		<td><strong>${esc(t.name)}</strong></td>
+		<td style="color:var(--text-muted);font-size:12px;">${esc(t.url)}</td>
+		<td><span class="badge badge-blue">${t.site_type || 'generic'}</span></td>
+		<td><span class="badge ${t.is_active ? 'badge-green' : 'badge-gray'}">${t.is_active ? 'Active' : 'Inactive'}</span></td>
+		<td style="color:var(--text-muted);font-size:12px;">${new Date(t.created_at).toLocaleDateString()}</td>
+		<td style="text-align:right;">
+			<button class="btn btn-ghost btn-sm" onclick="editTarget('${t.id}')">Edit</button>
+			<button class="btn btn-danger btn-sm" onclick="deleteTarget('${t.id}','${esc(t.name)}')">Delete</button>
+		</td>
+	</tr>`).join('');
+}
+
+function showCreateTarget() {
+	document.getElementById('targetModalTitle').textContent = 'New Target';
+	document.getElementById('targetEditId').value = '';
+	document.getElementById('targetName').value = '';
+	document.getElementById('targetUrl').value = '';
+	document.getElementById('targetSiteType').value = 'generic';
+	document.getElementById('targetBrand').value = '';
+	document.getElementById('targetTopics').value = '';
+	document.getElementById('targetScore').value = '80';
+	document.getElementById('targetModal').classList.remove('hidden');
+}
+
+function editTarget(id) {
+	const t = targets.find(x => x.id === id);
+	if (!t) return;
+	document.getElementById('targetModalTitle').textContent = 'Edit Target';
+	document.getElementById('targetEditId').value = id;
+	document.getElementById('targetName').value = t.name;
+	document.getElementById('targetUrl').value = t.url;
+	document.getElementById('targetSiteType').value = t.site_type || 'generic';
+	document.getElementById('targetBrand').value = t.brand || '';
+	document.getElementById('targetTopics').value = (t.topics || []).join(', ');
+	document.getElementById('targetScore').value = t.target_score || '';
+	document.getElementById('targetModal').classList.remove('hidden');
+}
+
+async function saveTarget() {
+	const id = document.getElementById('targetEditId').value;
+	const topicsRaw = document.getElementById('targetTopics').value;
+	const body = {
+		name: document.getElementById('targetName').value,
+		url: document.getElementById('targetUrl').value,
+		site_type: document.getElementById('targetSiteType').value,
+		brand: document.getElementById('targetBrand').value || undefined,
+		topics: topicsRaw ? topicsRaw.split(',').map(s => s.trim()).filter(Boolean) : [],
+		target_score: Number(document.getElementById('targetScore').value) || 80,
+	};
+	try {
+		if (id) {
+			await api('/api/targets/' + id, { method: 'PUT', body });
+			toast('Target updated');
+		} else {
+			await api('/api/targets', { method: 'POST', body });
+			toast('Target created');
+		}
+		closeModal('targetModal');
+		loadTargets();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteTarget(id, name) {
+	if (!confirm('Delete target "' + name + '"?')) return;
+	try {
+		await api('/api/targets/' + id, { method: 'DELETE' });
+		toast('Target deleted');
+		loadTargets();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Pipelines ────────────────────────────────────────
+async function loadPipelines() {
+	const container = document.getElementById('pipelinesContent');
+	if (!targets.length) {
+		try { targets = await api('/api/targets'); } catch {}
+	}
+	if (!targets.length) {
+		container.innerHTML = '<div class="empty">No targets. Add a target first.</div>';
+		return;
+	}
+	let html = '';
+	for (const t of targets) {
+		try {
+			const status = await api('/api/targets/' + t.id + '/cycle/status');
+			html += `<div class="card">
+				<div style="display:flex;justify-content:space-between;align-items:center;">
+					<div>
+						<h2>${esc(t.name)}</h2>
+						<div style="font-size:12px;color:var(--text-muted);">${esc(t.url)}</div>
+					</div>
+					<div style="display:flex;gap:8px;align-items:center;">
+						<span class="stage-badge stage-${status.stage}">${status.stage}</span>
+						${!status.is_terminal ? '<button class="btn btn-danger btn-sm" onclick="stopPipeline(\''+t.id+'\')">Stop</button>' : ''}
+					</div>
+				</div>
+				<div style="margin-top:8px;font-size:12px;color:var(--text-muted);">
+					Pipeline: ${status.pipeline_id} | Retries: ${status.retry_count} | Started: ${new Date(status.started_at).toLocaleString()}
+				</div>
+			</div>`;
+		} catch {
+			html += `<div class="card">
+				<div style="display:flex;justify-content:space-between;align-items:center;">
+					<div>
+						<h2>${esc(t.name)}</h2>
+						<div style="font-size:12px;color:var(--text-muted);">${esc(t.url)}</div>
+					</div>
+					<div>
+						<span class="badge badge-gray">No Pipeline</span>
+						<button class="btn btn-primary btn-sm" style="margin-left:8px;" onclick="startPipeline('${t.id}')">Start</button>
+					</div>
+				</div>
+			</div>`;
+		}
+	}
+	container.innerHTML = html;
+}
+
+async function startPipeline(targetId) {
+	try {
+		await api('/api/targets/' + targetId + '/pipeline', { method: 'POST' });
+		toast('Pipeline started');
+		loadPipelines();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+async function stopPipeline(targetId) {
+	try {
+		await api('/api/targets/' + targetId + '/cycle/stop', { method: 'POST' });
+		toast('Pipeline stopped');
+		loadPipelines();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Agent Prompts ────────────────────────────────────
+async function loadPrompts() {
+	try {
+		prompts = await api('/api/settings/agents/prompts');
+		renderPrompts();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+function renderPrompts() {
+	const container = document.getElementById('promptsContent');
+	container.innerHTML = prompts.map(p => `<div class="card">
+		<div style="display:flex;justify-content:space-between;align-items:center;">
+			<div>
+				<h2>${esc(p.agent_id)}</h2>
+				<div style="font-size:12px;color:var(--text-muted);">
+					${p.is_customized ? '<span class="badge badge-yellow">Customized</span>' : '<span class="badge badge-gray">Default</span>'}
+					${p.last_modified ? ' | Last modified: ' + new Date(p.last_modified).toLocaleString() : ''}
+				</div>
+			</div>
+			<button class="btn btn-ghost btn-sm" onclick="editPrompt('${p.agent_id}')">Edit</button>
+		</div>
+		<div style="margin-top:8px;font-size:12px;color:var(--text-muted);white-space:pre-wrap;max-height:60px;overflow:hidden;">${esc((p.system_prompt||'').slice(0,200))}...</div>
+	</div>`).join('');
+}
+
+function editPrompt(agentId) {
+	const p = prompts.find(x => x.agent_id === agentId);
+	if (!p) return;
+	document.getElementById('promptModalTitle').textContent = 'Edit: ' + agentId;
+	document.getElementById('promptEditId').value = agentId;
+	document.getElementById('promptText').value = p.system_prompt || '';
+	document.getElementById('promptModal').classList.remove('hidden');
+}
+
+async function savePrompt() {
+	const agentId = document.getElementById('promptEditId').value;
+	try {
+		await api('/api/settings/agents/prompts/' + agentId, {
+			method: 'PUT',
+			body: { system_prompt: document.getElementById('promptText').value },
+		});
+		toast('Prompt saved');
+		closeModal('promptModal');
+		loadPrompts();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+async function resetPrompt() {
+	const agentId = document.getElementById('promptEditId').value;
+	try {
+		await api('/api/settings/agents/prompts/' + agentId + '/reset', { method: 'POST' });
+		toast('Prompt reset to default');
+		closeModal('promptModal');
+		loadPrompts();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+async function resetAllPrompts() {
+	if (!confirm('Reset all agent prompts to defaults?')) return;
+	try {
+		await api('/api/settings/agents/prompts/reset-all', { method: 'POST' });
+		toast('All prompts reset');
+		loadPrompts();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+// ── LLM Providers ────────────────────────────────────
+async function loadLLMProviders() {
+	try {
+		providers = await api('/api/settings/llm-providers');
+		renderLLMProviders();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+function renderLLMProviders() {
+	const container = document.getElementById('llmContent');
+	container.innerHTML = providers.map(p => `<div class="card">
+		<div style="display:flex;justify-content:space-between;align-items:center;">
+			<div>
+				<h2>${esc(p.display_name)}</h2>
+				<div style="font-size:12px;color:var(--text-muted);">
+					Model: ${esc(p.default_model)} | Auth: ${p.auth_method}
+					${p.api_key ? ' | Key: ' + p.api_key.slice(0,8) + '...' : ''}
+				</div>
+			</div>
+			<div style="display:flex;gap:8px;align-items:center;">
+				<label class="toggle">
+					<input type="checkbox" ${p.enabled ? 'checked' : ''} onchange="toggleProvider('${p.provider_id}', this.checked)">
+					<span class="slider"></span>
+				</label>
+				<button class="btn btn-ghost btn-sm" onclick="editLLMProvider('${p.provider_id}')">Edit</button>
+			</div>
+		</div>
+	</div>`).join('');
+}
+
+async function toggleProvider(id, enabled) {
+	try {
+		await api('/api/settings/llm-providers/' + id + '/' + (enabled ? 'enable' : 'disable'), { method: 'POST' });
+		toast(id + ' ' + (enabled ? 'enabled' : 'disabled'));
+		loadLLMProviders();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+function editLLMProvider(id) {
+	const p = providers.find(x => x.provider_id === id);
+	if (!p) return;
+	document.getElementById('llmModalTitle').textContent = 'Edit: ' + p.display_name;
+	document.getElementById('llmEditId').value = id;
+	document.getElementById('llmApiKey').value = '';
+	document.getElementById('llmModel').value = p.default_model || '';
+	document.getElementById('llmMaxTokens').value = p.max_tokens || '';
+	document.getElementById('llmTemp').value = p.temperature ?? '';
+	document.getElementById('llmModal').classList.remove('hidden');
+}
+
+async function saveLLMProvider() {
+	const id = document.getElementById('llmEditId').value;
+	const body = {
+		default_model: document.getElementById('llmModel').value,
+		max_tokens: Number(document.getElementById('llmMaxTokens').value) || undefined,
+		temperature: Number(document.getElementById('llmTemp').value) || undefined,
+	};
+	const apiKey = document.getElementById('llmApiKey').value;
+	if (apiKey) body.api_key = apiKey;
+	try {
+		await api('/api/settings/llm-providers/' + id, { method: 'PUT', body });
+		toast('Provider saved');
+		closeModal('llmModal');
+		loadLLMProviders();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+async function resetAllProviders() {
+	if (!confirm('Reset all LLM providers to defaults?')) return;
+	try {
+		await api('/api/settings/llm-providers/reset-all', { method: 'POST' });
+		toast('All providers reset');
+		loadLLMProviders();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Utils ────────────────────────────────────────────
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// ── Init ─────────────────────────────────────────────
+checkHealth();
+loadTargets();
+</script>
+</body>
+</html>

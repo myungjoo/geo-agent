@@ -15,6 +15,7 @@ export * from "./logger.js";
 
 // Pipeline
 export * from "./pipeline/state-machine.js";
+export * from "./pipeline/orchestrator.js";
 
 // Clone
 export * from "./clone/clone-manager.js";
@@ -27,6 +28,7 @@ export * from "./report/dashboard-html-generator.js";
 // LLM
 export * from "./llm/provider-config.js";
 export * from "./llm/geo-llm-client.js";
+export * from "./llm/oauth-manager.js";
 
 // Evaluation Templates
 export * from "./prompts/evaluation-templates/index.js";

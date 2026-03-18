@@ -170,3 +170,12 @@ export function createSkillRegistry(): SkillRegistry {
 export function getBundledSkills(): SkillMetadata[] {
 	return [...BUNDLED_SKILLS];
 }
+
+// Re-export skill implementations
+export {
+	dualCrawlSkill,
+	crawlTarget,
+	type CrawlData,
+	_parsers as dualCrawlParsers,
+} from "./dual-crawl.js";
+export { geoScorerSkill, scoreTarget, type GeoScoreData } from "./geo-scorer.js";

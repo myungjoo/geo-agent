@@ -12,7 +12,7 @@
 		}
 	},
 	"scripts": {
-		"build": "tsc -b",
+		"build": "tsc -b && node -e \"const fs=require('fs'),p=require('path');const s=p.join('src','ui');const d=p.join('dist','ui');fs.mkdirSync(d,{recursive:true});fs.readdirSync(s).filter(f=>f.endsWith('.html')).forEach(f=>fs.copyFileSync(p.join(s,f),p.join(d,f)));\"",
 		"dev": "node --import tsx src/server.ts",
 		"test": "vitest run",
 		"clean": "rimraf dist .tsbuildinfo"
