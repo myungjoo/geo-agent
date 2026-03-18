@@ -6,7 +6,9 @@
 	"workspaces": ["packages/*"],
 	"scripts": {
 		"build": "npm run build --workspaces",
+		"start": "node --import tsx packages/cli/src/index.ts start",
 		"dev": "npm run dev --workspace=packages/dashboard",
+		"analyze": "node --import tsx packages/cli/src/index.ts analyze",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"pretest": "npm run build",

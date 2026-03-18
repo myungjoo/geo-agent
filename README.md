@@ -76,14 +76,14 @@ node --import tsx packages/cli/src/index.ts run https://www.samsung.com \
 
 결과로 `내 문서` 폴더에 Interactive HTML Dashboard가 생성됩니다.
 
-### 3. Web Dashboard
+### 3. Web Dashboard (권장)
 
 ```bash
-# 서버 시작
-node --import tsx packages/cli/src/index.ts start
+# 서버 시작 (간단)
+npm start
 
 # 또는 포트 지정
-node --import tsx packages/cli/src/index.ts start --port 8080
+npm start -- --port 8080
 ```
 
 브라우저에서 접속:
@@ -91,11 +91,18 @@ node --import tsx packages/cli/src/index.ts start --port 8080
 http://localhost:3000/dashboard
 ```
 
-Dashboard에서 할 수 있는 것:
-- **Targets 탭**: Target URL 추가/편집/삭제
-- **Pipelines 탭**: 파이프라인 시작/중단/상태 확인
-- **Agent Prompts 탭**: 에이전트 시스템 프롬프트 편집
-- **LLM Providers 탭**: LLM 프로바이더 설정 (API Key, 모델, 활성화/비활성화)
+Dashboard 사용 흐름:
+1. **LLM Providers 탭** → 사용할 프로바이더의 Edit 클릭 → API Key 입력 → Save → 토글 Enable
+2. **Targets 탭** → "+ New Target" → URL과 이름 입력 → Save
+3. **Pipelines 탭** → 생성된 Target 옆의 "Start" 클릭
+4. 파이프라인 진행 상태 확인, 필요 시 "Stop"으로 중단
+5. 결과는 `내 문서` 폴더에 HTML Dashboard로 저장됨
+
+Dashboard 탭 설명:
+- **Targets**: Target URL 추가/편집/삭제
+- **Pipelines**: 파이프라인 시작/중단/상태 확인
+- **Agent Prompts**: 에이전트 시스템 프롬프트 편집 (고급)
+- **LLM Providers**: LLM 프로바이더 설정 (API Key, 모델, 활성화/비활성화)
 
 ### 4. REST API
 
