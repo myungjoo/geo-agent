@@ -15,6 +15,7 @@ import { ArchiveBuilder } from "../report/archive-builder.js";
 import { generateDashboardHtml } from "../report/dashboard-html-generator.js";
 import { ReportBuilder } from "../report/report-generator.js";
 import { type AnalysisOutput, runAnalysis } from "./analysis-agent.js";
+import { isLLMAuthError } from "./llm-helpers.js";
 import { type OptimizationResult, runOptimization } from "./optimization-agent.js";
 import { type StrategyOutput, runStrategy } from "./strategy-agent.js";
 import { type ProbeContext, type SyntheticProbeRunResult, runProbes } from "./synthetic-probes.js";
@@ -184,7 +185,11 @@ export async function runPipeline(
 						duration_ms: Date.now() - startMs,
 						error: msg.slice(0, 500),
 					});
-					throw err; // Re-throw so safeLLMCall can handle fallback
+					// Auth errors (401, 403, invalid key) → stop pipeline immediately
+					if (isLLMAuthError(err)) {
+						orchestrator.stop();
+					}
+					throw err; // Re-throw so safeLLMCall can handle fallback (or stop for auth errors)
 				}
 			}
 		: undefined;

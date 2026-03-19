@@ -146,7 +146,7 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 			},
 		};
 
-		// Build chatLLM dependency — graceful degradation if no API key configured
+		// Build chatLLM dependency
 		let chatLLM: PipelineDeps["chatLLM"] | undefined;
 		const workspaceDir = sharedSettings?.workspace_dir ?? "./run";
 		try {
@@ -168,9 +168,21 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 				);
 			}
 		} catch (err) {
-			console.warn(
-				"⚠️ Failed to initialize LLM client — running pipeline in rule-based mode:",
-				err instanceof Error ? err.message : String(err),
+			// API key가 설정되어 있는데 초기화 실패 → 파이프라인 중단
+			const errMsg = err instanceof Error ? err.message : String(err);
+			console.error("❌ LLM initialization failed:", errMsg);
+			await repo.setError(pipeline.pipeline_id, `LLM 초기화 실패: ${errMsg}`);
+			broadcastSSE("pipeline:failed", {
+				target_id: targetId,
+				pipeline_id: pipeline.pipeline_id,
+				error: `LLM 초기화 실패: ${errMsg}`,
+			});
+			return c.json(
+				{
+					...pipeline,
+					error: `LLM 초기화 실패: ${errMsg}. Dashboard > LLM Providers 탭에서 API Key를 확인하세요.`,
+				},
+				201,
 			);
 		}
 
@@ -218,7 +230,22 @@ async function executePipelineAsync(
 		console.log(`⏳ Pipeline started for target ${targetId} (${config.target_url}) [${llmMode}]`);
 		const result = await runPipeline(config, deps);
 
-		if (result.success) {
+		// LLM 인증 에러가 있으면 성공 여부와 관계없이 실패 처리
+		const hasAuthError = result.llm_errors.some((e) => {
+			const patterns = [/401/i, /403/i, /unauthorized/i, /forbidden/i, /invalid.*(?:key|token|subscription)/i, /access.*denied/i, /authentication/i, /invalid_api_key/i, /incorrect.*api.*key/i];
+			return patterns.some((p) => p.test(e));
+		});
+
+		if (hasAuthError) {
+			const authErrMsg = `LLM API 인증 오류: ${result.llm_errors[0]?.slice(0, 200)}. Dashboard > LLM Providers 탭에서 API Key를 확인하세요.`;
+			await repo.setError(pipelineId, authErrMsg);
+			broadcastSSE("pipeline:failed", {
+				target_id: targetId,
+				pipeline_id: pipelineId,
+				error: authErrMsg,
+			});
+			console.error(`❌ Pipeline stopped for ${targetId}: ${authErrMsg}`);
+		} else if (result.success) {
 			await repo.updateStage(pipelineId, "COMPLETED");
 			broadcastSSE("pipeline:completed", {
 				target_id: targetId,

@@ -413,6 +413,52 @@ function toast(msg, type = 'success') {
 	setTimeout(() => el.remove(), duration);
 }
 
+// ── LLM Error Modal ─────────────────────────────────
+function showLLMErrorModal(errorMsg) {
+	// Remove existing modal if any
+	var existing = document.getElementById('llm-error-modal');
+	if (existing) existing.remove();
+
+	var overlay = document.createElement('div');
+	overlay.id = 'llm-error-modal';
+	overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+
+	var modal = document.createElement('div');
+	modal.style.cssText = 'background:#1F2937;border:2px solid #DC2626;border-radius:12px;padding:32px;max-width:560px;width:90%;color:#F3F4F6;box-shadow:0 20px 60px rgba(0,0,0,0.5);';
+
+	modal.innerHTML = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">'
+		+ '<span style="font-size:32px;">&#10060;</span>'
+		+ '<h2 style="margin:0;font-size:20px;color:#F87171;">Pipeline 실행 중단</h2>'
+		+ '</div>'
+		+ '<div style="background:#7F1D1D;border:1px solid #991B1B;border-radius:8px;padding:16px;margin-bottom:20px;">'
+		+ '<p style="margin:0 0 8px 0;font-weight:bold;color:#FCA5A5;">LLM API 인증 오류</p>'
+		+ '<p style="margin:0;font-size:13px;color:#FDA4AF;word-break:break-all;">' + escapeHtmlStr(errorMsg) + '</p>'
+		+ '</div>'
+		+ '<div style="background:#1E293B;border-radius:8px;padding:16px;margin-bottom:20px;">'
+		+ '<p style="margin:0 0 8px 0;font-weight:bold;color:#93C5FD;">해결 방법</p>'
+		+ '<ol style="margin:0;padding-left:20px;color:#CBD5E1;font-size:13px;line-height:1.8;">'
+		+ '<li><strong>LLM Providers</strong> 탭으로 이동</li>'
+		+ '<li>사용할 Provider의 <strong>API Key</strong>를 확인/재입력</li>'
+		+ '<li>Provider가 <strong>활성화(Enabled)</strong> 상태인지 확인</li>'
+		+ '<li>파이프라인을 다시 실행 (Re-run)</li>'
+		+ '</ol>'
+		+ '</div>'
+		+ '<div style="display:flex;gap:12px;justify-content:flex-end;">'
+		+ '<button onclick="document.getElementById(\'llm-error-modal\').remove();switchTab(\'llm\');" style="padding:8px 20px;background:#2563EB;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;">LLM Providers 설정</button>'
+		+ '<button onclick="document.getElementById(\'llm-error-modal\').remove();" style="padding:8px 20px;background:#374151;color:#D1D5DB;border:1px solid #4B5563;border-radius:6px;cursor:pointer;font-size:14px;">닫기</button>'
+		+ '</div>';
+
+	overlay.appendChild(modal);
+	overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+	document.body.appendChild(overlay);
+}
+
+function escapeHtmlStr(str) {
+	var div = document.createElement('div');
+	div.textContent = str;
+	return div.innerHTML;
+}
+
 // ── API helpers ──────────────────────────────────────
 async function api(path, opts = {}) {
 	const res = await fetch(API + path, {
@@ -642,7 +688,7 @@ function initSSE() {
 
 		sseSource.addEventListener('pipeline:completed', function(e) {
 			var data = JSON.parse(e.data);
-			showToast('Pipeline completed: ' + data.initial_score + ' → ' + data.final_score + ' (+' + data.delta + ')', 'success');
+			toast('Pipeline completed: ' + data.initial_score + ' → ' + data.final_score + ' (+' + data.delta + ')', 'success');
 			loadPipelines();
 			// Also refresh evaluation if on that tab
 			var activeTab = document.querySelector('.nav button.active');
@@ -653,7 +699,13 @@ function initSSE() {
 
 		sseSource.addEventListener('pipeline:failed', function(e) {
 			var data = JSON.parse(e.data);
-			showToast('Pipeline failed: ' + (data.error || 'Unknown error'), 'error');
+			var errorMsg = data.error || 'Unknown error';
+			var isAuthError = /401|403|unauthorized|forbidden|invalid.*key|access.*denied|authentication|invalid_api_key|incorrect.*api.*key|LLM.*인증|API.*인증/i.test(errorMsg);
+			if (isAuthError) {
+				showLLMErrorModal(errorMsg);
+			} else {
+				toast('Pipeline failed: ' + errorMsg, 'error');
+			}
 			loadPipelines();
 		});
 
@@ -667,7 +719,7 @@ function initSSE() {
 			var data = JSON.parse(e.data);
 			var errMsg = '⚠️ LLM errors (' + data.errors.length + '): ' + data.errors[0].slice(0, 100);
 			if (data.errors.length > 1) errMsg += ' (+' + (data.errors.length - 1) + ' more)';
-			showToast(errMsg, 8000);
+			toast(errMsg, 8000);
 		});
 
 		sseSource.onerror = function() {

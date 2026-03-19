@@ -9,6 +9,29 @@
 import type { z } from "zod";
 import type { LLMRequest, LLMResponse } from "../llm/geo-llm-client.js";
 
+// ── LLM Auth Error Detection ────────────────────────────────
+
+const AUTH_ERROR_PATTERNS = [
+	/401/i,
+	/403/i,
+	/unauthorized/i,
+	/forbidden/i,
+	/invalid.*(?:key|token|subscription)/i,
+	/access.*denied/i,
+	/authentication/i,
+	/invalid_api_key/i,
+	/incorrect.*api.*key/i,
+];
+
+/**
+ * Determines if an error is an LLM authentication/authorization error.
+ * These errors should NOT be silently handled — pipeline must stop.
+ */
+export function isLLMAuthError(err: unknown): boolean {
+	const msg = err instanceof Error ? err.message : String(err);
+	return AUTH_ERROR_PATTERNS.some((pattern) => pattern.test(msg));
+}
+
 // ── Safe LLM Call ───────────────────────────────────────────
 
 export interface SafeLLMResult<T> {
@@ -20,7 +43,8 @@ export interface SafeLLMResult<T> {
 
 /**
  * Wraps an LLM call with error handling and fallback.
- * Returns fallback if chatLLM is undefined or call fails.
+ * Returns fallback if chatLLM is undefined or call fails with non-auth errors.
+ * Re-throws auth errors (401, 403, invalid key) to stop the pipeline.
  */
 export async function safeLLMCall<T>(
 	chatLLM: ((req: LLMRequest) => Promise<LLMResponse>) | undefined,
@@ -34,6 +58,10 @@ export async function safeLLMCall<T>(
 		const parsed = parser(response.content);
 		return { result: parsed, llm_used: true, latency_ms: response.latency_ms };
 	} catch (err) {
+		// Auth errors must not be silently swallowed — re-throw to stop pipeline
+		if (isLLMAuthError(err)) {
+			throw err;
+		}
 		const errorMsg = err instanceof Error ? err.message : String(err);
 		return { result: fallback, llm_used: false, error: errorMsg };
 	}
