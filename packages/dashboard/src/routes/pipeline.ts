@@ -410,6 +410,29 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 	});
 });
 
+// GET /api/targets/:id/pipeline/:pipelineId/llm-log — LLM 호출 전체 로그
+pipelineRouter.get("/:id/pipeline/:pipelineId/llm-log", async (c) => {
+	const stageRepo = getStageRepo();
+	const pipelineId = c.req.param("pipelineId");
+
+	const stages = await stageRepo.findByPipelineId(pipelineId);
+	const reportingStage = stages.find((s) => s.stage === "REPORTING" && s.result_full);
+	if (!reportingStage?.result_full) {
+		return c.json({ llm_call_log: [], message: "No LLM call log available (pipeline not completed or no LLM used)" });
+	}
+
+	try {
+		const reportData = JSON.parse(reportingStage.result_full);
+		return c.json({
+			llm_call_log: reportData.llm_call_log ?? [],
+			llm_models_used: reportData.llm_models_used ?? [],
+			total_calls: (reportData.llm_call_log ?? []).length,
+		});
+	} catch {
+		return c.json({ llm_call_log: [], message: "Failed to parse report data" });
+	}
+});
+
 // ── Cycle Control Routes ──────────────────────────────────
 
 // POST /api/targets/:id/cycle/stop — 수동 중단

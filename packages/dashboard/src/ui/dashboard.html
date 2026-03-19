@@ -903,6 +903,7 @@ function buildEvalSubTabs(data) {
 		{ id: 'roadmap', icon: '🗺️', label: '개선 로드맵' },
 		{ id: 'probes', icon: '🧪', label: 'Synthetic Probes' },
 		{ id: 'pipeline', icon: '⏱️', label: '실행 요약' },
+		{ id: 'llmlog', icon: '🔎', label: 'LLM Call Log' },
 	];
 	var html = '';
 	for (var i = 0; i < tabs.length; i++) {
@@ -1002,6 +1003,9 @@ function renderEvalSubTab(tabId, data, container) {
 		break;
 	case 'pipeline':
 		html = renderPipelineTab(data);
+		break;
+	case 'llmlog':
+		html = buildLLMLogTab(data);
 		break;
 	default:
 		html = '<div class="empty">Unknown tab</div>';
@@ -1507,6 +1511,74 @@ function renderPipelineTab(data) {
 	}
 	html += '</div>';
 	return html;
+}
+
+function buildLLMLogTab(data) {
+	// This tab loads on demand when clicked
+	return '<div class="card" id="llmLogContainer">' +
+		'<h3 style="font-size:14px;margin-bottom:12px;">🔎 LLM Call Log</h3>' +
+		'<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">디버깅용: 파이프라인에서 LLM에 보낸 모든 요청과 응답을 시간순으로 표시합니다.</p>' +
+		'<button class="btn btn-primary btn-sm" onclick="loadLLMCallLog()">Load LLM Call Log</button>' +
+		'<div id="llmLogContent" style="margin-top:12px;"></div>' +
+		'</div>';
+}
+
+async function loadLLMCallLog() {
+	var btn = document.querySelector('#llmLogContainer button');
+	if (btn) btn.disabled = true;
+	var container = document.getElementById('llmLogContent');
+	container.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">Loading...</div>';
+	try {
+		var sel = document.getElementById('evalTargetSelect');
+		var targetId = sel ? sel.value : '';
+		var pipSel = document.getElementById('evalPipelineSelect');
+		var pipelineId = pipSel ? pipSel.value : '';
+		if (!targetId || !pipelineId) { container.innerHTML = '<div class="empty">Select a target and pipeline first.</div>'; return; }
+		var resp = await api('/api/targets/' + targetId + '/pipeline/' + pipelineId + '/llm-log');
+		if (!resp.llm_call_log || resp.llm_call_log.length === 0) {
+			container.innerHTML = '<div class="empty">No LLM calls recorded. Pipeline may have run in rule-based mode (no API Key).</div>';
+			return;
+		}
+		var html = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Total: ' + resp.total_calls + ' calls | Models: <code>' + esc((resp.llm_models_used||[]).join(', ')) + '</code></div>';
+		html += '<table class="eval-table" style="font-size:11px;"><thead><tr><th>#</th><th>Stage</th><th>Model</th><th>Duration</th><th>Tokens</th><th>Prompt (click to expand)</th></tr></thead><tbody>';
+		for (var i = 0; i < resp.llm_call_log.length; i++) {
+			var e = resp.llm_call_log[i];
+			var tokStr = (e.tokens_in || '?') + '→' + (e.tokens_out || '?');
+			var durStr = (e.duration_ms / 1000).toFixed(1) + 's';
+			var errBadge = e.error ? ' <span class="badge badge-red">ERROR</span>' : '';
+			html += '<tr onclick="toggleLLMDetail(this)" style="cursor:pointer;">';
+			html += '<td>' + e.seq + '</td>';
+			html += '<td>' + esc(e.stage) + '</td>';
+			html += '<td><code>' + esc(e.provider + '/' + e.model) + '</code>' + errBadge + '</td>';
+			html += '<td>' + durStr + '</td>';
+			html += '<td>' + tokStr + '</td>';
+			html += '<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(e.prompt_summary.slice(0, 80)) + '...</td>';
+			html += '</tr>';
+			html += '<tr class="llm-detail-row" style="display:none;"><td colspan="6">';
+			html += '<div style="background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;max-height:400px;overflow:auto;">';
+			html += '<div style="margin-bottom:8px;"><strong>📤 Prompt:</strong></div>';
+			html += '<pre style="white-space:pre-wrap;font-size:11px;color:var(--text-muted);max-height:200px;overflow:auto;">' + esc(e.prompt_summary) + '</pre>';
+			if (e.error) {
+				html += '<div style="margin-top:8px;"><strong style="color:var(--error);">❌ Error:</strong></div>';
+				html += '<pre style="white-space:pre-wrap;font-size:11px;color:var(--error);">' + esc(e.error) + '</pre>';
+			} else {
+				html += '<div style="margin-top:8px;"><strong>📥 Response:</strong></div>';
+				html += '<pre style="white-space:pre-wrap;font-size:11px;color:var(--text-muted);max-height:200px;overflow:auto;">' + esc(e.response_summary) + '</pre>';
+			}
+			html += '</div></td></tr>';
+		}
+		html += '</tbody></table>';
+		container.innerHTML = html;
+	} catch (err) {
+		container.innerHTML = '<div style="color:var(--error);">Failed to load: ' + esc(err.message) + '</div>';
+	}
+}
+
+function toggleLLMDetail(row) {
+	var detail = row.nextElementSibling;
+	if (detail && detail.classList.contains('llm-detail-row')) {
+		detail.style.display = detail.style.display === 'none' ? 'table-row' : 'none';
+	}
 }
 
 // ── Agent Prompts ────────────────────────────────────

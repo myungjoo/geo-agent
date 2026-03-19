@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { CrawlData } from "./types.js";
 import {
 	type BotPolicyEntry,
-	type CrawlData,
 	analyzePathAccess,
 	extractGeoEvaluationData,
 	extractMarketingClaims,

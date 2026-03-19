@@ -358,7 +358,7 @@ describe("Optimization Agent", () => {
 			// Verify writeFile was called with OG content for each
 			const writeCalls = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls;
 			const ogWrites = writeCalls.filter(
-				(c: [string, string]) => c[1] && c[1].includes("og:title"),
+				(c: unknown[]) => c[1] && String(c[1]).includes("og:title"),
 			);
 			expect(ogWrites.length).toBe(3);
 		});

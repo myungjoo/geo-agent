@@ -658,7 +658,7 @@ describe("LLM integration in pipeline execution", () => {
         configManager.save({ ...openai, enabled: true, api_key: "sk-invalid-key" });
         const client = new GeoLLMClient(testDir);
         // chat() should throw an error (authentication failure, network error, etc.)
-        await expect(client.chat({ prompt: "test" })).rejects.toThrow();
+        await expect(client.chat({ prompt: "test", json_mode: false })).rejects.toThrow();
         // Clean up
         configManager.save({ ...openai, enabled: true, api_key: undefined });
     });

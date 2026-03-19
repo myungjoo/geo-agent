@@ -15,37 +15,37 @@ function makeLLMResponse(content) {
 // ── safeLLMCall ─────────────────────────────────────────────
 describe("safeLLMCall", () => {
     it("returns fallback when chatLLM is undefined", async () => {
-        const result = await safeLLMCall(undefined, { prompt: "test" }, (c) => c, "fallback");
+        const result = await safeLLMCall(undefined, { prompt: "test", json_mode: false }, (c) => c, "fallback");
         expect(result.result).toBe("fallback");
         expect(result.llm_used).toBe(false);
         expect(result.latency_ms).toBeUndefined();
     });
     it("returns parsed result when chatLLM succeeds", async () => {
         const chatLLM = vi.fn().mockResolvedValue(makeLLMResponse("hello world"));
-        const result = await safeLLMCall(chatLLM, { prompt: "test" }, (c) => c.toUpperCase(), "fallback");
+        const result = await safeLLMCall(chatLLM, { prompt: "test", json_mode: false }, (c) => c.toUpperCase(), "fallback");
         expect(result.result).toBe("HELLO WORLD");
         expect(result.llm_used).toBe(true);
         expect(result.latency_ms).toBe(200);
     });
     it("returns fallback when chatLLM throws", async () => {
         const chatLLM = vi.fn().mockRejectedValue(new Error("API error"));
-        const result = await safeLLMCall(chatLLM, { prompt: "test" }, (c) => c, "fallback");
+        const result = await safeLLMCall(chatLLM, { prompt: "test", json_mode: false }, (c) => c, "fallback");
         expect(result.result).toBe("fallback");
         expect(result.llm_used).toBe(false);
     });
     it("sets llm_used flag correctly based on success/failure", async () => {
         const chatLLMOk = vi.fn().mockResolvedValue(makeLLMResponse("ok"));
         const chatLLMFail = vi.fn().mockRejectedValue(new Error("fail"));
-        const ok = await safeLLMCall(chatLLMOk, { prompt: "x" }, (c) => c, "fb");
-        const fail = await safeLLMCall(chatLLMFail, { prompt: "x" }, (c) => c, "fb");
-        const undef = await safeLLMCall(undefined, { prompt: "x" }, (c) => c, "fb");
+        const ok = await safeLLMCall(chatLLMOk, { prompt: "x", json_mode: false }, (c) => c, "fb");
+        const fail = await safeLLMCall(chatLLMFail, { prompt: "x", json_mode: false }, (c) => c, "fb");
+        const undef = await safeLLMCall(undefined, { prompt: "x", json_mode: false }, (c) => c, "fb");
         expect(ok.llm_used).toBe(true);
         expect(fail.llm_used).toBe(false);
         expect(undef.llm_used).toBe(false);
     });
     it("returns fallback when parser throws", async () => {
         const chatLLM = vi.fn().mockResolvedValue(makeLLMResponse("not json"));
-        const result = await safeLLMCall(chatLLM, { prompt: "test" }, () => {
+        const result = await safeLLMCall(chatLLM, { prompt: "test", json_mode: false }, () => {
             throw new Error("parse error");
         }, "fallback");
         expect(result.result).toBe("fallback");

@@ -57,6 +57,20 @@ export interface PipelineConfig {
 	stageCallbacks?: StageCallbacks;
 }
 
+export interface LLMCallLogEntry {
+	seq: number;
+	timestamp: string;
+	stage: string;
+	provider: string;
+	model: string;
+	prompt_summary: string;
+	response_summary: string;
+	tokens_in?: number;
+	tokens_out?: number;
+	duration_ms: number;
+	error?: string;
+}
+
 export interface PipelineResult {
 	success: boolean;
 	final_score: number;
@@ -67,6 +81,7 @@ export interface PipelineResult {
 	dashboard_html: string | null;
 	llm_models_used: string[];
 	llm_errors: string[];
+	llm_call_log: LLMCallLogEntry[];
 	error?: string;
 }
 
@@ -129,17 +144,46 @@ export async function runPipeline(
 	let probeResults: SyntheticProbeRunResult | null = null;
 	const llmModelsUsed = new Set<string>();
 	const llmErrors: string[] = [];
+	const llmCallLog: LLMCallLogEntry[] = [];
+	let llmCallSeq = 0;
+	let currentStageForLog = "INIT";
 
-	// Wrap chatLLM to track which models are actually used + collect errors
+	// Wrap chatLLM to track which models are actually used + collect errors + full call log
 	const trackedChatLLM = deps.chatLLM
 		? async (req: LLMRequest): Promise<LLMResponse> => {
+				const seq = ++llmCallSeq;
+				const startMs = Date.now();
+				const promptText = req.prompt ?? "";
 				try {
 					const response = await deps.chatLLM!(req);
 					llmModelsUsed.add(`${response.provider}/${response.model}`);
+					llmCallLog.push({
+						seq,
+						timestamp: new Date().toISOString(),
+						stage: currentStageForLog,
+						provider: response.provider,
+						model: response.model,
+						prompt_summary: promptText.slice(0, 500),
+						response_summary: (response.content ?? "").slice(0, 1000),
+						tokens_in: response.usage?.prompt_tokens,
+						tokens_out: response.usage?.completion_tokens,
+						duration_ms: Date.now() - startMs,
+					});
 					return response;
 				} catch (err) {
 					const msg = err instanceof Error ? err.message : String(err);
 					llmErrors.push(msg);
+					llmCallLog.push({
+						seq,
+						timestamp: new Date().toISOString(),
+						stage: currentStageForLog,
+						provider: req.provider ?? "unknown",
+						model: req.model ?? "unknown",
+						prompt_summary: promptText.slice(0, 500),
+						response_summary: "",
+						duration_ms: Date.now() - startMs,
+						error: msg.slice(0, 500),
+					});
 					throw err; // Re-throw so safeLLMCall can handle fallback
 				}
 			}
@@ -161,6 +205,7 @@ export async function runPipeline(
 		resultSummaryFn: (result: T) => string,
 		resultFullFn?: (result: T) => unknown,
 	): Promise<T> {
+		currentStageForLog = stage;
 		let execId: string | undefined;
 		if (cb?.onStageStart) {
 			execId = await cb.onStageStart(config.target_id, stage, cycleCount, promptSummary);
@@ -565,6 +610,7 @@ export async function runPipeline(
 					final: currentScore,
 					llm_models_used: Array.from(llmModelsUsed),
 					llm_errors: [...new Set(llmErrors)],
+					llm_call_log: llmCallLog,
 				};
 			},
 			(out) =>
@@ -586,6 +632,7 @@ export async function runPipeline(
 			dashboard_html: dashboardHtml,
 			llm_models_used: Array.from(llmModelsUsed),
 			llm_errors: [...new Set(llmErrors)],
+			llm_call_log: llmCallLog,
 			error: result.finalState.error_message ?? undefined,
 		};
 	} catch (err) {
@@ -599,6 +646,7 @@ export async function runPipeline(
 			dashboard_html: null,
 			llm_models_used: Array.from(llmModelsUsed),
 			llm_errors: [...new Set(llmErrors)],
+			llm_call_log: llmCallLog,
 			error: err instanceof Error ? err.message : String(err),
 		};
 	}
