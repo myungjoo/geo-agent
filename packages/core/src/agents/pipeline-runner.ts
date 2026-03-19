@@ -287,6 +287,15 @@ export async function runPipeline(
 									Math.max(probeResults.summary.total, 1)) *
 									100,
 							);
+							// rank_position: citation rate + info recognition 기반 추정 (0-100)
+							// 높은 citation + 높은 recognition = 높은 rank position
+							const citRate = probeResults.summary.citation_rate;
+							const infoRate =
+								(probeResults.summary.pass + probeResults.summary.partial * 0.5) /
+								Math.max(probeResults.summary.total, 1);
+							analysisOutput.report.current_geo_score.rank_position = Math.round(
+								(citRate * 0.6 + infoRate * 0.4) * 100,
+							);
 						}
 					} catch (probeErr) {
 						console.warn(
@@ -411,6 +420,7 @@ export async function runPipeline(
 						readFile: async (p) => cloneManager!.readWorkingFile(tid, p) ?? "",
 						writeFile: async (p, c) => cloneManager!.writeWorkingFile(tid, p, c),
 						listFiles: async () => cloneManager!.listWorkingFiles(tid),
+						target_url: config.target_url,
 					},
 					trackedChatLLM ? { chatLLM: trackedChatLLM } : undefined,
 				);

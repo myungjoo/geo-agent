@@ -19,6 +19,8 @@ export interface OptimizationInput {
 	writeFile: (filePath: string, content: string) => Promise<void>;
 	/** Clone의 working 파일 목록 */
 	listFiles: () => Promise<string[]>;
+	/** Target URL (canonical URL 등에 사용) */
+	target_url?: string;
 }
 
 export interface OptimizationResult {
@@ -500,12 +502,20 @@ async function optimizeAuthoritySignal(
 				fileModified = true;
 			}
 
-			// canonical URL이 없으면 추가
+			// canonical URL이 없으면 추가 (실제 target 도메인 사용)
 			if (!/<link\s+rel=["']canonical["']/i.test(html)) {
+				let canonicalBase = "https://example.com";
+				if (input.target_url) {
+					try {
+						canonicalBase = new URL(input.target_url).origin;
+					} catch {
+						/* keep default */
+					}
+				}
 				const titleForSlug = extractTitle(html).toLowerCase().replace(/\s+/g, "-").slice(0, 50);
 				html = html.replace(
 					"</head>",
-					`<link rel="canonical" href="https://example.com/${titleForSlug}">\n</head>`,
+					`<link rel="canonical" href="${canonicalBase}/${titleForSlug}">\n</head>`,
 				);
 				fileModified = true;
 			}

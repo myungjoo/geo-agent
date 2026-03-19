@@ -175,7 +175,7 @@ export async function runValidation(
 		stopReason = `max_cycles: ${input.cycle_number + 1} >= ${maxCycles}`;
 	}
 
-	// 6. LLM 품질 검증 (선택)
+	// 6. LLM 품질 검증 (선택) — 결과를 사이클 제어에도 반영
 	let llmVerdict: ValidationVerdict | null = null;
 	if (deps.chatLLM) {
 		try {
@@ -200,6 +200,27 @@ export async function runValidation(
 					specific_recommendations: result.specific_recommendations ?? [],
 					confidence: result.confidence ?? 0.5,
 				};
+				// LLM verdict에 따른 사이클 제어 보정
+				if (llmVerdict.confidence >= 0.7) {
+					if (llmVerdict.llm_friendliness_verdict === "worse" && needsMoreCycles) {
+						needsMoreCycles = false;
+						stopReason = `llm_verdict_worse: LLM assessment says quality worsened (confidence: ${llmVerdict.confidence})`;
+					} else if (
+						llmVerdict.llm_friendliness_verdict === "no_change" &&
+						needsMoreCycles &&
+						input.cycle_number > 0
+					) {
+						needsMoreCycles = false;
+						stopReason = `llm_verdict_no_change: LLM assessment says no improvement (confidence: ${llmVerdict.confidence})`;
+					} else if (
+						llmVerdict.remaining_issues.length === 0 &&
+						effectiveAfterScore >= 70 &&
+						needsMoreCycles
+					) {
+						needsMoreCycles = false;
+						stopReason = `llm_verdict_sufficient: LLM found no remaining issues (score: ${effectiveAfterScore})`;
+					}
+				}
 			}
 		} catch {
 			// Non-fatal

@@ -43,13 +43,49 @@ function scoreS1Crawlability(data: CrawlData): DimensionScore {
 			score += 10;
 			details.push("No blanket disallow");
 		}
-		// Check for GPTBot, ClaudeBot, etc.
-		const aiAllowed =
-			!data.robots_txt.match(/User-agent:\s*(GPTBot|ClaudeBot|Google-Extended)/i) ||
-			!data.robots_txt.match(/Disallow:\s*\//);
-		if (aiAllowed) {
+		// Check explicit AI bot permissions (bonus for named allowance)
+		const aiBots = [
+			"GPTBot",
+			"ClaudeBot",
+			"Google-Extended",
+			"PerplexityBot",
+			"Applebot",
+			"OAI-SearchBot",
+		];
+		let namedAllowed = 0;
+		let namedBlocked = 0;
+		for (const bot of aiBots) {
+			const botRegex = new RegExp(`User-agent:\\s*${bot}[\\s\\S]*?(?=User-agent:|$)`, "i");
+			const section = data.robots_txt.match(botRegex);
+			if (section) {
+				if (/Disallow:\s*\/\s*$/m.test(section[0])) {
+					namedBlocked++;
+				} else {
+					namedAllowed++;
+				}
+			}
+		}
+		if (namedAllowed >= 3) {
 			score += 15;
-			details.push("AI bots not explicitly blocked");
+			details.push(`${namedAllowed} AI bots explicitly allowed (+15 bonus)`);
+		} else if (namedAllowed >= 1) {
+			score += 8;
+			details.push(`${namedAllowed} AI bots explicitly allowed`);
+		}
+		// Penalty: named blocks
+		if (namedBlocked > 0) {
+			const penalty = namedBlocked * 5;
+			score -= penalty;
+			details.push(`${namedBlocked} AI bots explicitly blocked (-${penalty} penalty)`);
+		}
+		// Penalty: ClaudeBot/Applebot 미명시 (글로벌 브랜드에 중요)
+		if (!data.robots_txt.match(/ClaudeBot/i)) {
+			score -= 5;
+			details.push("ClaudeBot not mentioned (-5 penalty)");
+		}
+		if (!data.robots_txt.match(/Applebot/i)) {
+			score -= 5;
+			details.push("Applebot not mentioned (-5 penalty)");
 		}
 	} else {
 		details.push("No robots.txt found");
@@ -82,6 +118,9 @@ function scoreS1Crawlability(data: CrawlData): DimensionScore {
 	if (data.sitemap_xml) {
 		score += 10;
 		details.push("sitemap.xml found");
+	} else {
+		score -= 5;
+		details.push("No sitemap.xml (-5 penalty)");
 	}
 
 	return {
@@ -146,7 +185,46 @@ function scoreS2StructuredData(data: CrawlData): DimensionScore {
 		details.push("Meta description present");
 	}
 
-	return { id: "S2", label: "구조화 데이터", score: Math.min(100, score), weight: 0.25, details };
+	// Bonus: advanced schema types
+	if (data.json_ld.length > 0) {
+		const allTypes = data.json_ld.map((ld) => JSON.stringify(ld)).join(" ");
+		if (/BreadcrumbList/i.test(allTypes)) {
+			score += 5;
+			details.push("BreadcrumbList (+5 bonus)");
+		}
+		if (/VideoObject/i.test(allTypes)) {
+			score += 5;
+			details.push("VideoObject (+5 bonus)");
+		}
+		if (/SpeakableSpecification/i.test(allTypes)) {
+			score += 5;
+			details.push("SpeakableSpecification (+5 bonus)");
+		}
+		if (/dateModified/i.test(allTypes)) {
+			score += 3;
+			details.push("dateModified present (+3 bonus)");
+		}
+		if (/FAQPage/i.test(allTypes)) {
+			score += 3;
+			details.push("FAQPage schema (+3 bonus)");
+		}
+		// Penalty: non-standard custom objects replacing schema
+		if (
+			/digitalData/i.test(data.html) &&
+			!data.json_ld.some((ld) => String((ld as Record<string, unknown>)["@type"]).match(/Product/i))
+		) {
+			score -= 10;
+			details.push("digitalData replaces standard Product schema (-10 penalty)");
+		}
+	}
+
+	return {
+		id: "S2",
+		label: "구조화 데이터",
+		score: Math.max(0, Math.min(100, score)),
+		weight: 0.25,
+		details,
+	};
 }
 
 function scoreS3ContentReadability(data: CrawlData): DimensionScore {

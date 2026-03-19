@@ -183,7 +183,8 @@ export interface MultiPageCrawlResult {
 }
 
 /** Asset/non-content file extensions to skip */
-const SKIP_EXTENSIONS = /\.(css|js|png|jpg|jpeg|gif|svg|ico|pdf|zip|woff2?|ttf|eot|mp4|mp3|webp|avif)(\?|$)/i;
+const SKIP_EXTENSIONS =
+	/\.(css|js|png|jpg|jpeg|gif|svg|ico|pdf|zip|woff2?|ttf|eot|mp4|mp3|webp|avif)(\?|$)/i;
 
 /** URL patterns indicating product/category pages (prioritized in crawl order) */
 const PRODUCT_PATTERNS = [
@@ -212,101 +213,164 @@ export function urlToFilename(pageUrl: string, baseUrl: string): string {
 }
 
 /**
- * Crawl the homepage, discover internal links, and crawl up to maxPages total.
- * Link discovery: extract <a href> from homepage HTML, filter to same host,
- * prioritize product/category URLs, crawl in parallel (5 concurrent).
+ * Extract same-host links from HTML, categorized by priority.
  */
-export async function crawlMultiplePages(
-	url: string,
-	maxPages = 20,
-	timeoutMs = 10000,
-): Promise<MultiPageCrawlResult> {
-	const startTime = Date.now();
-
-	// 1. Crawl homepage (full crawl with robots/llms/sitemap)
-	const homepage = await crawlTarget(url, timeoutMs);
-	const baseUrl = getBaseUrl(url);
-
-	if (maxPages <= 1) {
-		return {
-			homepage,
-			pages: [],
-			total_pages: 1,
-			crawl_duration_ms: Date.now() - startTime,
-		};
-	}
-
-	// 2. Discover internal links from homepage
-	const seen = new Set<string>([new URL(url).pathname]);
+function discoverLinks(
+	html: string,
+	sourceUrl: string,
+	host: string,
+	seen: Set<string>,
+): { prioritized: string[]; secondary: string[] } {
+	const links = extractLinks(html);
 	const prioritized: string[] = [];
 	const secondary: string[] = [];
 
-	for (const link of homepage.links) {
+	for (const link of links) {
 		try {
-			const resolved = new URL(link.href, url);
-			// Same host only
-			if (resolved.host !== new URL(url).host) continue;
-			// Skip assets
+			const resolved = new URL(link.href, sourceUrl);
+			if (resolved.host !== host) continue;
 			if (SKIP_EXTENSIONS.test(resolved.pathname)) continue;
-			// Skip anchors and query-only
 			const path = resolved.pathname;
 			if (seen.has(path)) continue;
 			seen.add(path);
 
-			const fullUrl = resolved.href.split("#")[0]; // strip fragment
+			const fullUrl = resolved.href.split("#")[0];
 			if (PRODUCT_PATTERNS.some((p) => p.test(path))) {
 				prioritized.push(fullUrl);
 			} else {
 				secondary.push(fullUrl);
 			}
 		} catch {
-			// Invalid URL, skip
+			/* skip */
 		}
 	}
+	return { prioritized, secondary };
+}
 
-	// 3. Select up to maxPages-1 URLs (prioritized first)
-	const toFetch = [...prioritized, ...secondary].slice(0, maxPages - 1);
+/**
+ * Crawl a single page (simplified — no robots/llms/sitemap).
+ */
+async function crawlSubPage(
+	pageUrl: string,
+	homepage: CrawlData,
+	baseUrl: string,
+	timeoutMs: number,
+): Promise<{ url: string; path: string; crawl_data: CrawlData } | null> {
+	const res = await safeFetch(pageUrl, timeoutMs);
+	if (!res || res.status >= 400) return null;
 
-	// 4. Crawl in parallel with concurrency limit of 5
+	const html = res.body;
+	const crawlData: CrawlData = {
+		html,
+		url: pageUrl,
+		status_code: res.status,
+		content_type: res.headers["content-type"] ?? "text/html",
+		response_time_ms: 0,
+		robots_txt: homepage.robots_txt,
+		llms_txt: homepage.llms_txt,
+		sitemap_xml: homepage.sitemap_xml,
+		json_ld: extractJsonLd(html),
+		meta_tags: extractMetaTags(html),
+		title: extractTitle(html),
+		canonical_url: extractCanonical(html),
+		links: extractLinks(html),
+		headers: res.headers,
+	};
+	return { url: pageUrl, path: urlToFilename(pageUrl, baseUrl), crawl_data: crawlData };
+}
+
+/**
+ * Multi-depth crawl: depth=1 wide (up to maxWidth), depth=2+ narrow (2-3 per parent).
+ *
+ * Strategy mimics LLM service information discovery:
+ * - Depth 1: Broad scan of homepage links (categories, product lines)
+ * - Depth 2: Drill into 2-3 most important links per depth-1 page (PDP, details)
+ * - Depth 3: Pick 1-2 links per depth-2 page (specific specs, variants)
+ *
+ * maxDepth default=3, maxPages default=30.
+ */
+export async function crawlMultiplePages(
+	url: string,
+	maxPages = 30,
+	timeoutMs = 10000,
+	maxDepth = 3,
+): Promise<MultiPageCrawlResult> {
+	const startTime = Date.now();
+
+	// 1. Crawl homepage (full crawl with robots/llms/sitemap)
+	const homepage = await crawlTarget(url, timeoutMs);
+	const baseUrl = getBaseUrl(url);
+	const host = new URL(url).host;
+
+	if (maxPages <= 1) {
+		return { homepage, pages: [], total_pages: 1, crawl_duration_ms: Date.now() - startTime };
+	}
+
+	const seen = new Set<string>([new URL(url).pathname]);
 	const pages: Array<{ url: string; path: string; crawl_data: CrawlData }> = [];
 	const concurrency = 5;
 
-	for (let i = 0; i < toFetch.length; i += concurrency) {
-		const batch = toFetch.slice(i, i + concurrency);
-		const results = await Promise.allSettled(
-			batch.map(async (pageUrl) => {
-				const res = await safeFetch(pageUrl, timeoutMs);
-				if (!res || res.status >= 400) return null;
+	// Width limits per depth: depth1=wide, depth2+=narrow (LLM-style drill-down)
+	const widthByDepth = [0, maxPages - 1, 3, 2]; // index=depth
 
-				const html = res.body;
-				const crawlData: CrawlData = {
-					html,
-					url: pageUrl,
-					status_code: res.status,
-					content_type: res.headers["content-type"] ?? "text/html",
-					response_time_ms: 0,
-					// Share bot-facing resources from homepage
-					robots_txt: homepage.robots_txt,
-					llms_txt: homepage.llms_txt,
-					sitemap_xml: homepage.sitemap_xml,
-					json_ld: extractJsonLd(html),
-					meta_tags: extractMetaTags(html),
-					title: extractTitle(html),
-					canonical_url: extractCanonical(html),
-					links: extractLinks(html),
-					headers: res.headers,
-				};
-				return {
-					url: pageUrl,
-					path: urlToFilename(pageUrl, baseUrl),
-					crawl_data: crawlData,
-				};
-			}),
-		);
+	// 2. Depth 1: Broad scan from homepage
+	const d1Links = discoverLinks(homepage.html, url, host, seen);
+	const d1Urls = [...d1Links.prioritized, ...d1Links.secondary].slice(0, widthByDepth[1]);
 
-		for (const result of results) {
-			if (result.status === "fulfilled" && result.value) {
-				pages.push(result.value);
+	// Fetch depth-1 pages
+	const toFetch = d1Urls;
+
+	// Helper: batch-fetch pages
+	async function fetchBatch(
+		urls: string[],
+	): Promise<Array<{ url: string; path: string; crawl_data: CrawlData }>> {
+		const fetched: Array<{ url: string; path: string; crawl_data: CrawlData }> = [];
+		for (let i = 0; i < urls.length; i += concurrency) {
+			if (pages.length + fetched.length >= maxPages - 1) break;
+			const batch = urls.slice(i, i + concurrency);
+			const results = await Promise.allSettled(
+				batch.map((u) => crawlSubPage(u, homepage, baseUrl, timeoutMs)),
+			);
+			for (const r of results) {
+				if (r.status === "fulfilled" && r.value) fetched.push(r.value);
+			}
+		}
+		return fetched;
+	}
+
+	// Depth 1: broad scan
+	const depth1Pages = await fetchBatch(toFetch);
+	pages.push(...depth1Pages);
+
+	// Depth 2: narrow drill-down (2-3 links per depth-1 page, prioritized only)
+	if (maxDepth >= 2 && pages.length < maxPages - 1) {
+		const depth2Parents = depth1Pages
+			.filter((p) => PRODUCT_PATTERNS.some((pat) => pat.test(p.url)))
+			.slice(0, 5); // max 5 parents to drill from
+
+		for (const parent of depth2Parents) {
+			if (pages.length >= maxPages - 1) break;
+			const d2Links = discoverLinks(parent.crawl_data.html, parent.url, host, seen);
+			const d2Urls = [...d2Links.prioritized, ...d2Links.secondary].slice(0, widthByDepth[2] ?? 3);
+			const d2Pages = await fetchBatch(d2Urls);
+			pages.push(...d2Pages);
+
+			// Depth 3: even narrower (1-2 links per depth-2 page)
+			if (maxDepth >= 3 && pages.length < maxPages - 1) {
+				const depth3Parents = d2Pages
+					.filter((p) => p.crawl_data.json_ld.length > 0) // pages with schema = interesting
+					.slice(0, 2);
+
+				for (const d3Parent of depth3Parents) {
+					if (pages.length >= maxPages - 1) break;
+					const d3Links = discoverLinks(d3Parent.crawl_data.html, d3Parent.url, host, seen);
+					const d3Urls = [...d3Links.prioritized, ...d3Links.secondary].slice(
+						0,
+						widthByDepth[3] ?? 2,
+					);
+					const d3Pages = await fetchBatch(d3Urls);
+					pages.push(...d3Pages);
+				}
 			}
 		}
 	}
