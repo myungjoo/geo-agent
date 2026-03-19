@@ -75,6 +75,14 @@ app.onError((err, c) => {
 // Health check
 app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
 
+// Graceful shutdown endpoint
+app.post("/api/shutdown", (c) => {
+	console.log("🛑 Shutdown requested via API");
+	// Schedule shutdown after response is sent
+	setTimeout(() => process.exit(0), 500);
+	return c.json({ status: "shutting_down" });
+});
+
 // SSE endpoint — real-time pipeline events
 app.get("/events", (c) => {
 	const stream = new ReadableStream({

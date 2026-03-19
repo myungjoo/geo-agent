@@ -154,7 +154,9 @@ export function extractSchemaCoverage(
 			present,
 			pages: foundOn,
 			quality,
-			details: present ? `Found on ${foundOn.length}/${pages.length} pages` : "Not implemented",
+			details: present
+				? `Found on ${foundOn.length}/${pages.length} pages`
+				: "Not found on any page",
 		};
 	});
 }

@@ -143,7 +143,7 @@ describe("Optimization Agent", () => {
 		});
 
 		it("skips unknown change types", async () => {
-			const input = makeInput([makeTask({ change_type: "EXTERNAL" as "METADATA" })]);
+			const input = makeInput([makeTask({ change_type: "UNKNOWN_TYPE" as "METADATA" })]);
 			const result = await runOptimization(input);
 			expect(result.skipped_tasks).toHaveLength(1);
 		});
@@ -181,18 +181,18 @@ describe("Optimization Agent", () => {
 		});
 	});
 
-	describe("runOptimization — with LLM", () => {
-		function makeLLMResponse(content: string) {
-			return {
-				content,
-				model: "gpt-4o",
-				provider: "openai",
-				usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
-				latency_ms: 200,
-				cost_usd: 0.01,
-			};
-		}
+	function makeLLMResponse(content: string) {
+		return {
+			content,
+			model: "gpt-4o",
+			provider: "openai",
+			usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+			latency_ms: 200,
+			cost_usd: 0.01,
+		};
+	}
 
+	describe("runOptimization — with LLM", () => {
 		it("generates real meta description via LLM", async () => {
 			const chatLLM = vi
 				.fn()
@@ -272,8 +272,8 @@ describe("Optimization Agent", () => {
 				(c: string[]) => c[0] === "index.html",
 			);
 			expect(writeCall).toBeTruthy();
-			// Should have the fallback description
-			expect(writeCall![1]).toContain("Optimized page description for LLM discoverability");
+			// Should have the context-based fallback description (title-based)
+			expect(writeCall![1]).toContain("Test Page - Official information");
 		});
 	});
 
@@ -361,6 +361,134 @@ describe("Optimization Agent", () => {
 				(c: [string, string]) => c[1] && c[1].includes("og:title"),
 			);
 			expect(ogWrites.length).toBe(3);
+		});
+	});
+
+	describe("runOptimization — new ChangeType handlers", () => {
+		it("CONTENT_DENSITY adds nav when no LLM (fallback)", async () => {
+			const input = makeInput([makeTask({ change_type: "CONTENT_DENSITY", title: "콘텐츠 확충" })]);
+			const result = await runOptimization(input);
+			expect(result.applied_tasks).toHaveLength(1);
+			expect(result.files_modified).toContain("index.html");
+		});
+
+		it("CONTENT_DENSITY generates content with LLM", async () => {
+			const generatedHtml =
+				"<section><p>Generated factual content about the product.</p></section>";
+			const chatLLM = vi.fn().mockResolvedValue(makeLLMResponse(generatedHtml));
+			// Short content page (< 300 words)
+			const input = makeInput(
+				[makeTask({ change_type: "CONTENT_DENSITY", title: "콘텐츠 확충" })],
+				{
+					"index.html":
+						"<html><head><title>Test</title></head><body><p>Short content</p></body></html>",
+				},
+			);
+			const result = await runOptimization(input, { chatLLM });
+			expect(result.applied_tasks).toHaveLength(1);
+			expect(chatLLM).toHaveBeenCalled();
+			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
+				(c: string[]) => c[0] === "index.html",
+			);
+			expect(writeCall![1]).toContain("Generated factual content");
+		});
+
+		it("CONTENT_DENSITY skips pages with enough words", async () => {
+			const longContent = "word ".repeat(400);
+			const input = makeInput(
+				[makeTask({ change_type: "CONTENT_DENSITY", title: "콘텐츠 확충" })],
+				{
+					"index.html": `<html><head><title>T</title></head><body><p>${longContent}</p></body></html>`,
+				},
+			);
+			const result = await runOptimization(input);
+			expect(result.skipped_tasks).toHaveLength(1);
+		});
+
+		it("FAQ_ADDITION generates FAQ with LLM", async () => {
+			const faqJson = JSON.stringify({
+				faqs: [{ question: "What is this?", answer: "A test page." }],
+			});
+			const chatLLM = vi.fn().mockResolvedValue(makeLLMResponse(faqJson));
+			const input = makeInput([makeTask({ change_type: "FAQ_ADDITION", title: "FAQ 추가" })], {
+				"index.html": "<html><head></head><body><p>Content</p></body></html>",
+			});
+			const result = await runOptimization(input, { chatLLM });
+			expect(result.applied_tasks).toHaveLength(1);
+			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
+				(c: string[]) => c[0] === "index.html",
+			);
+			expect(writeCall![1]).toContain("FAQPage");
+			expect(writeCall![1]).toContain("What is this?");
+		});
+
+		it("FAQ_ADDITION skips pages already having FAQ", async () => {
+			const input = makeInput([makeTask({ change_type: "FAQ_ADDITION", title: "FAQ 추가" })], {
+				"index.html": "<html><head></head><body><div>FAQPage content</div></body></html>",
+			});
+			const chatLLM = vi.fn().mockResolvedValue(makeLLMResponse("{}"));
+			const result = await runOptimization(input, { chatLLM });
+			// FAQPage found in HTML → skipped
+			expect(result.files_modified).toHaveLength(0);
+		});
+
+		it("FAQ_ADDITION does nothing without LLM", async () => {
+			const input = makeInput([makeTask({ change_type: "FAQ_ADDITION", title: "FAQ 추가" })]);
+			const result = await runOptimization(input);
+			expect(result.skipped_tasks).toHaveLength(1);
+		});
+
+		it("AUTHORITY_SIGNAL adds dateModified and canonical", async () => {
+			const input = makeInput([
+				makeTask({ change_type: "AUTHORITY_SIGNAL", title: "권위 신호 강화" }),
+			]);
+			const result = await runOptimization(input);
+			expect(result.applied_tasks).toHaveLength(1);
+			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
+				(c: string[]) => c[0] === "index.html",
+			);
+			expect(writeCall![1]).toContain("article:modified_time");
+			expect(writeCall![1]).toContain("canonical");
+		});
+
+		it("CONTENT_CHUNKING adds anchor ids to H2 and article wrapper", async () => {
+			const input = makeInput(
+				[makeTask({ change_type: "CONTENT_CHUNKING", title: "콘텐츠 구조화" })],
+				{
+					"index.html":
+						"<html><head></head><body><main><h2>Section One</h2><p>Content</p></main></body></html>",
+				},
+			);
+			const result = await runOptimization(input);
+			expect(result.applied_tasks).toHaveLength(1);
+			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
+				(c: string[]) => c[0] === "index.html",
+			);
+			expect(writeCall![1]).toContain('id="section-one"');
+			expect(writeCall![1]).toContain("<article>");
+		});
+
+		it("READABILITY_FIX adds lang attribute and fixes alt text", async () => {
+			const input = makeInput(
+				[makeTask({ change_type: "READABILITY_FIX", title: "가독성 개선" })],
+				{ "index.html": '<html><head></head><body><img src="/photo.jpg" alt=""></body></html>' },
+			);
+			const result = await runOptimization(input);
+			expect(result.applied_tasks).toHaveLength(1);
+			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
+				(c: string[]) => c[0] === "index.html",
+			);
+			expect(writeCall![1]).toContain('lang="ko"');
+			expect(writeCall![1]).toContain('alt="photo"');
+		});
+
+		it("EXTERNAL returns success with no file changes", async () => {
+			const input = makeInput([
+				makeTask({ change_type: "EXTERNAL" as "METADATA", title: "외부 변경" }),
+			]);
+			const result = await runOptimization(input);
+			expect(result.applied_tasks).toHaveLength(1);
+			expect(result.files_modified).toHaveLength(0);
 		});
 	});
 });

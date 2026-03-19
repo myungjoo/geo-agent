@@ -209,6 +209,21 @@ export async function runPipeline(
 							{ chatLLM: deps.chatLLM },
 							{ delayMs: 500 },
 						);
+
+						// Reflect probe results in GeoScore
+						if (probeResults) {
+							analysisOutput.report.current_geo_score.citation_rate = Math.round(
+								probeResults.summary.citation_rate * 100,
+							);
+							analysisOutput.report.current_geo_score.citation_accuracy = Math.round(
+								probeResults.summary.average_accuracy * 100,
+							);
+							analysisOutput.report.current_geo_score.info_recognition_score = Math.round(
+								((probeResults.summary.pass + probeResults.summary.partial * 0.5) /
+									Math.max(probeResults.summary.total, 1)) *
+									100,
+							);
+						}
 					} catch (probeErr) {
 						console.warn(
 							"⚠️ Synthetic Probes failed (non-fatal):",

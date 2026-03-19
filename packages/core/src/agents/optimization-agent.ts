@@ -68,7 +68,10 @@ async function optimizeMetadata(
 
 			if (task.title.includes("Meta description") || task.title.includes("메타")) {
 				if (!/<meta\s+name=["']description["']/i.test(html)) {
-					const fallbackDesc = "Optimized page description for LLM discoverability";
+					const pageTitle = extractTitle(html);
+					const fallbackDesc = pageTitle
+						? `${pageTitle} - Official information and details`
+						: "Comprehensive information and resources";
 					let description = fallbackDesc;
 
 					if (deps?.chatLLM) {
@@ -225,8 +228,28 @@ async function optimizeLlmsTxt(
 	input: OptimizationInput,
 	deps?: { chatLLM?: (req: LLMRequest) => Promise<LLMResponse> },
 ): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
-	const fallbackContent =
-		"# Site Information\n\nThis site provides information about products and services.\n\n## Key Content\n- Products and specifications\n- Pricing information\n- Company information\n";
+	// Build context-aware fallback from available HTML pages
+	let fallbackContent = "# Site Information\n\n";
+	try {
+		const files = await input.listFiles();
+		const htmlFiles = files.filter((f) => f.endsWith(".html")).slice(0, 5);
+		const titles: string[] = [];
+		for (const f of htmlFiles) {
+			const html = await input.readFile(f);
+			const t = extractTitle(html);
+			if (t) titles.push(t);
+		}
+		if (titles.length > 0) {
+			fallbackContent += `This site contains the following pages:\n${titles.map((t) => `- ${t}`).join("\n")}\n\n`;
+		} else {
+			fallbackContent += "This site provides information about products and services.\n\n";
+		}
+		fallbackContent +=
+			"## Key Content\n- Products and specifications\n- Pricing information\n- Company information\n";
+	} catch {
+		fallbackContent =
+			"# Site Information\n\nThis site provides information about products and services.\n";
+	}
 
 	try {
 		let content = fallbackContent;
@@ -327,6 +350,274 @@ async function optimizeSemanticStructure(
 	}
 }
 
+// ── CONTENT_DENSITY: 콘텐츠 보강 (LLM 기반 또는 구조적 개선) ──
+
+async function optimizeContentDensity(
+	task: OptimizationTask,
+	input: OptimizationInput,
+	deps?: { chatLLM?: (req: LLMRequest) => Promise<LLMResponse> },
+): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
+	const htmlFiles = await getHtmlFiles(input);
+	const modified: string[] = [];
+
+	try {
+		for (const htmlFile of htmlFiles) {
+			let html = await input.readFile(htmlFile);
+			const text = extractVisibleText(html);
+			const wordCount = text.split(/\s+/).filter(Boolean).length;
+
+			// 콘텐츠가 300단어 미만이면 보강 필요
+			if (wordCount >= 300) continue;
+
+			if (deps?.chatLLM) {
+				const title = extractTitle(html);
+				const { result } = await safeLLMCall(
+					deps.chatLLM,
+					{
+						prompt: `This web page has thin content (${wordCount} words). Title: "${title}"\nContent: "${text.slice(0, 1500)}"\n\nWrite 2-3 additional paragraphs of factual, informative content that would help this page be better understood by LLMs. Write in the same language as the existing content. Output only the HTML paragraphs (wrapped in <section> tags).`,
+						system_instruction:
+							"You are a GEO content specialist. Generate factual, relevant content to improve page density for LLM consumption. Never fabricate data. Use semantic HTML.",
+						json_mode: false,
+						temperature: 0.4,
+						max_tokens: 1000,
+					},
+					(content) => content.trim(),
+					"",
+				);
+				if (result) {
+					html = html.replace("</body>", `\n${result}\n</body>`);
+					await input.writeFile(htmlFile, html);
+					modified.push(htmlFile);
+				}
+			} else {
+				// Fallback: 구조적 개선 — nav가 없으면 추가
+				if (!/<nav[\s>]/i.test(html)) {
+					html = html.replace(
+						/<body[^>]*>/i,
+						(m) =>
+							`${m}\n<nav aria-label="Main navigation"><ul><li><a href="/">Home</a></li></ul></nav>`,
+					);
+					await input.writeFile(htmlFile, html);
+					modified.push(htmlFile);
+				}
+			}
+		}
+		return { success: modified.length > 0, files_modified: modified };
+	} catch (err) {
+		return { success: false, files_modified: [], error: (err as Error).message };
+	}
+}
+
+// ── FAQ_ADDITION: FAQ 스키마 + 콘텐츠 추가 ──────────────────
+
+async function optimizeFaqAddition(
+	task: OptimizationTask,
+	input: OptimizationInput,
+	deps?: { chatLLM?: (req: LLMRequest) => Promise<LLMResponse> },
+): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
+	const htmlFiles = await getHtmlFiles(input);
+	const modified: string[] = [];
+
+	try {
+		for (const htmlFile of htmlFiles) {
+			let html = await input.readFile(htmlFile);
+
+			// 이미 FAQ 스키마가 있으면 skip
+			if (/FAQPage/i.test(html)) continue;
+
+			if (deps?.chatLLM) {
+				const title = extractTitle(html);
+				const text = extractVisibleText(html).slice(0, 2000);
+				const { result } = await safeLLMCall(
+					deps.chatLLM,
+					{
+						prompt: `Based on this page content, generate a FAQ section with 3-5 questions and answers.\nTitle: "${title}"\nContent: "${text}"\n\nOutput JSON: { "faqs": [{ "question": "...", "answer": "..." }] }`,
+						system_instruction:
+							"Generate factual FAQ items based on the page content. Never invent information not present in the content.",
+						json_mode: true,
+						temperature: 0.3,
+						max_tokens: 1500,
+					},
+					(content) => {
+						const parsed = JSON.parse(content);
+						return parsed.faqs as Array<{ question: string; answer: string }>;
+					},
+					[],
+				);
+
+				if (result.length > 0) {
+					// FAQ HTML section
+					const faqHtml = `<section class="faq" itemscope itemtype="https://schema.org/FAQPage">\n<h2>자주 묻는 질문</h2>\n${result.map((f) => `<div itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">\n<h3 itemprop="name">${escapeHtml(f.question)}</h3>\n<div itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer"><p itemprop="text">${escapeHtml(f.answer)}</p></div>\n</div>`).join("\n")}\n</section>`;
+
+					// FAQ JSON-LD
+					const faqJsonLd = {
+						"@context": "https://schema.org",
+						"@type": "FAQPage",
+						mainEntity: result.map((f) => ({
+							"@type": "Question",
+							name: f.question,
+							acceptedAnswer: { "@type": "Answer", text: f.answer },
+						})),
+					};
+
+					html = html.replace(
+						"</body>",
+						`${faqHtml}\n<script type="application/ld+json">${JSON.stringify(faqJsonLd)}</script>\n</body>`,
+					);
+					await input.writeFile(htmlFile, html);
+					modified.push(htmlFile);
+				}
+			}
+			// No fallback — FAQ 생성은 LLM 없이는 의미 없음
+		}
+		return { success: modified.length > 0, files_modified: modified };
+	} catch (err) {
+		return { success: false, files_modified: [], error: (err as Error).message };
+	}
+}
+
+// ── AUTHORITY_SIGNAL: 권위 신호 강화 (sameAs, dateModified 등) ──
+
+async function optimizeAuthoritySignal(
+	_task: OptimizationTask,
+	input: OptimizationInput,
+): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
+	const htmlFiles = await getHtmlFiles(input);
+	const modified: string[] = [];
+
+	try {
+		for (const htmlFile of htmlFiles) {
+			let html = await input.readFile(htmlFile);
+			let fileModified = false;
+
+			// dateModified 메타태그 추가
+			if (!/<meta\s+[^>]*dateModified/i.test(html) && !/"dateModified"/i.test(html)) {
+				const now = new Date().toISOString().split("T")[0];
+				html = html.replace(
+					"</head>",
+					`<meta name="article:modified_time" content="${now}">\n</head>`,
+				);
+				fileModified = true;
+			}
+
+			// canonical URL이 없으면 추가
+			if (!/<link\s+rel=["']canonical["']/i.test(html)) {
+				const titleForSlug = extractTitle(html).toLowerCase().replace(/\s+/g, "-").slice(0, 50);
+				html = html.replace(
+					"</head>",
+					`<link rel="canonical" href="https://example.com/${titleForSlug}">\n</head>`,
+				);
+				fileModified = true;
+			}
+
+			if (fileModified) {
+				await input.writeFile(htmlFile, html);
+				modified.push(htmlFile);
+			}
+		}
+		return { success: modified.length > 0, files_modified: modified };
+	} catch (err) {
+		return { success: false, files_modified: [], error: (err as Error).message };
+	}
+}
+
+// ── CONTENT_CHUNKING: 콘텐츠 구조화 (섹션 분할, 앵커) ──────
+
+async function optimizeContentChunking(
+	_task: OptimizationTask,
+	input: OptimizationInput,
+): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
+	const htmlFiles = await getHtmlFiles(input);
+	const modified: string[] = [];
+
+	try {
+		for (const htmlFile of htmlFiles) {
+			let html = await input.readFile(htmlFile);
+			let fileModified = false;
+
+			// H2 태그에 id 앵커 추가 (없으면)
+			html = html.replace(/<h2([^>]*)>([\s\S]*?)<\/h2>/gi, (match, attrs, content) => {
+				if (/\bid=/i.test(attrs)) return match;
+				const text = content.replace(/<[^>]+>/g, "").trim();
+				const id = text
+					.toLowerCase()
+					.replace(/[^a-z0-9가-힣]+/g, "-")
+					.replace(/^-|-$/g, "")
+					.slice(0, 40);
+				if (!id) return match;
+				fileModified = true;
+				return `<h2${attrs} id="${id}">${content}</h2>`;
+			});
+
+			// article 태그가 없으면 본문을 article로 감싸기
+			if (!/<article[\s>]/i.test(html) && /<main[\s>]/i.test(html)) {
+				html = html.replace(/<main([^>]*)>/i, "<main$1>\n<article>");
+				html = html.replace(/<\/main>/i, "</article>\n</main>");
+				fileModified = true;
+			}
+
+			if (fileModified) {
+				await input.writeFile(htmlFile, html);
+				modified.push(htmlFile);
+			}
+		}
+		return { success: modified.length > 0, files_modified: modified };
+	} catch (err) {
+		return { success: false, files_modified: [], error: (err as Error).message };
+	}
+}
+
+// ── READABILITY_FIX: 가독성 개선 ────────────────────────────
+
+async function optimizeReadabilityFix(
+	_task: OptimizationTask,
+	input: OptimizationInput,
+	deps?: { chatLLM?: (req: LLMRequest) => Promise<LLMResponse> },
+): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
+	const htmlFiles = await getHtmlFiles(input);
+	const modified: string[] = [];
+
+	try {
+		for (const htmlFile of htmlFiles) {
+			let html = await input.readFile(htmlFile);
+			let fileModified = false;
+
+			// lang 속성 추가
+			if (/<html(?![^>]*\blang\b)/i.test(html)) {
+				html = html.replace(/<html/i, '<html lang="ko"');
+				fileModified = true;
+			}
+
+			// alt 속성이 빈 img 태그에 placeholder 추가
+			html = html.replace(/<img([^>]*)\balt=["']["']/gi, (match, attrs) => {
+				const src = (attrs.match(/src=["']([^"']*)["']/i) || [])[1] || "";
+				const filename = src.split("/").pop()?.split(".")[0] || "image";
+				fileModified = true;
+				return `<img${attrs}alt="${escapeHtml(filename)}"`;
+			});
+
+			if (fileModified) {
+				await input.writeFile(htmlFile, html);
+				modified.push(htmlFile);
+			}
+		}
+		return { success: modified.length > 0, files_modified: modified };
+	} catch (err) {
+		return { success: false, files_modified: [], error: (err as Error).message };
+	}
+}
+
+// ── EXTERNAL: 외부 변경 알림 (수정 불가, 리포트만) ───────────
+
+async function optimizeExternal(
+	_task: OptimizationTask,
+	_input: OptimizationInput,
+): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
+	// EXTERNAL 타입은 시스템 외부에서 발생한 변경을 기록하는 용도
+	// 최적화 대상이 아니므로 skip (성공으로 처리하되 파일 변경 없음)
+	return { success: true, files_modified: [] };
+}
+
 // ── Task type → optimizer mapping ────────────────────────────
 
 const OPTIMIZERS: Record<string, TaskOptimizer> = {
@@ -334,6 +625,12 @@ const OPTIMIZERS: Record<string, TaskOptimizer> = {
 	SCHEMA_MARKUP: optimizeSchemaMarkup,
 	LLMS_TXT: optimizeLlmsTxt,
 	SEMANTIC_STRUCTURE: optimizeSemanticStructure,
+	CONTENT_DENSITY: optimizeContentDensity,
+	FAQ_ADDITION: optimizeFaqAddition,
+	AUTHORITY_SIGNAL: optimizeAuthoritySignal,
+	CONTENT_CHUNKING: optimizeContentChunking,
+	READABILITY_FIX: optimizeReadabilityFix,
+	EXTERNAL: optimizeExternal,
 };
 
 // ── Optimization Agent 실행 ──────────────────────────────────

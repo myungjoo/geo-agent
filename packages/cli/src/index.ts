@@ -191,9 +191,32 @@ program
 program
 	.command("stop")
 	.description("Stop the GEO Agent dashboard server")
-	.action(() => {
+	.option("-p, --port <port>", "Server port to stop", "3000")
+	.action(async (opts) => {
+		const port = Number.parseInt(opts.port, 10);
 		console.log("🛑 Stopping GEO Agent System...");
-		console.log("⚠️  Use Ctrl+C to stop the running server.");
+		try {
+			const res = await fetch(`http://localhost:${port}/health`, {
+				signal: AbortSignal.timeout(3000),
+			});
+			if (res.ok) {
+				// Server is running — send shutdown request
+				try {
+					await fetch(`http://localhost:${port}/api/shutdown`, {
+						method: "POST",
+						signal: AbortSignal.timeout(5000),
+					});
+					console.log("✅ Server shutdown requested.");
+				} catch {
+					console.log("⚠️ Server running but doesn't support graceful shutdown.");
+					console.log("   Use Ctrl+C in the server terminal, or:");
+					console.log(`   taskkill /F /FI "WINDOWTITLE eq *geo*" (Windows)`);
+					console.log(`   pkill -f "geo.*start" (Linux/macOS)`);
+				}
+			}
+		} catch {
+			console.log("ℹ️  No server found on port " + port + ".");
+		}
 	});
 
 // ── geo status ────────────────────────────────────────────
