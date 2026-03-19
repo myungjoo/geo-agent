@@ -318,6 +318,76 @@ describe("Analysis Agent", () => {
 	});
 });
 
+describe("Analysis Agent — with LLM content quality assessment", () => {
+	const mockLLMAssessment = {
+		brand_recognition: {
+			score: 80,
+			identified_brand: "Test Corp",
+			identified_products: ["Product A"],
+			reasoning: "Found brand in title",
+		},
+		content_quality: {
+			score: 65,
+			clarity: 70,
+			completeness: 60,
+			factual_density: 55,
+			reasoning: "Good structure",
+		},
+		information_gaps: [
+			{ category: "pricing", description: "No price info", importance: "high" as const },
+		],
+		llm_consumption_issues: [{ issue: "No JSON-LD", recommendation: "Add structured data" }],
+		overall_assessment: "Decent page with room for improvement",
+	};
+
+	function makeLLMResponse(content: string) {
+		return {
+			content,
+			model: "gpt-4o",
+			provider: "openai",
+			usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+			latency_ms: 300,
+			cost_usd: 0.02,
+		};
+	}
+
+	it("includes llm_assessment when chatLLM provided", async () => {
+		const deps = makeDeps();
+		const chatLLM = vi.fn().mockResolvedValue(makeLLMResponse(JSON.stringify(mockLLMAssessment)));
+		const depsWithLLM = { ...deps, chatLLM };
+
+		const result = await runAnalysis(defaultInput, depsWithLLM);
+
+		expect(result.llm_assessment).not.toBeNull();
+		expect(result.llm_assessment!.brand_recognition.score).toBe(80);
+		expect(result.llm_assessment!.brand_recognition.identified_brand).toBe("Test Corp");
+		expect(result.llm_assessment!.content_quality.score).toBe(65);
+		expect(result.llm_assessment!.information_gaps).toHaveLength(1);
+		expect(result.llm_assessment!.information_gaps[0].category).toBe("pricing");
+		expect(result.llm_assessment!.llm_consumption_issues).toHaveLength(1);
+		expect(result.llm_assessment!.overall_assessment).toBe("Decent page with room for improvement");
+		expect(chatLLM).toHaveBeenCalledOnce();
+	});
+
+	it("llm_assessment is null when chatLLM not provided", async () => {
+		const deps = makeDeps();
+		const result = await runAnalysis(defaultInput, deps);
+		expect(result.llm_assessment).toBeNull();
+	});
+
+	it("llm_assessment is null when chatLLM fails", async () => {
+		const deps = makeDeps();
+		const chatLLM = vi.fn().mockRejectedValue(new Error("API rate limit exceeded"));
+		const depsWithLLM = { ...deps, chatLLM };
+
+		const result = await runAnalysis(defaultInput, depsWithLLM);
+		expect(result.llm_assessment).toBeNull();
+		// Should still have all other fields
+		expect(result.report).toBeDefined();
+		expect(result.geo_scores).toBeDefined();
+	});
+});
+
 describe("Analysis Agent — smoke test with real classifySite", () => {
 	it("works with actual classifySite implementation", async () => {
 		const { classifySite } = await import("../prompts/template-engine.js");

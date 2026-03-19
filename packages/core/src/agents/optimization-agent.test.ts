@@ -181,6 +181,102 @@ describe("Optimization Agent", () => {
 		});
 	});
 
+	describe("runOptimization — with LLM", () => {
+		function makeLLMResponse(content: string) {
+			return {
+				content,
+				model: "gpt-4o",
+				provider: "openai",
+				usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+				latency_ms: 200,
+				cost_usd: 0.01,
+			};
+		}
+
+		it("generates real meta description via LLM", async () => {
+			const chatLLM = vi
+				.fn()
+				.mockResolvedValue(
+					makeLLMResponse("Galaxy S25 Ultra - Premium flagship smartphone with AI features"),
+				);
+			const input = makeInput([
+				makeTask({ change_type: "METADATA", title: "Meta description 추가" }),
+			]);
+
+			const result = await runOptimization(input, { chatLLM });
+
+			expect(result.applied_tasks).toHaveLength(1);
+			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
+				(c: string[]) => c[0] === "index.html",
+			);
+			expect(writeCall).toBeTruthy();
+			expect(writeCall![1]).toContain("Galaxy S25 Ultra");
+			expect(writeCall![1]).not.toContain("Optimized page description for LLM discoverability");
+		});
+
+		it("generates JSON-LD via LLM", async () => {
+			const llmJsonLd = JSON.stringify({
+				"@context": "https://schema.org",
+				"@type": "Product",
+				name: "Test Page",
+				description: "A test product page",
+			});
+			const chatLLM = vi.fn().mockResolvedValue(makeLLMResponse(llmJsonLd));
+			const input = makeInput([
+				makeTask({ change_type: "SCHEMA_MARKUP", title: "JSON-LD 구조화 데이터 추가" }),
+			]);
+
+			const result = await runOptimization(input, { chatLLM });
+
+			expect(result.applied_tasks).toHaveLength(1);
+			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
+				(c: string[]) => c[0] === "index.html",
+			);
+			expect(writeCall).toBeTruthy();
+			expect(writeCall![1]).toContain("Product");
+			expect(writeCall![1]).toContain("application/ld+json");
+		});
+
+		it("generates site-specific llms.txt via LLM", async () => {
+			const llmContent =
+				"# Test Page\n\nA detailed description of Test Page with specific content.\n\n## Key Sections\n- Products overview\n- Technical specifications";
+			const chatLLM = vi.fn().mockResolvedValue(makeLLMResponse(llmContent));
+			const input = makeInput([makeTask({ change_type: "LLMS_TXT", title: "llms.txt 파일 생성" })]);
+
+			const result = await runOptimization(input, { chatLLM });
+
+			expect(result.applied_tasks).toHaveLength(1);
+			expect(result.files_modified).toContain("llms.txt");
+			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
+				(c: string[]) => c[0] === "llms.txt",
+			);
+			expect(writeCall).toBeTruthy();
+			// Should contain LLM-generated content, not boilerplate
+			expect(writeCall![1]).toContain("Test Page");
+			expect(writeCall![1]).toContain("Technical specifications");
+			expect(writeCall![1]).not.toBe(
+				"# Site Information\n\nThis site provides information about products and services.\n\n## Key Content\n- Products and specifications\n- Pricing information\n- Company information\n",
+			);
+		});
+
+		it("falls back to hardcoded when LLM fails", async () => {
+			const chatLLM = vi.fn().mockRejectedValue(new Error("API error"));
+			const input = makeInput([
+				makeTask({ change_type: "METADATA", title: "Meta description 추가" }),
+			]);
+
+			const result = await runOptimization(input, { chatLLM });
+
+			expect(result.applied_tasks).toHaveLength(1);
+			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
+				(c: string[]) => c[0] === "index.html",
+			);
+			expect(writeCall).toBeTruthy();
+			// Should have the fallback description
+			expect(writeCall![1]).toContain("Optimized page description for LLM discoverability");
+		});
+	});
+
 	describe("runOptimization — multi-page support (KI-003)", () => {
 		function makeMultiPageInput(tasks: OptimizationTask[]): OptimizationInput {
 			const files: Record<string, string> = {

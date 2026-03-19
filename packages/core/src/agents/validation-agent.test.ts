@@ -165,6 +165,61 @@ describe("Validation Agent", () => {
 		});
 	});
 
+	describe("runValidation — with LLM verdict", () => {
+		const mockLLMVerdict = {
+			improved_aspects: ["Better meta tags", "Added JSON-LD"],
+			remaining_issues: ["Missing FAQ schema"],
+			llm_friendliness_verdict: "better" as const,
+			specific_recommendations: ["Add FAQ section"],
+			confidence: 0.75,
+		};
+
+		function makeLLMResponse(content: string) {
+			return {
+				content,
+				model: "gpt-4o",
+				provider: "openai",
+				usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+				latency_ms: 250,
+				cost_usd: 0.01,
+			};
+		}
+
+		it("includes llm_verdict when chatLLM provided", async () => {
+			const deps = makeDeps(65);
+			const chatLLM = vi.fn().mockResolvedValue(makeLLMResponse(JSON.stringify(mockLLMVerdict)));
+			const depsWithLLM = { ...deps, chatLLM };
+
+			const result = await runValidation(makeInput(), depsWithLLM);
+
+			expect(result.llm_verdict).not.toBeNull();
+			expect(result.llm_verdict!.improved_aspects).toEqual(["Better meta tags", "Added JSON-LD"]);
+			expect(result.llm_verdict!.remaining_issues).toEqual(["Missing FAQ schema"]);
+			expect(result.llm_verdict!.llm_friendliness_verdict).toBe("better");
+			expect(result.llm_verdict!.specific_recommendations).toEqual(["Add FAQ section"]);
+			expect(result.llm_verdict!.confidence).toBe(0.75);
+			expect(chatLLM).toHaveBeenCalledOnce();
+		});
+
+		it("llm_verdict is null without chatLLM", async () => {
+			const result = await runValidation(makeInput(), makeDeps(65));
+			expect(result.llm_verdict).toBeNull();
+		});
+
+		it("llm_verdict is null when chatLLM fails", async () => {
+			const deps = makeDeps(65);
+			const chatLLM = vi.fn().mockRejectedValue(new Error("LLM timeout"));
+			const depsWithLLM = { ...deps, chatLLM };
+
+			const result = await runValidation(makeInput(), depsWithLLM);
+			expect(result.llm_verdict).toBeNull();
+			// Other fields should still be correct
+			expect(result.after_score).toBe(65);
+			expect(result.delta).toBe(15);
+			expect(result.improved).toBe(true);
+		});
+	});
+
 	describe("runValidation — edge cases", () => {
 		it("handles crawl error", async () => {
 			const deps = {
