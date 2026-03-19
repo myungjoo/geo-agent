@@ -241,3 +241,138 @@ describe("Pipeline Runner — Synthetic Probes", () => {
 		expect(probes.summary.citation_rate).toBeGreaterThanOrEqual(0);
 	});
 });
+
+// ── resultFullFn Regression Tests ────────────────────────
+
+function makeStageTracker() {
+	const stageResults: Array<{ stage: string; resultFull?: unknown }> = [];
+	return {
+		stageResults,
+		callbacks: {
+			onStageStart: async (_pid: string, stage: string, _cycle: number, _prompt: string) => {
+				return `exec-${stage}`;
+			},
+			onStageComplete: async (execId: string, _summary: string, resultFull?: unknown) => {
+				stageResults.push({
+					stage: execId.replace("exec-", ""),
+					resultFull,
+				});
+			},
+			onStageFail: async () => {},
+		},
+	};
+}
+
+describe("Pipeline Runner — resultFullFn regression", () => {
+	it("REPORTING result_full contains LLM tracking data when LLM is used", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+		const { stageResults, callbacks } = makeStageTracker();
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			stageCallbacks: callbacks,
+		});
+
+		const result = await runPipeline(config, deps);
+		expect(result.success).toBe(true);
+
+		const reporting = stageResults.find((s) => s.stage === "REPORTING");
+		expect(reporting).toBeDefined();
+		expect(reporting?.resultFull).toBeDefined();
+
+		const full = reporting?.resultFull as {
+			initial: number;
+			final: number;
+			llm_models_used: string[];
+			llm_errors: string[];
+			llm_call_log: unknown[];
+		};
+		expect(full.llm_models_used).toBeInstanceOf(Array);
+		expect(full.llm_models_used.length).toBeGreaterThan(0);
+		expect(full.llm_models_used[0]).toContain("test-provider");
+		expect(full.llm_errors).toBeInstanceOf(Array);
+		expect(full.llm_call_log).toBeInstanceOf(Array);
+		expect(full.llm_call_log.length).toBeGreaterThan(0);
+		expect(full.initial).toBeGreaterThan(0);
+		expect(typeof full.final).toBe("number");
+	});
+
+	it("llm_call_log entries have correct structure", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+		const { stageResults, callbacks } = makeStageTracker();
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			stageCallbacks: callbacks,
+		});
+
+		await runPipeline(config, deps);
+
+		const reporting = stageResults.find((s) => s.stage === "REPORTING");
+		const full = reporting?.resultFull as { llm_call_log: Record<string, unknown>[] };
+		expect(full.llm_call_log.length).toBeGreaterThan(0);
+
+		const entry = full.llm_call_log[0];
+		expect(typeof entry.seq).toBe("number");
+		expect(typeof entry.timestamp).toBe("string");
+		expect(typeof entry.stage).toBe("string");
+		expect(typeof entry.provider).toBe("string");
+		expect(typeof entry.model).toBe("string");
+		expect(typeof entry.prompt_summary).toBe("string");
+		expect(typeof entry.response_summary).toBe("string");
+		expect(typeof entry.duration_ms).toBe("number");
+	});
+
+	it("CLONING result_full is stored", async () => {
+		const deps = makeDeps();
+		const { stageResults, callbacks } = makeStageTracker();
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			stageCallbacks: callbacks,
+		});
+
+		await runPipeline(config, deps);
+
+		const cloning = stageResults.find((s) => s.stage === "CLONING");
+		expect(cloning).toBeDefined();
+		expect(cloning?.resultFull).toBeDefined();
+
+		const full = cloning?.resultFull as { clone_path: string; files: number };
+		expect(typeof full.clone_path).toBe("string");
+		expect(typeof full.files).toBe("number");
+		expect(full.files).toBeGreaterThan(0);
+	});
+
+	it("without LLM, llm_models_used and llm_call_log are empty arrays", async () => {
+		const deps = makeDeps();
+		// No chatLLM
+		const { stageResults, callbacks } = makeStageTracker();
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			stageCallbacks: callbacks,
+		});
+
+		await runPipeline(config, deps);
+
+		const reporting = stageResults.find((s) => s.stage === "REPORTING");
+		expect(reporting).toBeDefined();
+		expect(reporting?.resultFull).toBeDefined();
+
+		const full = reporting?.resultFull as {
+			llm_models_used: string[];
+			llm_call_log: unknown[];
+			llm_errors: string[];
+		};
+		expect(full.llm_models_used).toEqual([]);
+		expect(full.llm_call_log).toEqual([]);
+		expect(full.llm_errors).toEqual([]);
+	});
+});

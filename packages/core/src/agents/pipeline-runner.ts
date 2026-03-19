@@ -378,6 +378,7 @@ export async function runPipeline(
 				return { clone_path: config.workspace_dir, files: 1 + additionalFiles.size };
 			},
 			(out) => `Clone created at ${out.clone_path} (${out.files} files)`,
+			(out) => out,
 		);
 	});
 
@@ -630,6 +631,7 @@ export async function runPipeline(
 			},
 			(out) =>
 				`Report: ${out.initial}→${out.final} (+${out.final - out.initial}), LLM: ${out.llm_models_used.join(", ") || "none"}`,
+			(out) => out,
 		);
 	});
 
