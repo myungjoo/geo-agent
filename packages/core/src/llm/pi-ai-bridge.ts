@@ -47,11 +47,14 @@ export function piAiModelFromProvider(provider: LLMProviderSettings): Model<Api>
 		throw new Error(`Provider "${provider.provider_id}" not mapped to pi-ai provider`);
 	}
 
+	// Perplexity uses OpenAI-compatible API with custom baseUrl
+	const effectiveBaseUrl = provider.api_base_url
+		?? (provider.provider_id === "perplexity" ? "https://api.perplexity.ai" : undefined);
+
 	try {
 		const model = getModel(piProvider as any, provider.default_model as any);
-		// Override baseUrl if provider has custom one
-		if (provider.api_base_url) {
-			return { ...model, baseUrl: provider.api_base_url };
+		if (effectiveBaseUrl) {
+			return { ...model, baseUrl: effectiveBaseUrl };
 		}
 		return model;
 	} catch {
@@ -72,7 +75,7 @@ export function piAiModelFromProvider(provider: LLMProviderSettings): Model<Api>
 			name: provider.default_model,
 			api,
 			provider: piProvider,
-			baseUrl: provider.api_base_url ?? getDefaultBaseUrl(piProvider),
+			baseUrl: effectiveBaseUrl ?? getDefaultBaseUrl(piProvider),
 			reasoning: false,
 			input: ["text"],
 			cost: { input: 0.002, output: 0.006, cacheRead: 0, cacheWrite: 0 },
@@ -99,6 +102,7 @@ function getDefaultBaseUrl(provider: string): string {
 
 /**
  * Complete a single LLM request using pi-ai, returning the GEO LLMResponse format.
+ * Supports json_mode via onPayload injection for providers that need it.
  */
 export async function piAiComplete(
 	model: Model<Api>,
@@ -118,11 +122,34 @@ export async function piAiComplete(
 		messages,
 	};
 
+	// json_mode: inject response_format / text.format into the raw API payload
+	const onPayload = request.json_mode
+		? (payload: unknown) => {
+				const p = payload as Record<string, unknown>;
+				const api = model.api;
+				if (api === "openai-completions" || api === "mistral-conversations") {
+					// OpenAI chat/completions format
+					p.response_format = { type: "json_object" };
+				} else if (api === "openai-responses" || api === "openai-codex-responses" || api === "azure-openai-responses") {
+					// OpenAI Responses API format
+					p.text = { format: { type: "json_object" } };
+				} else if (api === "google-generative-ai" || api === "google-vertex") {
+					// Google: inject into generationConfig
+					const gc = (p.generationConfig ?? {}) as Record<string, unknown>;
+					gc.responseMimeType = "application/json";
+					p.generationConfig = gc;
+				}
+				// Anthropic: no native json_mode — handled via prompt instructions
+				return p;
+			}
+		: undefined;
+
 	const startTime = Date.now();
 	const response = await complete(model, context, {
 		apiKey: options?.apiKey,
 		temperature: request.temperature,
 		maxTokens: request.max_tokens,
+		onPayload,
 	});
 
 	const textContent = response.content

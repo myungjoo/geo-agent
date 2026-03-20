@@ -1,12 +1,13 @@
 /**
  * GEO LLM Client — 통합 LLM 추상화 레이어
  *
- * OpenAI / Anthropic / Google Generative AI SDK를 통합하여 단일 인터페이스로 제공.
- * 프로바이더 자동 라우팅, 비용 추적, 에러 핸들링 포함.
+ * pi-ai를 통해 모든 프로바이더 (OpenAI, Anthropic, Google, Perplexity, Azure)에
+ * 단일 인터페이스로 접근. 프로바이더 라우팅, 비용 추적 포함.
  */
 import { z } from "zod";
-import type { LLMProviderId, LLMProviderSettings } from "./provider-config.js";
+import type { LLMProviderSettings } from "./provider-config.js";
 import { ProviderConfigManager } from "./provider-config.js";
+import { piAiModelFromProvider, piAiComplete } from "./pi-ai-bridge.js";
 
 // ── LLM 요청/응답 스키마 ─────────────────────────────────────
 
@@ -81,267 +82,6 @@ export class CostTracker {
 	}
 }
 
-// ── Price table (USD per 1K tokens) ──────────────────────────
-
-const PRICING: Record<string, { input: number; output: number }> = {
-	"gpt-5.3-codex": { input: 0.00075, output: 0.003 },
-	"gpt-5.2": { input: 0.002, output: 0.008 },
-	"gpt-4o": { input: 0.0025, output: 0.01 },
-	"gpt-4o-mini": { input: 0.00015, output: 0.0006 },
-	"gpt-4-turbo": { input: 0.01, output: 0.03 },
-	"claude-sonnet-4-20250514": { input: 0.003, output: 0.015 },
-	"claude-haiku-4-5-20251001": { input: 0.0008, output: 0.004 },
-	"claude-opus-4-20250514": { input: 0.015, output: 0.075 },
-	"gemini-2.0-flash": { input: 0.0001, output: 0.0004 },
-	"gemini-2.5-pro-preview-05-06": { input: 0.00125, output: 0.01 },
-};
-
-function estimateCost(model: string, promptTokens: number, completionTokens: number): number {
-	const price = PRICING[model] ?? { input: 0.002, output: 0.006 };
-	return (promptTokens / 1000) * price.input + (completionTokens / 1000) * price.output;
-}
-
-// ── Provider-specific callers ────────────────────────────────
-
-async function callOpenAI(
-	provider: LLMProviderSettings,
-	request: LLMRequest,
-	model: string,
-): Promise<LLMResponse> {
-	const { default: OpenAI } = await import("openai");
-	const client = new OpenAI({
-		apiKey: provider.api_key ?? "",
-		baseURL: provider.api_base_url || undefined,
-	});
-
-	const messages: Array<{ role: "system" | "user"; content: string }> = [];
-	if (request.system_instruction) {
-		messages.push({ role: "system", content: request.system_instruction });
-	}
-	messages.push({ role: "user", content: request.prompt });
-
-	const startTime = Date.now();
-	const completion = await client.chat.completions.create({
-		model,
-		messages,
-		max_tokens: request.max_tokens ?? provider.max_tokens,
-		temperature: request.temperature ?? provider.temperature,
-		...(request.json_mode ? { response_format: { type: "json_object" } } : {}),
-	});
-
-	const usage = completion.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-	const costUsd = estimateCost(model, usage.prompt_tokens, usage.completion_tokens);
-
-	return {
-		content: completion.choices[0]?.message?.content ?? "",
-		model: completion.model ?? model,
-		provider: provider.provider_id,
-		usage: {
-			prompt_tokens: usage.prompt_tokens,
-			completion_tokens: usage.completion_tokens,
-			total_tokens: usage.total_tokens,
-		},
-		latency_ms: Date.now() - startTime,
-		cost_usd: costUsd,
-	};
-}
-
-/** Models that use v1/responses (GPT-5 family, o-series) */
-function isResponsesModel(model: string): boolean {
-	const lower = model.toLowerCase();
-	return (
-		lower.startsWith("gpt-5") ||
-		lower.startsWith("o3") ||
-		lower.startsWith("o4") ||
-		lower.includes("codex")
-	);
-}
-
-async function callOpenAIResponses(
-	provider: LLMProviderSettings,
-	request: LLMRequest,
-	model: string,
-): Promise<LLMResponse> {
-	const { default: OpenAI } = await import("openai");
-	const client = new OpenAI({
-		apiKey: provider.api_key ?? "",
-		baseURL: provider.api_base_url || undefined,
-	});
-
-	const startTime = Date.now();
-
-	const params: Record<string, unknown> = {
-		model,
-		input: request.prompt,
-		...(request.system_instruction ? { instructions: request.system_instruction } : {}),
-		...(request.max_tokens ? { max_output_tokens: request.max_tokens } : {}),
-		...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
-		...(request.json_mode ? { text: { format: { type: "json_object" } } } : {}),
-	};
-
-	const response = await client.responses.create(params as any);
-
-	const usage = response.usage ?? { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
-	const inputTokens = usage.input_tokens;
-	const outputTokens = usage.output_tokens;
-	const costUsd = estimateCost(model, inputTokens, outputTokens);
-
-	return {
-		content: response.output_text ?? "",
-		model: String(response.model ?? model),
-		provider: provider.provider_id,
-		usage: {
-			prompt_tokens: inputTokens,
-			completion_tokens: outputTokens,
-			total_tokens: usage.total_tokens,
-		},
-		latency_ms: Date.now() - startTime,
-		cost_usd: costUsd,
-	};
-}
-
-async function callAzureOpenAI(
-	provider: LLMProviderSettings,
-	request: LLMRequest,
-	model: string,
-): Promise<LLMResponse> {
-	const baseUrl = (provider.api_base_url ?? "").replace(/\/+$/, "");
-	const deployment = model;
-	const url = `${baseUrl}/openai/deployments/${deployment}/chat/completions?api-version=2024-08-01-preview`;
-
-	const messages: Array<{ role: "system" | "user"; content: string }> = [];
-	if (request.system_instruction) {
-		messages.push({ role: "system", content: request.system_instruction });
-	}
-	messages.push({ role: "user", content: request.prompt });
-
-	const startTime = Date.now();
-	const res = await fetch(url, {
-		method: "POST",
-		headers: {
-			"api-key": provider.api_key ?? "",
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			messages,
-			max_tokens: request.max_tokens ?? provider.max_tokens ?? 4096,
-			temperature: request.temperature ?? provider.temperature ?? 0.7,
-			...(request.json_mode ? { response_format: { type: "json_object" } } : {}),
-		}),
-	});
-
-	if (!res.ok) {
-		const errBody = await res.text();
-		throw new Error(`Azure OpenAI error ${res.status}: ${errBody}`);
-	}
-
-	const data = await res.json();
-	const content = data.choices?.[0]?.message?.content ?? "";
-	const usage = data.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-	const costUsd = estimateCost(data.model ?? model, usage.prompt_tokens, usage.completion_tokens);
-
-	return {
-		content,
-		model: data.model ?? model,
-		provider: provider.provider_id,
-		usage: {
-			prompt_tokens: usage.prompt_tokens,
-			completion_tokens: usage.completion_tokens,
-			total_tokens: usage.total_tokens,
-		},
-		latency_ms: Date.now() - startTime,
-		cost_usd: costUsd,
-	};
-}
-
-async function callAnthropic(
-	provider: LLMProviderSettings,
-	request: LLMRequest,
-	model: string,
-): Promise<LLMResponse> {
-	const { default: Anthropic } = await import("@anthropic-ai/sdk");
-	const client = new Anthropic({
-		apiKey: provider.api_key ?? "",
-		baseURL: provider.api_base_url || undefined,
-	});
-
-	const startTime = Date.now();
-	const message = await client.messages.create({
-		model,
-		max_tokens: request.max_tokens ?? provider.max_tokens ?? 4096,
-		...(request.system_instruction ? { system: request.system_instruction } : {}),
-		messages: [{ role: "user", content: request.prompt }],
-		...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
-	});
-
-	const usage = message.usage;
-	const promptTokens = usage?.input_tokens ?? 0;
-	const completionTokens = usage?.output_tokens ?? 0;
-	const costUsd = estimateCost(model, promptTokens, completionTokens);
-
-	const content =
-		message.content
-			.filter((b) => b.type === "text")
-			.map((b) => (b as { type: "text"; text: string }).text)
-			.join("") ?? "";
-
-	return {
-		content,
-		model: message.model ?? model,
-		provider: provider.provider_id,
-		usage: {
-			prompt_tokens: promptTokens,
-			completion_tokens: completionTokens,
-			total_tokens: promptTokens + completionTokens,
-		},
-		latency_ms: Date.now() - startTime,
-		cost_usd: costUsd,
-	};
-}
-
-async function callGoogle(
-	provider: LLMProviderSettings,
-	request: LLMRequest,
-	model: string,
-): Promise<LLMResponse> {
-	const { GoogleGenerativeAI } = await import("@google/generative-ai");
-	const genAI = new GoogleGenerativeAI(provider.api_key ?? "");
-	const genModel = genAI.getGenerativeModel({
-		model,
-		...(request.system_instruction ? { systemInstruction: request.system_instruction } : {}),
-	});
-
-	const startTime = Date.now();
-	const result = await genModel.generateContent({
-		contents: [{ role: "user", parts: [{ text: request.prompt }] }],
-		generationConfig: {
-			maxOutputTokens: request.max_tokens ?? provider.max_tokens ?? 4096,
-			temperature: request.temperature ?? provider.temperature ?? 0.7,
-			...(request.json_mode ? { responseMimeType: "application/json" } : {}),
-		},
-	});
-
-	const response = result.response;
-	const text = response.text();
-	const usage = response.usageMetadata;
-	const promptTokens = usage?.promptTokenCount ?? 0;
-	const completionTokens = usage?.candidatesTokenCount ?? 0;
-	const costUsd = estimateCost(model, promptTokens, completionTokens);
-
-	return {
-		content: text,
-		model,
-		provider: provider.provider_id,
-		usage: {
-			prompt_tokens: promptTokens,
-			completion_tokens: completionTokens,
-			total_tokens: promptTokens + completionTokens,
-		},
-		latency_ms: Date.now() - startTime,
-		cost_usd: costUsd,
-	};
-}
-
 // ── GEO LLM Client ──────────────────────────────────────────
 
 export class GeoLLMClient {
@@ -360,20 +100,19 @@ export class GeoLLMClient {
 			throw new Error("No LLM providers enabled. Configure at least one provider.");
 		}
 
-		// Prefer providers with API keys
 		const withKeys = enabled.filter((p) => p.api_key);
 
 		if (preferredProvider) {
-			const preferred = withKeys.find((p) => p.provider_id === preferredProvider)
-				?? enabled.find((p) => p.provider_id === preferredProvider);
+			const preferred =
+				withKeys.find((p) => p.provider_id === preferredProvider) ??
+				enabled.find((p) => p.provider_id === preferredProvider);
 			if (preferred) return preferred;
 		}
 
-		// 기본: API key가 있는 첫 번째 프로바이더, 없으면 첫 번째 활성
 		return withKeys[0] ?? enabled[0];
 	}
 
-	/** LLM 호출 — 프로바이더별 SDK 자동 라우팅 */
+	/** LLM 호출 — pi-ai complete()를 통해 모든 프로바이더 자동 라우팅 */
 	async chat(request: LLMRequest): Promise<LLMResponse> {
 		const provider = this.selectProvider(request.provider);
 		const model = request.model ?? provider.default_model;
@@ -384,40 +123,16 @@ export class GeoLLMClient {
 			);
 		}
 
-		let response: LLMResponse;
+		// Build pi-ai Model, overriding the model ID if request specifies one
+		const piModel = piAiModelFromProvider(
+			model !== provider.default_model ? { ...provider, default_model: model } : provider,
+		);
 
-		switch (provider.provider_id) {
-			case "openai":
-				response = isResponsesModel(model)
-					? await callOpenAIResponses(provider, request, model)
-					: await callOpenAI(provider, request, model);
-				break;
-			case "anthropic":
-				response = await callAnthropic(provider, request, model);
-				break;
-			case "google":
-				response = await callGoogle(provider, request, model);
-				break;
-			case "perplexity":
-				// Perplexity uses OpenAI-compatible API
-				response = await callOpenAI(
-					{ ...provider, api_base_url: provider.api_base_url || "https://api.perplexity.ai" },
-					request,
-					model,
-				);
-				break;
-			case "microsoft":
-				response = await callAzureOpenAI(provider, request, model);
-				break;
-			default:
-				throw new Error(
-					`Provider "${provider.provider_id}" is not yet supported for direct API calls.`,
-				);
-		}
+		const response = await piAiComplete(piModel, request, { apiKey: provider.api_key });
 
 		this.costTracker.record(
 			provider.provider_id,
-			model,
+			response.model,
 			response.usage.total_tokens,
 			response.cost_usd,
 		);
