@@ -56,10 +56,21 @@ export function piAiModelFromProvider(provider: LLMProviderSettings): Model<Api>
 		return model;
 	} catch {
 		// Model not in pi-ai's registry — build a minimal Model object
+		const modelId = provider.default_model.toLowerCase();
+		let api: string;
+		if (piProvider === "anthropic") {
+			api = "anthropic-messages";
+		} else if (modelId.includes("codex")) {
+			api = "openai-codex-responses";
+		} else if (modelId.startsWith("gpt-5") || modelId.startsWith("o3") || modelId.startsWith("o4")) {
+			api = "openai-responses";
+		} else {
+			api = "openai-completions";
+		}
 		return {
 			id: provider.default_model,
 			name: provider.default_model,
-			api: piProvider === "anthropic" ? "anthropic-messages" : "openai-completions",
+			api,
 			provider: piProvider,
 			baseUrl: provider.api_base_url ?? getDefaultBaseUrl(piProvider),
 			reasoning: false,

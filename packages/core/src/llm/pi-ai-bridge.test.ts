@@ -65,6 +65,61 @@ describe("pi-ai-bridge", () => {
 			expect(() => piAiModelFromProvider(provider)).toThrow("not mapped");
 		});
 
+		it("should use responses API for codex models", () => {
+			const provider: LLMProviderSettings = {
+				provider_id: "openai",
+				display_name: "OpenAI",
+				enabled: true,
+				auth_method: "api_key",
+				api_key: "sk-test",
+				default_model: "gpt-5.3-codex",
+				available_models: ["gpt-5.3-codex"],
+				max_tokens: 4096,
+				temperature: 0.3,
+				rate_limit_rpm: 60,
+			};
+
+			const model = piAiModelFromProvider(provider);
+			// pi-ai may map it to openai-responses or openai-codex-responses
+			expect(model.api).toMatch(/responses/);
+		});
+
+		it("should use openai-responses API for gpt-5 models", () => {
+			const provider: LLMProviderSettings = {
+				provider_id: "openai",
+				display_name: "OpenAI",
+				enabled: true,
+				auth_method: "api_key",
+				api_key: "sk-test",
+				default_model: "gpt-5.2",
+				available_models: ["gpt-5.2"],
+				max_tokens: 4096,
+				temperature: 0.3,
+				rate_limit_rpm: 60,
+			};
+
+			const model = piAiModelFromProvider(provider);
+			expect(model.api).toBe("openai-responses");
+		});
+
+		it("should use openai-responses API for o3/o4 models", () => {
+			const provider: LLMProviderSettings = {
+				provider_id: "openai",
+				display_name: "OpenAI",
+				enabled: true,
+				auth_method: "api_key",
+				api_key: "sk-test",
+				default_model: "o3-mini",
+				available_models: ["o3-mini"],
+				max_tokens: 4096,
+				temperature: 0.3,
+				rate_limit_rpm: 60,
+			};
+
+			const model = piAiModelFromProvider(provider);
+			expect(model.api).toBe("openai-responses");
+		});
+
 		it("should override baseUrl when api_base_url is set", () => {
 			const provider: LLMProviderSettings = {
 				provider_id: "openai",
