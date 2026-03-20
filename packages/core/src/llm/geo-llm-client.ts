@@ -84,6 +84,8 @@ export class CostTracker {
 // ── Price table (USD per 1K tokens) ──────────────────────────
 
 const PRICING: Record<string, { input: number; output: number }> = {
+	"gpt-5.3-codex": { input: 0.00075, output: 0.003 },
+	"gpt-5.2": { input: 0.002, output: 0.008 },
 	"gpt-4o": { input: 0.0025, output: 0.01 },
 	"gpt-4o-mini": { input: 0.00015, output: 0.0006 },
 	"gpt-4-turbo": { input: 0.01, output: 0.03 },
@@ -144,21 +146,18 @@ async function callOpenAI(
 	};
 }
 
-/** Models that use v1/completions instead of v1/chat/completions */
-const COMPLETIONS_MODELS = [
-	"gpt-5.3-codex",
-	"codex",
-	"davinci",
-	"babbage",
-	"curie",
-	"ada",
-];
-
-function isCompletionsModel(model: string): boolean {
-	return COMPLETIONS_MODELS.some((m) => model.toLowerCase().includes(m.toLowerCase()));
+/** Models that use v1/responses (GPT-5 family, o-series) */
+function isResponsesModel(model: string): boolean {
+	const lower = model.toLowerCase();
+	return (
+		lower.startsWith("gpt-5") ||
+		lower.startsWith("o3") ||
+		lower.startsWith("o4") ||
+		lower.includes("codex")
+	);
 }
 
-async function callOpenAICompletions(
+async function callOpenAIResponses(
 	provider: LLMProviderSettings,
 	request: LLMRequest,
 	model: string,
@@ -169,31 +168,31 @@ async function callOpenAICompletions(
 		baseURL: provider.api_base_url || undefined,
 	});
 
-	// Build prompt: system instruction + user prompt
-	let prompt = "";
-	if (request.system_instruction) {
-		prompt += `${request.system_instruction}\n\n`;
-	}
-	prompt += request.prompt;
-
 	const startTime = Date.now();
-	const completion = await client.completions.create({
-		model,
-		prompt,
-		max_tokens: request.max_tokens ?? provider.max_tokens ?? 4096,
-		temperature: request.temperature ?? provider.temperature ?? 0.7,
-	});
 
-	const usage = completion.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-	const costUsd = estimateCost(model, usage.prompt_tokens, usage.completion_tokens);
+	const params: Record<string, unknown> = {
+		model,
+		input: request.prompt,
+		...(request.system_instruction ? { instructions: request.system_instruction } : {}),
+		...(request.max_tokens ? { max_output_tokens: request.max_tokens } : {}),
+		...(request.temperature !== undefined ? { temperature: request.temperature } : {}),
+		...(request.json_mode ? { text: { format: { type: "json_object" } } } : {}),
+	};
+
+	const response = await client.responses.create(params as any);
+
+	const usage = response.usage ?? { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+	const inputTokens = usage.input_tokens;
+	const outputTokens = usage.output_tokens;
+	const costUsd = estimateCost(model, inputTokens, outputTokens);
 
 	return {
-		content: completion.choices[0]?.text ?? "",
-		model: completion.model ?? model,
+		content: response.output_text ?? "",
+		model: String(response.model ?? model),
 		provider: provider.provider_id,
 		usage: {
-			prompt_tokens: usage.prompt_tokens,
-			completion_tokens: usage.completion_tokens,
+			prompt_tokens: inputTokens,
+			completion_tokens: outputTokens,
 			total_tokens: usage.total_tokens,
 		},
 		latency_ms: Date.now() - startTime,
@@ -389,8 +388,8 @@ export class GeoLLMClient {
 
 		switch (provider.provider_id) {
 			case "openai":
-				response = isCompletionsModel(model)
-					? await callOpenAICompletions(provider, request, model)
+				response = isResponsesModel(model)
+					? await callOpenAIResponses(provider, request, model)
 					: await callOpenAI(provider, request, model);
 				break;
 			case "anthropic":
