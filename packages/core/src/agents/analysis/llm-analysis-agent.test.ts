@@ -1,116 +1,54 @@
 import { describe, it, expect, vi } from "vitest";
-import { runAnalysisWithLLM, type LLMAnalysisResult } from "./llm-analysis-agent.js";
-import type { AnalysisDeps } from "./analysis-agent.js";
-import type { CrawlData } from "../shared/types.js";
+import { resolveModel, type LLMAnalysisResult } from "./llm-analysis-agent.js";
 
-// ── Mock Data ──────────────────────────────────────────────
-
-const mockCrawlData: CrawlData = {
-	html: `<html>
-<head>
-	<title>Samsung Galaxy S25</title>
-	<meta name="description" content="Samsung Galaxy S25 specs">
-	<meta property="og:title" content="Galaxy S25">
-	<script type="application/ld+json">{"@type": "Product", "name": "Galaxy S25"}</script>
-</head>
-<body>
-	<h1>Samsung Galaxy S25</h1>
-	<article>
-		<section>
-			<h2>Specifications</h2>
-			<p>6.2 inch display, 128GB storage, 50MP camera</p>
-		</section>
-	</article>
-</body>
-</html>`,
-	url: "https://www.samsung.com",
-	status_code: 200,
-	content_type: "text/html",
-	response_time_ms: 200,
-	robots_txt: "User-agent: *\nAllow: /\nUser-agent: GPTBot\nAllow: /",
-	llms_txt: null,
-	sitemap_xml: "<urlset><url><loc>https://www.samsung.com/</loc></url></urlset>",
-	json_ld: [{ "@type": "Product", name: "Galaxy S25" }],
-	meta_tags: { description: "Samsung Galaxy S25 specs", "og:title": "Galaxy S25" },
-	title: "Samsung Galaxy S25",
-	canonical_url: "https://www.samsung.com",
-	links: [{ href: "/products", rel: "", text: "Products" }],
-	headers: { "content-type": "text/html" },
-};
-
-const mockDeps: AnalysisDeps = {
-	crawlTarget: vi.fn().mockResolvedValue(mockCrawlData),
-	scoreTarget: vi.fn().mockReturnValue({
-		overall_score: 65,
-		grade: "Needs Improvement",
-		dimensions: [
-			{ id: "S1", label: "LLM Crawlability", score: 70, weight: 0.15, details: ["robots.txt OK"] },
-			{ id: "S2", label: "Structured Data", score: 55, weight: 0.25, details: ["1 JSON-LD block"] },
-			{ id: "S3", label: "Content Readability", score: 60, weight: 0.20, details: ["H1 present"] },
-			{ id: "S4", label: "Fact Density", score: 50, weight: 0.10, details: [] },
-			{ id: "S5", label: "Brand Message", score: 40, weight: 0.10, details: [] },
-			{ id: "S6", label: "AI Infrastructure", score: 30, weight: 0.10, details: [] },
-			{ id: "S7", label: "Navigation", score: 45, weight: 0.10, details: [] },
-		],
-	}),
-	classifySite: vi.fn().mockReturnValue({
-		site_type: "manufacturer",
-		confidence: 0.6,
-		matched_signals: ["has-product-schema"],
-		all_signals: [],
-	}),
-};
-
-// ── Tests ──────────────────────────────────────────────────
-
-describe("runAnalysisWithLLM", () => {
-	describe("without LLM config (rule-based)", () => {
-		it("should run rule-based analysis", async () => {
-			const result = await runAnalysisWithLLM(
-				{ target_id: "t1", target_url: "https://www.samsung.com" },
-				mockDeps,
-			);
-
-			expect(result.usedLLMAgent).toBe(false);
-			expect(result.llmAssessment).toBeNull();
-			expect(result.richReport).toBeNull();
-			expect(result.agentLoopResult).toBeNull();
-			expect(result.toolCallLog).toEqual([]);
-			expect(result.output).toBeTruthy();
-			expect(result.output.geo_scores.overall_score).toBe(65);
-		});
-
-		it("should produce valid AnalysisOutput", async () => {
-			const result = await runAnalysisWithLLM(
-				{ target_id: "t1", target_url: "https://www.samsung.com" },
-				mockDeps,
-			);
-
-			const output = result.output;
-			expect(output.report).toBeTruthy();
-			expect(output.report.target_id).toBe("t1");
-			expect(output.crawl_data).toBeTruthy();
-			expect(output.classification.site_type).toBe("manufacturer");
-			expect(output.geo_scores.dimensions).toHaveLength(7);
-			expect(output.eval_data).toBeTruthy();
+describe("LLM Analysis Agent", () => {
+	describe("resolveModel", () => {
+		it("should throw when no provider with API key is configured", () => {
+			// Use a temp dir with no config files — ProviderConfigManager returns defaults (no API keys)
+			expect(() => resolveModel("/tmp/nonexistent-workspace")).toThrow("No LLM provider");
 		});
 	});
 
-	describe("LLMAnalysisResult structure", () => {
-		it("should have correct fields", () => {
+	describe("LLMAnalysisResult type contract", () => {
+		it("should have mandatory richReport field", () => {
 			const mockResult: LLMAnalysisResult = {
 				output: {} as any,
-				usedLLMAgent: true,
+				richReport: {
+					target: { url: "https://example.com", title: "Test", site_type: "generic", site_type_confidence: 0.8, analyzed_at: new Date().toISOString() },
+					overall_score: 65,
+					grade: "Needs Improvement",
+					overview: { summary_cards: [], dimensions: [], llm_accessibility: [], strengths: [], weaknesses: [], opportunities: [] },
+					crawlability: { bot_policies: [], blocked_paths: [], allowed_paths: [], llms_txt: { exists: false, urls_checked: [], content_preview: null }, robots_txt_ai_section: null },
+					structured_data: { page_quality: [], schema_analysis: [], schema_counts: {} },
+					products: { category_scores: [], product_lists: [], spec_recognition: [] },
+					brand: { dimensions: [], claims: [] },
+					pages: { pages: [] },
+					recommendations: { high_priority: [], medium_priority: [], low_priority: [], competitive_comparison: null },
+					evidence: { sections: [], schema_implementation_matrix: [], js_dependency_details: [], claim_verifications: [] },
+					probes: null,
+					roadmap: { consumer_scenarios: [], vulnerability_scores: [], opportunity_matrix: [] },
+				},
 				llmAssessment: "Good GEO readiness",
-				agentLoopResult: null,
+				agentLoopResult: { finalText: "{}", messages: [], iterations: 5, totalUsage: { input: 100, output: 200, totalTokens: 300 }, totalCost: 0.01, completed: true, toolCallLog: [] },
 				toolCallLog: [
 					{ name: "crawl_page", args: { url: "https://example.com" }, result: "{}" },
+					{ name: "score_geo", args: { crawl_data_key: "homepage" }, result: "{}" },
 				],
 			};
 
-			expect(mockResult.usedLLMAgent).toBe(true);
-			expect(mockResult.toolCallLog).toHaveLength(1);
-			expect(mockResult.toolCallLog[0].name).toBe("crawl_page");
+			// richReport is NOT null — it's mandatory
+			expect(mockResult.richReport).toBeTruthy();
+			expect(mockResult.richReport.overall_score).toBe(65);
+			expect(mockResult.richReport.overview).toBeTruthy();
+			expect(mockResult.richReport.crawlability).toBeTruthy();
+			expect(mockResult.richReport.structured_data).toBeTruthy();
+			expect(mockResult.richReport.products).toBeTruthy();
+			expect(mockResult.richReport.brand).toBeTruthy();
+			expect(mockResult.richReport.pages).toBeTruthy();
+			expect(mockResult.richReport.recommendations).toBeTruthy();
+			expect(mockResult.richReport.evidence).toBeTruthy();
+			expect(mockResult.richReport.roadmap).toBeTruthy();
+			expect(mockResult.toolCallLog).toHaveLength(2);
 		});
 	});
 });

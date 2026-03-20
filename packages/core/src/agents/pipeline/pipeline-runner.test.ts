@@ -6,6 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
 import { type PipelineConfig, type PipelineDeps, runPipeline } from "./pipeline-runner.js";
 import type { CrawlData } from "../shared/types.js";
+import { runAnalysis } from "../analysis/analysis-agent.js";
+import type { LLMAnalysisResult } from "../analysis/llm-analysis-agent.js";
+import type { RichAnalysisReport } from "../analysis/rich-analysis-schema.js";
 
 let tmpDirs: string[] = [];
 
@@ -47,38 +50,82 @@ function makeCrawlData(): CrawlData {
 	};
 }
 
-function makeDeps(): PipelineDeps {
+function makeScoreTarget() {
 	let callCount = 0;
-	return {
-		crawlTarget: vi.fn().mockResolvedValue(makeCrawlData()),
-		scoreTarget: vi.fn().mockImplementation(() => {
-			callCount++;
-			// Score improves each call (simulating optimization effect)
-			const baseScore = 45 + callCount * 10;
-			return {
-				overall_score: Math.min(baseScore, 90),
-				grade: baseScore >= 75 ? "Good" : "Needs Improvement",
-				dimensions: [
-					{ id: "S1", label: "크롤링", score: 50 + callCount * 5, weight: 0.15, details: [] },
-					{ id: "S2", label: "구조화", score: 40 + callCount * 10, weight: 0.25, details: [] },
-					{ id: "S3", label: "가독성", score: 55 + callCount * 5, weight: 0.2, details: [] },
-					{ id: "S4", label: "팩트", score: 40, weight: 0.1, details: [] },
-					{ id: "S5", label: "브랜드", score: 60, weight: 0.1, details: [] },
-					{ id: "S6", label: "AI", score: 20 + callCount * 10, weight: 0.1, details: [] },
-					{ id: "S7", label: "네비게이션", score: 45, weight: 0.1, details: [] },
-				],
-			};
-		}),
-		classifySite: vi.fn().mockReturnValue({
-			site_type: "manufacturer",
-			confidence: 0.7,
-			matched_signals: ["Price pattern"],
-			all_signals: [
-				{ site_type: "manufacturer", confidence: 0.7, signals: ["Price"] },
-				{ site_type: "research", confidence: 0, signals: [] },
-				{ site_type: "generic", confidence: 0.3, signals: [] },
+	return vi.fn().mockImplementation(() => {
+		callCount++;
+		const baseScore = 45 + callCount * 10;
+		return {
+			overall_score: Math.min(baseScore, 90),
+			grade: baseScore >= 75 ? "Good" : "Needs Improvement",
+			dimensions: [
+				{ id: "S1", label: "크롤링", score: 50 + callCount * 5, weight: 0.15, details: [] },
+				{ id: "S2", label: "구조화", score: 40 + callCount * 10, weight: 0.25, details: [] },
+				{ id: "S3", label: "가독성", score: 55 + callCount * 5, weight: 0.2, details: [] },
+				{ id: "S4", label: "팩트", score: 40, weight: 0.1, details: [] },
+				{ id: "S5", label: "브랜드", score: 60, weight: 0.1, details: [] },
+				{ id: "S6", label: "AI", score: 20 + callCount * 10, weight: 0.1, details: [] },
+				{ id: "S7", label: "네비게이션", score: 45, weight: 0.1, details: [] },
 			],
-		}),
+		};
+	});
+}
+
+function makeMockRichReport(score: number): RichAnalysisReport {
+	return {
+		target: { url: "https://example.com", title: "Test", site_type: "manufacturer", site_type_confidence: 0.7, analyzed_at: new Date().toISOString() },
+		overall_score: score,
+		grade: score >= 75 ? "Good" : "Needs Improvement",
+		overview: { summary_cards: [], dimensions: [], llm_accessibility: [], strengths: [], weaknesses: [], opportunities: [] },
+		crawlability: { bot_policies: [], blocked_paths: [], allowed_paths: [], llms_txt: { exists: false, urls_checked: [], content_preview: null }, robots_txt_ai_section: null },
+		structured_data: { page_quality: [], schema_analysis: [], schema_counts: {} },
+		products: { category_scores: [], product_lists: [], spec_recognition: [] },
+		brand: { dimensions: [], claims: [] },
+		pages: { pages: [] },
+		recommendations: { high_priority: [], medium_priority: [], low_priority: [], competitive_comparison: null },
+		evidence: { sections: [], schema_implementation_matrix: [], js_dependency_details: [], claim_verifications: [] },
+		probes: null,
+		roadmap: { consumer_scenarios: [], vulnerability_scores: [], opportunity_matrix: [] },
+	};
+}
+
+function makeDeps(): PipelineDeps {
+	const scoreTarget = makeScoreTarget();
+	const crawlTarget = vi.fn().mockResolvedValue(makeCrawlData());
+	const classifySite = vi.fn().mockReturnValue({
+		site_type: "manufacturer",
+		confidence: 0.7,
+		matched_signals: ["Price pattern"],
+		all_signals: [
+			{ site_type: "manufacturer", confidence: 0.7, signals: ["Price"] },
+			{ site_type: "research", confidence: 0, signals: [] },
+			{ site_type: "generic", confidence: 0.3, signals: [] },
+		],
+	});
+
+	// Mock LLM analysis — runs rule-based analysis + attaches mock richReport
+	const runLLMAnalysisOverride = vi.fn().mockImplementation(async (input: any, toolDeps: any) => {
+		const output = await runAnalysis(input, {
+			crawlTarget: toolDeps.crawlTarget,
+			scoreTarget: toolDeps.scoreTarget,
+			classifySite: toolDeps.classifySite,
+			crawlMultiplePages: toolDeps.crawlMultiplePages,
+			chatLLM: toolDeps.chatLLM,
+		});
+		return {
+			output,
+			richReport: makeMockRichReport(output.geo_scores.overall_score),
+			llmAssessment: "Mock LLM assessment",
+			agentLoopResult: { finalText: "{}", messages: [], iterations: 1, totalUsage: { input: 0, output: 0, totalTokens: 0 }, totalCost: 0, completed: true, toolCallLog: [] },
+			toolCallLog: [],
+		} satisfies LLMAnalysisResult;
+	});
+
+	return {
+		crawlTarget,
+		scoreTarget,
+		classifySite,
+		runLLMAnalysisOverride,
 	};
 }
 

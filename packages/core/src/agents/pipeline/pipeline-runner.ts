@@ -15,7 +15,8 @@ import { ArchiveBuilder } from "../../report/archive-builder.js";
 import { generateDashboardHtml } from "../../report/dashboard-html-generator.js";
 import { ReportBuilder } from "../../report/report-generator.js";
 import { type AnalysisOutput, runAnalysis } from "../analysis/analysis-agent.js";
-import { runAnalysisWithLLM, type LLMAnalysisConfig } from "../analysis/llm-analysis-agent.js";
+import { runLLMAnalysis, resolveModel } from "../analysis/llm-analysis-agent.js";
+import type { RichAnalysisReport } from "../analysis/rich-analysis-schema.js";
 import { isLLMAuthError } from "../shared/llm-helpers.js";
 import { type OptimizationResult, runOptimization } from "../optimization/optimization-agent.js";
 import { type StrategyOutput, runStrategy } from "../strategy/strategy-agent.js";
@@ -57,10 +58,6 @@ export interface PipelineConfig {
 	timeout_ms?: number;
 	/** 스테이지 실행 기록 콜백 (optional) */
 	stageCallbacks?: StageCallbacks;
-	/** pi-ai Model for LLM-driven analysis agent (optional) */
-	piAiModel?: import("@mariozechner/pi-ai").Model<import("@mariozechner/pi-ai").Api>;
-	/** API key for pi-ai model (optional) */
-	piAiApiKey?: string;
 }
 
 export interface LLMCallLogEntry {
@@ -116,6 +113,11 @@ export interface PipelineDeps {
 		all_signals: Array<{ site_type: string; confidence: number; signals: string[] }>;
 	};
 	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>;
+	/** Override for the LLM analysis step (for testing). If not provided, uses runLLMAnalysis with resolveModel. */
+	runLLMAnalysisOverride?: (
+		input: { target_id: string; target_url: string },
+		toolDeps: any,
+	) => Promise<import("../analysis/llm-analysis-agent.js").LLMAnalysisResult>;
 	/** 멀티 페이지 크롤링 (optional — 제공 시 manufacturer 사이트에서 자동 사용) */
 	crawlMultiplePages?: (
 		url: string,
@@ -148,7 +150,7 @@ export async function runPipeline(
 	let initialScore = 0;
 	let cycleCount = 0;
 	let probeResults: SyntheticProbeRunResult | null = null;
-	let richReport: import("../analysis/rich-analysis-schema.js").RichAnalysisReport | null = null;
+	let richReport: RichAnalysisReport | null = null;
 	const llmModelsUsed = new Set<string>();
 	const llmErrors: string[] = [];
 	const llmCallLog: LLMCallLogEntry[] = [];
@@ -243,9 +245,9 @@ export async function runPipeline(
 	orchestrator.registerHandler("ANALYZING", async (ctx: StageContext) => {
 		await trackStage(
 			"ANALYZING",
-			`Crawling ${config.target_url}, classifying site type, scoring 7 GEO dimensions${config.piAiModel ? " (LLM-driven)" : ""}`,
+			`Crawling ${config.target_url}, LLM-driven 10-tab GEO analysis`,
 			async () => {
-				const analysisDeps = {
+				const toolDeps = {
 					crawlTarget: deps.crawlTarget,
 					scoreTarget: deps.scoreTarget,
 					classifySite: deps.classifySite,
@@ -253,26 +255,22 @@ export async function runPipeline(
 					chatLLM: trackedChatLLM,
 				};
 
-				// Use LLM-driven analysis if pi-ai model is configured
-				if (config.piAiModel) {
-					const llmConfig: LLMAnalysisConfig = {
-						model: config.piAiModel,
-						apiKey: config.piAiApiKey,
-						maxIterations: 12,
-						temperature: 0.3,
-					};
-					const result = await runAnalysisWithLLM(
+				if (deps.runLLMAnalysisOverride) {
+					const result = await deps.runLLMAnalysisOverride(
 						{ target_id: config.target_id, target_url: config.target_url },
-						analysisDeps,
-						llmConfig,
+						toolDeps,
 					);
 					analysisOutput = result.output;
 					richReport = result.richReport;
 				} else {
-					analysisOutput = await runAnalysis(
+					const piModel = resolveModel(config.workspace_dir);
+					const result = await runLLMAnalysis(
 						{ target_id: config.target_id, target_url: config.target_url },
-						analysisDeps,
+						toolDeps,
+						piModel,
 					);
+					analysisOutput = result.output;
+					richReport = result.richReport;
 				}
 				ctx.setRef("analysis", analysisOutput.report.report_id);
 				currentScore = analysisOutput.geo_scores.overall_score;
