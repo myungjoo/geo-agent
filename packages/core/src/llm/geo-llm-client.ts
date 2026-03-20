@@ -144,6 +144,63 @@ async function callOpenAI(
 	};
 }
 
+/** Models that use v1/completions instead of v1/chat/completions */
+const COMPLETIONS_MODELS = [
+	"gpt-5.3-codex",
+	"codex",
+	"davinci",
+	"babbage",
+	"curie",
+	"ada",
+];
+
+function isCompletionsModel(model: string): boolean {
+	return COMPLETIONS_MODELS.some((m) => model.toLowerCase().includes(m.toLowerCase()));
+}
+
+async function callOpenAICompletions(
+	provider: LLMProviderSettings,
+	request: LLMRequest,
+	model: string,
+): Promise<LLMResponse> {
+	const { default: OpenAI } = await import("openai");
+	const client = new OpenAI({
+		apiKey: provider.api_key ?? "",
+		baseURL: provider.api_base_url || undefined,
+	});
+
+	// Build prompt: system instruction + user prompt
+	let prompt = "";
+	if (request.system_instruction) {
+		prompt += `${request.system_instruction}\n\n`;
+	}
+	prompt += request.prompt;
+
+	const startTime = Date.now();
+	const completion = await client.completions.create({
+		model,
+		prompt,
+		max_tokens: request.max_tokens ?? provider.max_tokens ?? 4096,
+		temperature: request.temperature ?? provider.temperature ?? 0.7,
+	});
+
+	const usage = completion.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+	const costUsd = estimateCost(model, usage.prompt_tokens, usage.completion_tokens);
+
+	return {
+		content: completion.choices[0]?.text ?? "",
+		model: completion.model ?? model,
+		provider: provider.provider_id,
+		usage: {
+			prompt_tokens: usage.prompt_tokens,
+			completion_tokens: usage.completion_tokens,
+			total_tokens: usage.total_tokens,
+		},
+		latency_ms: Date.now() - startTime,
+		cost_usd: costUsd,
+	};
+}
+
 async function callAzureOpenAI(
 	provider: LLMProviderSettings,
 	request: LLMRequest,
@@ -332,7 +389,9 @@ export class GeoLLMClient {
 
 		switch (provider.provider_id) {
 			case "openai":
-				response = await callOpenAI(provider, request, model);
+				response = isCompletionsModel(model)
+					? await callOpenAICompletions(provider, request, model)
+					: await callOpenAI(provider, request, model);
 				break;
 			case "anthropic":
 				response = await callAnthropic(provider, request, model);
