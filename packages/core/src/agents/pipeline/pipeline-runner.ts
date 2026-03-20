@@ -15,6 +15,7 @@ import { ArchiveBuilder } from "../../report/archive-builder.js";
 import { generateDashboardHtml } from "../../report/dashboard-html-generator.js";
 import { ReportBuilder } from "../../report/report-generator.js";
 import { type AnalysisOutput, runAnalysis } from "../analysis/analysis-agent.js";
+import { runAnalysisWithLLM, type LLMAnalysisConfig } from "../analysis/llm-analysis-agent.js";
 import { isLLMAuthError } from "../shared/llm-helpers.js";
 import { type OptimizationResult, runOptimization } from "../optimization/optimization-agent.js";
 import { type StrategyOutput, runStrategy } from "../strategy/strategy-agent.js";
@@ -56,6 +57,10 @@ export interface PipelineConfig {
 	timeout_ms?: number;
 	/** 스테이지 실행 기록 콜백 (optional) */
 	stageCallbacks?: StageCallbacks;
+	/** pi-ai Model for LLM-driven analysis agent (optional) */
+	piAiModel?: import("@mariozechner/pi-ai").Model<import("@mariozechner/pi-ai").Api>;
+	/** API key for pi-ai model (optional) */
+	piAiApiKey?: string;
 }
 
 export interface LLMCallLogEntry {
@@ -237,18 +242,36 @@ export async function runPipeline(
 	orchestrator.registerHandler("ANALYZING", async (ctx: StageContext) => {
 		await trackStage(
 			"ANALYZING",
-			`Crawling ${config.target_url}, classifying site type, scoring 7 GEO dimensions`,
+			`Crawling ${config.target_url}, classifying site type, scoring 7 GEO dimensions${config.piAiModel ? " (LLM-driven)" : ""}`,
 			async () => {
-				analysisOutput = await runAnalysis(
-					{ target_id: config.target_id, target_url: config.target_url },
-					{
-						crawlTarget: deps.crawlTarget,
-						scoreTarget: deps.scoreTarget,
-						classifySite: deps.classifySite,
-						crawlMultiplePages: deps.crawlMultiplePages,
-						chatLLM: trackedChatLLM,
-					},
-				);
+				const analysisDeps = {
+					crawlTarget: deps.crawlTarget,
+					scoreTarget: deps.scoreTarget,
+					classifySite: deps.classifySite,
+					crawlMultiplePages: deps.crawlMultiplePages,
+					chatLLM: trackedChatLLM,
+				};
+
+				// Use LLM-driven analysis if pi-ai model is configured
+				if (config.piAiModel) {
+					const llmConfig: LLMAnalysisConfig = {
+						model: config.piAiModel,
+						apiKey: config.piAiApiKey,
+						maxIterations: 12,
+						temperature: 0.3,
+					};
+					const result = await runAnalysisWithLLM(
+						{ target_id: config.target_id, target_url: config.target_url },
+						analysisDeps,
+						llmConfig,
+					);
+					analysisOutput = result.output;
+				} else {
+					analysisOutput = await runAnalysis(
+						{ target_id: config.target_id, target_url: config.target_url },
+						analysisDeps,
+					);
+				}
 				ctx.setRef("analysis", analysisOutput.report.report_id);
 				currentScore = analysisOutput.geo_scores.overall_score;
 				currentGrade = analysisOutput.geo_scores.grade;

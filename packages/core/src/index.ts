@@ -30,6 +30,10 @@ export * from "./report/dashboard-html-generator.js";
 export * from "./llm/provider-config.js";
 export * from "./llm/geo-llm-client.js";
 export * from "./llm/oauth-manager.js";
+export * from "./llm/pi-ai-bridge.js";
+
+// Skills
+export * from "./skills/skill-loader.js";
 
 // Agents
 export * from "./agents/index.js";

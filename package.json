@@ -3,7 +3,9 @@
 	"version": "0.1.0",
 	"private": true,
 	"description": "GEO (Generative Engine Optimization) Agent System",
-	"workspaces": ["packages/*"],
+	"workspaces": [
+		"packages/*"
+	],
 	"scripts": {
 		"build": "npm run build --workspaces",
 		"start": "node --import tsx packages/cli/src/index.ts start",
@@ -23,5 +25,8 @@
 	},
 	"engines": {
 		"node": ">=20.0.0"
+	},
+	"dependencies": {
+		"@mariozechner/pi-ai": "^0.61.0"
 	}
 }
