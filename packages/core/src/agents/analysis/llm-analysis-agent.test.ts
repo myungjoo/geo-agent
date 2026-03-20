@@ -73,6 +73,7 @@ describe("runAnalysisWithLLM", () => {
 
 			expect(result.usedLLMAgent).toBe(false);
 			expect(result.llmAssessment).toBeNull();
+			expect(result.richReport).toBeNull();
 			expect(result.agentLoopResult).toBeNull();
 			expect(result.toolCallLog).toEqual([]);
 			expect(result.output).toBeTruthy();

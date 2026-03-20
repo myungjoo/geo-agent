@@ -148,6 +148,7 @@ export async function runPipeline(
 	let initialScore = 0;
 	let cycleCount = 0;
 	let probeResults: SyntheticProbeRunResult | null = null;
+	let richReport: import("../analysis/rich-analysis-schema.js").RichAnalysisReport | null = null;
 	const llmModelsUsed = new Set<string>();
 	const llmErrors: string[] = [];
 	const llmCallLog: LLMCallLogEntry[] = [];
@@ -266,6 +267,7 @@ export async function runPipeline(
 						llmConfig,
 					);
 					analysisOutput = result.output;
+					richReport = result.richReport;
 				} else {
 					analysisOutput = await runAnalysis(
 						{ target_id: config.target_id, target_url: config.target_url },
@@ -370,6 +372,7 @@ export async function runPipeline(
 				eval_data: out.eval_data,
 				llm_assessment: out.llm_assessment,
 				synthetic_probes: probeResults,
+				rich_report: richReport,
 			}),
 		);
 	});

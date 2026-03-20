@@ -22,6 +22,7 @@ import {
 	type AnalysisToolState,
 } from "./tools.js";
 import { type AnalysisDeps, type AnalysisOutput, runAnalysis } from "./analysis-agent.js";
+import type { RichAnalysisReport } from "./rich-analysis-schema.js";
 
 // ── LLM Analysis Config ─────────────────────────────────────
 
@@ -49,6 +50,8 @@ export interface LLMAnalysisResult {
 	usedLLMAgent: boolean;
 	/** The LLM's synthesized assessment (null if rule-based) */
 	llmAssessment: string | null;
+	/** Rich 10-tab report from the LLM (null if rule-based or parsing failed) */
+	richReport: RichAnalysisReport | null;
 	/** Agent loop details (null if rule-based) */
 	agentLoopResult: AgentLoopResult | null;
 	/** Tool call log from the agent loop */
@@ -96,10 +99,25 @@ export async function runLLMAnalysis(
 		// Build AnalysisOutput from accumulated tool state
 		const output = buildOutputFromState(state, input);
 
+		// Try to parse the LLM's final text as RichAnalysisReport
+		let richReport: RichAnalysisReport | null = null;
+		if (agentResult.finalText) {
+			try {
+				// Strip markdown code fences if present
+				let jsonText = agentResult.finalText.trim();
+				const fenceMatch = jsonText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+				if (fenceMatch) jsonText = fenceMatch[1];
+				richReport = JSON.parse(jsonText) as RichAnalysisReport;
+			} catch {
+				// LLM response wasn't valid JSON — store as assessment text instead
+			}
+		}
+
 		return {
 			output,
 			usedLLMAgent: true,
 			llmAssessment: agentResult.finalText || null,
+			richReport,
 			agentLoopResult: agentResult,
 			toolCallLog: agentResult.toolCallLog,
 		};
@@ -126,6 +144,7 @@ export async function runAnalysisWithLLM(
 			output,
 			usedLLMAgent: false,
 			llmAssessment: null,
+			richReport: null,
 			agentLoopResult: null,
 			toolCallLog: [],
 		};
@@ -300,6 +319,7 @@ async function fallbackToRuleBased(
 		output,
 		usedLLMAgent: false,
 		llmAssessment: `LLM agent failed (${error instanceof Error ? error.message : "unknown error"}), used rule-based fallback`,
+		richReport: null,
 		agentLoopResult: null,
 		toolCallLog: [],
 	};

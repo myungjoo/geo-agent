@@ -47,8 +47,8 @@ const mockDeps: AnalysisToolDeps = {
 // ── Tests ──────────────────────────────────────────────────
 
 describe("ANALYSIS_TOOLS", () => {
-	it("should define 6 tools", () => {
-		expect(ANALYSIS_TOOLS).toHaveLength(6);
+	it("should define 9 tools", () => {
+		expect(ANALYSIS_TOOLS).toHaveLength(9);
 	});
 
 	it("should have correct tool names", () => {
@@ -59,6 +59,9 @@ describe("ANALYSIS_TOOLS", () => {
 		expect(names).toContain("classify_site");
 		expect(names).toContain("extract_evaluation_data");
 		expect(names).toContain("run_synthetic_probes");
+		expect(names).toContain("analyze_brand_message");
+		expect(names).toContain("analyze_product_recognition");
+		expect(names).toContain("collect_evidence");
 	});
 
 	it("each tool should have description and parameters", () => {
@@ -82,10 +85,10 @@ describe("createAnalysisToolState", () => {
 });
 
 describe("createAnalysisToolHandlers", () => {
-	it("should create handlers for all 6 tools", () => {
+	it("should create handlers for all 9 tools", () => {
 		const state = createAnalysisToolState();
 		const handlers = createAnalysisToolHandlers(mockDeps, state);
-		expect(Object.keys(handlers)).toHaveLength(6);
+		expect(Object.keys(handlers)).toHaveLength(9);
 		expect(handlers.crawl_page).toBeTypeOf("function");
 		expect(handlers.score_geo).toBeTypeOf("function");
 		expect(handlers.classify_site).toBeTypeOf("function");
@@ -212,6 +215,78 @@ describe("createAnalysisToolHandlers", () => {
 			});
 			const parsed = JSON.parse(result);
 			expect(parsed.error).toContain("LLM not available");
+		});
+	});
+
+	describe("analyze_brand_message handler", () => {
+		it("should return error if no crawl data", async () => {
+			const state = createAnalysisToolState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+			const result = await handlers.analyze_brand_message({});
+			expect(JSON.parse(result).error).toBeTruthy();
+		});
+
+		it("should extract brand dimensions after crawl", async () => {
+			const state = createAnalysisToolState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+			await handlers.crawl_page({ url: "https://example.com" });
+			const result = await handlers.analyze_brand_message({});
+			const parsed = JSON.parse(result);
+			expect(parsed.dimensions).toBeInstanceOf(Array);
+			expect(parsed.dimensions.length).toBeGreaterThan(0);
+			expect(parsed.claims).toBeInstanceOf(Array);
+		});
+	});
+
+	describe("analyze_product_recognition handler", () => {
+		it("should return error if no crawl data", async () => {
+			const state = createAnalysisToolState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+			const result = await handlers.analyze_product_recognition({});
+			expect(JSON.parse(result).error).toBeTruthy();
+		});
+
+		it("should produce category scores after crawl", async () => {
+			const state = createAnalysisToolState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+			await handlers.crawl_page({ url: "https://example.com" });
+			const result = await handlers.analyze_product_recognition({});
+			const parsed = JSON.parse(result);
+			expect(parsed.category_scores).toBeInstanceOf(Array);
+			expect(parsed.product_lists).toBeInstanceOf(Array);
+			expect(parsed.spec_recognition).toBeInstanceOf(Array);
+		});
+	});
+
+	describe("collect_evidence handler", () => {
+		it("should return error if no crawl data", async () => {
+			const state = createAnalysisToolState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+			const result = await handlers.collect_evidence({});
+			expect(JSON.parse(result).error).toBeTruthy();
+		});
+
+		it("should collect evidence sections after crawl", async () => {
+			const state = createAnalysisToolState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+			await handlers.crawl_page({ url: "https://example.com" });
+			const result = await handlers.collect_evidence({});
+			const parsed = JSON.parse(result);
+			expect(parsed.sections).toBeInstanceOf(Array);
+			expect(parsed.sections.length).toBeGreaterThan(0);
+			expect(parsed.schema_implementation_matrix).toBeInstanceOf(Array);
+			expect(parsed.js_dependency_details).toBeInstanceOf(Array);
+		});
+
+		it("should include llms.txt evidence", async () => {
+			const state = createAnalysisToolState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+			await handlers.crawl_page({ url: "https://example.com" });
+			const result = await handlers.collect_evidence({});
+			const parsed = JSON.parse(result);
+			const llmsSection = parsed.sections.find((s: any) => s.id === "E-1");
+			expect(llmsSection).toBeTruthy();
+			expect(llmsSection.title).toContain("llms.txt");
 		});
 	});
 });
