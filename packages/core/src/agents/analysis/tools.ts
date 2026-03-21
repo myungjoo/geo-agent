@@ -316,8 +316,8 @@ export function createAnalysisToolHandlers(
 			const evalData = await extractGeoEvaluationData(
 				crawlData,
 				subPages,
-				dimensions,
 				deps.chatLLM,
+				dimensions,
 			);
 			state.evalData = evalData;
 			return JSON.stringify(evalData);

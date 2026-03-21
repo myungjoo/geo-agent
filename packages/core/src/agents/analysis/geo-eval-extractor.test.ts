@@ -596,7 +596,8 @@ describe("analyzeJsDependency", () => {
 
 	it("detects frameworks from DOM markers (heuristic fallback when LLM framework detection fails)", async () => {
 		// Must include a <script> tag so extractScriptEvidence is non-empty and LLM path is attempted
-		const html = '<html><head><script src="bundle.js"></script></head><body><div id="__next">React SSR content</div></body></html>';
+		const html =
+			'<html><head><script src="bundle.js"></script></head><body><div id="__next">React SSR content</div></body></html>';
 		const failingLLM = async (req: LLMRequest): Promise<LLMResponse> => {
 			const promptText = req.prompt ?? "";
 			if (promptText.includes("JavaScript frameworks")) {
@@ -695,7 +696,7 @@ describe("extractGeoEvaluationData", () => {
 			{ id: "S1", label: "Crawlability", score: 62 },
 			{ id: "S2", label: "Structure", score: 30 },
 		];
-		const result = await extractGeoEvaluationData(homepage, subPages, dimensions, mockLLM);
+		const result = await extractGeoEvaluationData(homepage, subPages, mockLLM, dimensions);
 
 		expect(result.bot_policies).toHaveLength(8);
 		expect(result.llms_txt.exists).toBe(false);
@@ -710,7 +711,7 @@ describe("extractGeoEvaluationData", () => {
 
 	it("includes LLM-generated strengths/weaknesses/opportunities when chatLLM provided", async () => {
 		const homepage = makeCrawlData();
-		const result = await extractGeoEvaluationData(homepage, [], undefined, mockLLM);
+		const result = await extractGeoEvaluationData(homepage, [], mockLLM);
 		expect(Array.isArray(result.strengths)).toBe(true);
 		expect(Array.isArray(result.weaknesses)).toBe(true);
 		expect(Array.isArray(result.opportunities)).toBe(true);
@@ -722,7 +723,7 @@ describe("extractGeoEvaluationData", () => {
 
 	it("produces rule-based findings with a mock chatLLM", async () => {
 		const homepage = makeCrawlData();
-		const result = await extractGeoEvaluationData(homepage, [], undefined, mockLLM);
+		const result = await extractGeoEvaluationData(homepage, [], mockLLM);
 		expect(Array.isArray(result.strengths)).toBe(true);
 		expect(Array.isArray(result.weaknesses)).toBe(true);
 		expect(Array.isArray(result.opportunities)).toBe(true);
@@ -746,9 +747,9 @@ describe("extractGeoEvaluationData", () => {
 			throw new Error("LLM unavailable");
 		};
 		const homepage = makeCrawlData();
-		await expect(
-			extractGeoEvaluationData(homepage, [], undefined, failingLLM),
-		).rejects.toThrow("LLM unavailable");
+		await expect(extractGeoEvaluationData(homepage, [], failingLLM)).rejects.toThrow(
+			"LLM unavailable",
+		);
 	});
 });
 

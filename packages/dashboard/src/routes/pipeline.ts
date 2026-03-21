@@ -168,9 +168,7 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 			}
 			const client = new GeoLLMClient(workspaceDir);
 			chatLLM = (req) => client.chat(req);
-			console.log(
-				`🤖 LLM enabled: ${providersWithKey.map((p) => p.provider_id).join(", ")}`,
-			);
+			console.log(`🤖 LLM enabled: ${providersWithKey.map((p) => p.provider_id).join(", ")}`);
 		} catch (err) {
 			// LLM 초기화 실패 → 파이프라인 중단
 			const errMsg = err instanceof Error ? err.message : String(err);

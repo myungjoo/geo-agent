@@ -390,8 +390,8 @@ export async function runAnalysis(
 	const evalData = await extractGeoEvaluationData(
 		crawlData,
 		subPages,
-		geoScores.dimensions,
 		deps.chatLLM,
+		geoScores.dimensions,
 	);
 
 	// 7. LLM content quality assessment (4-D: LLM required, no fallback)

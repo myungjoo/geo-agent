@@ -82,10 +82,13 @@ function makeReport(overrides: Partial<AnalysisReport> = {}): AnalysisReport {
 describe("Strategy Agent", () => {
 	describe("runStrategy — basic execution", () => {
 		it("returns plan with tasks", async () => {
-			const result = await runStrategy({
-				target_id: "550e8400-e29b-41d4-a716-446655440000",
-				analysis_report: makeReport(),
-			}, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{
+					target_id: "550e8400-e29b-41d4-a716-446655440000",
+					analysis_report: makeReport(),
+				},
+				{ chatLLM: mockChatLLM() },
+			);
 
 			expect(result.plan).toBeDefined();
 			expect(result.plan.plan_id).toBeTruthy();
@@ -96,30 +99,45 @@ describe("Strategy Agent", () => {
 
 		it("plan has correct analysis_report_ref", async () => {
 			const report = makeReport();
-			const result = await runStrategy({ target_id: report.target_id, analysis_report: report }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: report.target_id, analysis_report: report },
+				{ chatLLM: mockChatLLM() },
+			);
 			expect(result.plan.analysis_report_ref).toBe(report.report_id);
 		});
 
 		it("plan status is draft", async () => {
-			const result = await runStrategy({ target_id: "t1", analysis_report: makeReport() }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: makeReport() },
+				{ chatLLM: mockChatLLM() },
+			);
 			expect(result.plan.status).toBe("draft");
 		});
 
 		it("all tasks have pending status", async () => {
-			const result = await runStrategy({ target_id: "t1", analysis_report: makeReport() }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: makeReport() },
+				{ chatLLM: mockChatLLM() },
+			);
 			for (const task of result.plan.tasks) {
 				expect(task.status).toBe("pending");
 			}
 		});
 
 		it("tasks have unique IDs", async () => {
-			const result = await runStrategy({ target_id: "t1", analysis_report: makeReport() }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: makeReport() },
+				{ chatLLM: mockChatLLM() },
+			);
 			const ids = result.plan.tasks.map((t) => t.task_id);
 			expect(new Set(ids).size).toBe(ids.length);
 		});
 
 		it("tasks are ordered by priority", async () => {
-			const result = await runStrategy({ target_id: "t1", analysis_report: makeReport() }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: makeReport() },
+				{ chatLLM: mockChatLLM() },
+			);
 			const priorities = result.plan.tasks.map((t) => t.priority);
 			const order = { critical: 0, high: 1, medium: 2, low: 3 };
 			for (let i = 1; i < priorities.length; i++) {
@@ -128,7 +146,10 @@ describe("Strategy Agent", () => {
 		});
 
 		it("tasks have sequential order field", async () => {
-			const result = await runStrategy({ target_id: "t1", analysis_report: makeReport() }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: makeReport() },
+				{ chatLLM: mockChatLLM() },
+			);
 			result.plan.tasks.forEach((t, i) => {
 				expect(t.order).toBe(i);
 			});
@@ -146,7 +167,10 @@ describe("Strategy Agent", () => {
 					meta_description: "test",
 				},
 			});
-			const result = await runStrategy({ target_id: "t1", analysis_report: report }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: report },
+				{ chatLLM: mockChatLLM() },
+			);
 			const jsonLdTask = result.plan.tasks.find((t) => t.title.includes("JSON-LD"));
 			expect(jsonLdTask).toBeDefined();
 			expect(jsonLdTask!.priority).toBe("critical");
@@ -162,7 +186,10 @@ describe("Strategy Agent", () => {
 					meta_description: "test",
 				},
 			});
-			const result = await runStrategy({ target_id: "t1", analysis_report: report }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: report },
+				{ chatLLM: mockChatLLM() },
+			);
 			const ogTask = result.plan.tasks.find((t) => t.title.includes("Open Graph"));
 			expect(ogTask).toBeDefined();
 			expect(ogTask!.priority).toBe("high");
@@ -178,7 +205,10 @@ describe("Strategy Agent", () => {
 					meta_description: null,
 				},
 			});
-			const result = await runStrategy({ target_id: "t1", analysis_report: report }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: report },
+				{ chatLLM: mockChatLLM() },
+			);
 			const metaTask = result.plan.tasks.find((t) => t.title.includes("Meta description"));
 			expect(metaTask).toBeDefined();
 		});
@@ -186,7 +216,10 @@ describe("Strategy Agent", () => {
 		it("generates heading task when hierarchy invalid", async () => {
 			const report = makeReport();
 			report.machine_readability.structure_quality.heading_hierarchy_valid = false;
-			const result = await runStrategy({ target_id: "t1", analysis_report: report }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: report },
+				{ chatLLM: mockChatLLM() },
+			);
 			const headingTask = result.plan.tasks.find((t) => t.title.includes("헤딩"));
 			expect(headingTask).toBeDefined();
 		});
@@ -194,13 +227,19 @@ describe("Strategy Agent", () => {
 		it("generates semantic tags task when ratio low", async () => {
 			const report = makeReport();
 			report.machine_readability.structure_quality.semantic_tag_ratio = 0.1;
-			const result = await runStrategy({ target_id: "t1", analysis_report: report }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: report },
+				{ chatLLM: mockChatLLM() },
+			);
 			const semanticTask = result.plan.tasks.find((t) => t.title.includes("시맨틱"));
 			expect(semanticTask).toBeDefined();
 		});
 
 		it("generates llms.txt task", async () => {
-			const result = await runStrategy({ target_id: "t1", analysis_report: makeReport() }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: makeReport() },
+				{ chatLLM: mockChatLLM() },
+			);
 			const llmsTask = result.plan.tasks.find((t) => t.title.includes("llms.txt"));
 			expect(llmsTask).toBeDefined();
 		});
@@ -208,7 +247,10 @@ describe("Strategy Agent", () => {
 		it("generates content expansion task when word count low", async () => {
 			const report = makeReport();
 			report.content_analysis.word_count = 100;
-			const result = await runStrategy({ target_id: "t1", analysis_report: report }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: report },
+				{ chatLLM: mockChatLLM() },
+			);
 			const contentTask = result.plan.tasks.find((t) => t.title.includes("콘텐츠 확충"));
 			expect(contentTask).toBeDefined();
 		});
@@ -223,7 +265,10 @@ describe("Strategy Agent", () => {
 					content_accessible: false,
 				},
 			];
-			const result = await runStrategy({ target_id: "t1", analysis_report: report }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: report },
+				{ chatLLM: mockChatLLM() },
+			);
 			const robotsTask = result.plan.tasks.find((t) => t.title.includes("robots.txt"));
 			expect(robotsTask).toBeDefined();
 			expect(robotsTask!.priority).toBe("critical");
@@ -247,26 +292,49 @@ describe("Strategy Agent", () => {
 
 			// LLM returns different estimated_delta based on analysis
 			const mockGood = vi.fn().mockResolvedValue({
-				content: JSON.stringify({ strategy_rationale: "Good", tasks: [], estimated_delta: 5, confidence: 0.6 }),
-				model: "gpt-4o", provider: "openai",
+				content: JSON.stringify({
+					strategy_rationale: "Good",
+					tasks: [],
+					estimated_delta: 5,
+					confidence: 0.6,
+				}),
+				model: "gpt-4o",
+				provider: "openai",
 				usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
-				latency_ms: 500, cost_usd: 0.01,
+				latency_ms: 500,
+				cost_usd: 0.01,
 			});
 			const mockBad = vi.fn().mockResolvedValue({
-				content: JSON.stringify({ strategy_rationale: "Bad", tasks: [], estimated_delta: 25, confidence: 0.7 }),
-				model: "gpt-4o", provider: "openai",
+				content: JSON.stringify({
+					strategy_rationale: "Bad",
+					tasks: [],
+					estimated_delta: 25,
+					confidence: 0.7,
+				}),
+				model: "gpt-4o",
+				provider: "openai",
 				usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
-				latency_ms: 500, cost_usd: 0.01,
+				latency_ms: 500,
+				cost_usd: 0.01,
 			});
 
-			const resultGood = await runStrategy({ target_id: "t1", analysis_report: good }, { chatLLM: mockGood });
-			const resultBad = await runStrategy({ target_id: "t1", analysis_report: bad }, { chatLLM: mockBad });
+			const resultGood = await runStrategy(
+				{ target_id: "t1", analysis_report: good },
+				{ chatLLM: mockGood },
+			);
+			const resultBad = await runStrategy(
+				{ target_id: "t1", analysis_report: bad },
+				{ chatLLM: mockBad },
+			);
 
 			expect(resultBad.estimated_delta).toBeGreaterThan(resultGood.estimated_delta);
 		});
 
 		it("confidence is between 0 and 1", async () => {
-			const result = await runStrategy({ target_id: "t1", analysis_report: makeReport() }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: makeReport() },
+				{ chatLLM: mockChatLLM() },
+			);
 			expect(result.plan.estimated_impact.confidence).toBeGreaterThanOrEqual(0);
 			expect(result.plan.estimated_impact.confidence).toBeLessThanOrEqual(1);
 		});
@@ -315,10 +383,7 @@ describe("Strategy Agent", () => {
 			const mockChat = vi.fn().mockRejectedValue(new Error("API error: 401 Unauthorized"));
 
 			await expect(
-				runStrategy(
-					{ target_id: "t1", analysis_report: makeReport() },
-					{ chatLLM: mockChat },
-				),
+				runStrategy({ target_id: "t1", analysis_report: makeReport() }, { chatLLM: mockChat }),
 			).rejects.toThrow("API error: 401 Unauthorized");
 		});
 	});
@@ -326,13 +391,22 @@ describe("Strategy Agent", () => {
 	describe("runStrategy — edge cases", () => {
 		it("generates unique plan_id each call", async () => {
 			const report = makeReport();
-			const r1 = await runStrategy({ target_id: "t1", analysis_report: report }, { chatLLM: mockChatLLM() });
-			const r2 = await runStrategy({ target_id: "t1", analysis_report: report }, { chatLLM: mockChatLLM() });
+			const r1 = await runStrategy(
+				{ target_id: "t1", analysis_report: report },
+				{ chatLLM: mockChatLLM() },
+			);
+			const r2 = await runStrategy(
+				{ target_id: "t1", analysis_report: report },
+				{ chatLLM: mockChatLLM() },
+			);
 			expect(r1.plan.plan_id).not.toBe(r2.plan.plan_id);
 		});
 
 		it("handles perfectly optimized site (minimal tasks)", async () => {
-			const result = await runStrategy({ target_id: "t1", analysis_report: makeReport() }, { chatLLM: mockChatLLM() });
+			const result = await runStrategy(
+				{ target_id: "t1", analysis_report: makeReport() },
+				{ chatLLM: mockChatLLM() },
+			);
 			// Even a good site gets llms.txt suggestion
 			expect(result.tasks_count).toBeGreaterThan(0);
 		});
