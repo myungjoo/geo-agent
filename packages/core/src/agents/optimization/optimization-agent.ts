@@ -70,33 +70,23 @@ async function optimizeMetadata(
 
 			if (task.title.includes("Meta description") || task.title.includes("메타")) {
 				if (!/<meta\s+name=["']description["']/i.test(html)) {
+					const pageText = extractVisibleText(html).slice(0, 1500);
 					const pageTitle = extractTitle(html);
-					const fallbackDesc = pageTitle
-						? `${pageTitle} - Official information and details`
-						: "Comprehensive information and resources";
-					let description = fallbackDesc;
-
-					if (deps?.chatLLM) {
-						const pageText = extractVisibleText(html).slice(0, 1500);
-						const pageTitle = extractTitle(html);
-						const { result } = await safeLLMCall(
-							deps.chatLLM,
-							{
-								prompt: `Write a concise meta description (max 160 characters) for this web page.\n\nTitle: ${pageTitle}\n\nContent excerpt:\n${pageText}`,
-								system_instruction:
-									"You are an SEO expert specializing in LLM discoverability. Write a single meta description that is factual, keyword-rich, and optimized for AI engines. Output ONLY the description text, no quotes or labels. Keep it under 160 characters.",
-								json_mode: false,
-								temperature: 0.3,
-								max_tokens: 200,
-							},
-							(content) => {
-								const trimmed = content.trim().replace(/^["']|["']$/g, "");
-								return trimmed.length > 160 ? `${trimmed.slice(0, 157)}...` : trimmed;
-							},
-							fallbackDesc,
-						);
-						description = result;
-					}
+					const { result: description } = await safeLLMCall(
+						deps?.chatLLM,
+						{
+							prompt: `Write a concise meta description (max 160 characters) for this web page.\n\nTitle: ${pageTitle}\n\nContent excerpt:\n${pageText}`,
+							system_instruction:
+								"You are an SEO expert specializing in LLM discoverability. Write a single meta description that is factual, keyword-rich, and optimized for AI engines. Output ONLY the description text, no quotes or labels. Keep it under 160 characters.",
+							json_mode: false,
+							temperature: 0.3,
+							max_tokens: 200,
+						},
+						(content) => {
+							const trimmed = content.trim().replace(/^["']|["']$/g, "");
+							return trimmed.length > 160 ? `${trimmed.slice(0, 157)}...` : trimmed;
+						},
+					);
 
 					html = html.replace(
 						"</head>",
@@ -109,25 +99,19 @@ async function optimizeMetadata(
 			if (task.title.includes("Open Graph") || task.title.includes("OG")) {
 				if (!/<meta\s+property=["']og:/i.test(html)) {
 					const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || "Page";
-					let ogDescription = "";
-
-					if (deps?.chatLLM) {
-						const pageText = extractVisibleText(html).slice(0, 1500);
-						const { result } = await safeLLMCall(
-							deps.chatLLM,
-							{
-								prompt: `Write a compelling Open Graph description (max 200 characters) for social sharing of this page.\n\nTitle: ${title.trim()}\n\nContent excerpt:\n${pageText}`,
-								system_instruction:
-									"You are a social media optimization expert. Write a single OG description that encourages clicks and shares. Output ONLY the description text, no quotes or labels. Keep it under 200 characters.",
-								json_mode: false,
-								temperature: 0.3,
-								max_tokens: 200,
-							},
-							(content) => content.trim().replace(/^["']|["']$/g, ""),
-							"",
-						);
-						ogDescription = result;
-					}
+					const pageText = extractVisibleText(html).slice(0, 1500);
+					const { result: ogDescription } = await safeLLMCall(
+						deps?.chatLLM,
+						{
+							prompt: `Write a compelling Open Graph description (max 200 characters) for social sharing of this page.\n\nTitle: ${title.trim()}\n\nContent excerpt:\n${pageText}`,
+							system_instruction:
+								"You are a social media optimization expert. Write a single OG description that encourages clicks and shares. Output ONLY the description text, no quotes or labels. Keep it under 200 characters.",
+							json_mode: false,
+							temperature: 0.3,
+							max_tokens: 200,
+						},
+						(content) => content.trim().replace(/^["']|["']$/g, ""),
+					);
 
 					const ogDescTag = ogDescription
 						? `\n<meta property="og:description" content="${escapeHtml(ogDescription)}">`
@@ -170,45 +154,32 @@ async function optimizeSchemaMarkup(
 					(html.match(/<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i) || [])[1] ||
 					"";
 
-				const fallbackJsonLd = {
-					"@context": "https://schema.org",
-					"@type": "WebPage",
-					name: pageTitle,
-					description: metaDesc,
-				};
+				const pageText = extractVisibleText(html).slice(0, 1500);
+				// Check for existing JSON-LD in other script tags (partial matches)
+				const existingLdMatches = html.match(
+					/<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+				);
+				const existingLd = existingLdMatches ? existingLdMatches.join("\n") : "None";
 
-				let jsonLdStr = JSON.stringify(fallbackJsonLd);
-
-				if (deps?.chatLLM) {
-					const pageText = extractVisibleText(html).slice(0, 1500);
-					// Check for existing JSON-LD in other script tags (partial matches)
-					const existingLdMatches = html.match(
-						/<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
-					);
-					const existingLd = existingLdMatches ? existingLdMatches.join("\n") : "None";
-
-					const { result } = await safeLLMCall(
-						deps.chatLLM,
-						{
-							prompt: `Generate a rich JSON-LD (schema.org) structured data object for this web page.\n\nTitle: ${pageTitle}\nMeta description: ${metaDesc}\nExisting JSON-LD: ${existingLd}\n\nContent excerpt:\n${pageText}`,
-							system_instruction:
-								"You are a structured data expert. Generate a single JSON-LD object using schema.org vocabulary. Choose the most appropriate @type (WebPage, Product, Article, Organization, etc.) based on the content. Include as many relevant properties as the content supports (name, description, url, image, author, datePublished, etc.). Output ONLY valid JSON, no markdown fences or explanation.",
-							json_mode: true,
-							temperature: 0.3,
-							max_tokens: 800,
-						},
-						(content) => {
-							// Validate it's parseable JSON with @context
-							const parsed = JSON.parse(content.trim());
-							if (!parsed["@context"]) {
-								parsed["@context"] = "https://schema.org";
-							}
-							return JSON.stringify(parsed);
-						},
-						jsonLdStr,
-					);
-					jsonLdStr = result;
-				}
+				const { result: jsonLdStr } = await safeLLMCall(
+					deps?.chatLLM,
+					{
+						prompt: `Generate a rich JSON-LD (schema.org) structured data object for this web page.\n\nTitle: ${pageTitle}\nMeta description: ${metaDesc}\nExisting JSON-LD: ${existingLd}\n\nContent excerpt:\n${pageText}`,
+						system_instruction:
+							"You are a structured data expert. Generate a single JSON-LD object using schema.org vocabulary. Choose the most appropriate @type (WebPage, Product, Article, Organization, etc.) based on the content. Include as many relevant properties as the content supports (name, description, url, image, author, datePublished, etc.). Output ONLY valid JSON, no markdown fences or explanation.",
+						json_mode: true,
+						temperature: 0.3,
+						max_tokens: 800,
+					},
+					(content) => {
+						// Validate it's parseable JSON with @context
+						const parsed = JSON.parse(content.trim());
+						if (!parsed["@context"]) {
+							parsed["@context"] = "https://schema.org";
+						}
+						return JSON.stringify(parsed);
+					},
+				);
 
 				html = html.replace(
 					"</head>",
@@ -230,63 +201,34 @@ async function optimizeLlmsTxt(
 	input: OptimizationInput,
 	deps?: { chatLLM?: (req: LLMRequest) => Promise<LLMResponse> },
 ): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
-	// Build context-aware fallback from available HTML pages
-	let fallbackContent = "# Site Information\n\n";
 	try {
-		const files = await input.listFiles();
-		const htmlFiles = files.filter((f) => f.endsWith(".html")).slice(0, 5);
-		const titles: string[] = [];
-		for (const f of htmlFiles) {
-			const html = await input.readFile(f);
-			const t = extractTitle(html);
-			if (t) titles.push(t);
-		}
-		if (titles.length > 0) {
-			fallbackContent += `This site contains the following pages:\n${titles.map((t) => `- ${t}`).join("\n")}\n\n`;
-		} else {
-			fallbackContent += "This site provides information about products and services.\n\n";
-		}
-		fallbackContent +=
-			"## Key Content\n- Products and specifications\n- Pricing information\n- Company information\n";
-	} catch {
-		fallbackContent =
-			"# Site Information\n\nThis site provides information about products and services.\n";
-	}
+		// Gather summaries from available HTML pages
+		const htmlFiles = await getHtmlFiles(input);
+		const pageSummaries: string[] = [];
 
-	try {
-		let content = fallbackContent;
-
-		if (deps?.chatLLM) {
-			// Gather summaries from available HTML pages
-			const htmlFiles = await getHtmlFiles(input);
-			const pageSummaries: string[] = [];
-
-			for (const htmlFile of htmlFiles.slice(0, 5)) {
-				try {
-					const html = await input.readFile(htmlFile);
-					const title = extractTitle(html) || htmlFile;
-					const text = extractVisibleText(html).slice(0, 300);
-					pageSummaries.push(`- ${htmlFile}: "${title}" — ${text}`);
-				} catch {
-					pageSummaries.push(`- ${htmlFile}: (could not read)`);
-				}
+		for (const htmlFile of htmlFiles.slice(0, 5)) {
+			try {
+				const html = await input.readFile(htmlFile);
+				const title = extractTitle(html) || htmlFile;
+				const text = extractVisibleText(html).slice(0, 300);
+				pageSummaries.push(`- ${htmlFile}: "${title}" — ${text}`);
+			} catch {
+				pageSummaries.push(`- ${htmlFile}: (could not read)`);
 			}
-
-			const { result } = await safeLLMCall(
-				deps.chatLLM,
-				{
-					prompt: `Generate an llms.txt file for a website with these pages:\n\n${pageSummaries.join("\n")}\n\nTotal pages: ${htmlFiles.length}`,
-					system_instruction:
-						"You are a GEO (Generative Engine Optimization) expert. Generate an llms.txt file that helps LLMs understand this site. Use markdown format with: a top-level heading with the site name, a brief description, then sections for key content areas, important pages, and any structured data available. Be specific to the actual site content — do not use generic boilerplate. Output ONLY the llms.txt content.",
-					json_mode: false,
-					temperature: 0.3,
-					max_tokens: 500,
-				},
-				(c) => c.trim(),
-				fallbackContent,
-			);
-			content = result;
 		}
+
+		const { result: content } = await safeLLMCall(
+			deps?.chatLLM,
+			{
+				prompt: `Generate an llms.txt file for a website with these pages:\n\n${pageSummaries.join("\n")}\n\nTotal pages: ${htmlFiles.length}`,
+				system_instruction:
+					"You are a GEO (Generative Engine Optimization) expert. Generate an llms.txt file that helps LLMs understand this site. Use markdown format with: a top-level heading with the site name, a brief description, then sections for key content areas, important pages, and any structured data available. Be specific to the actual site content — do not use generic boilerplate. Output ONLY the llms.txt content.",
+				json_mode: false,
+				temperature: 0.3,
+				max_tokens: 500,
+			},
+			(c) => c.trim(),
+		);
 
 		await input.writeFile("llms.txt", content);
 		return { success: true, files_modified: ["llms.txt"] };
@@ -313,28 +255,22 @@ async function optimizeSemanticStructure(
 				const title =
 					(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1]?.trim() || "Page Title";
 
-				let heading = title;
-
-				if (deps?.chatLLM) {
-					const pageText = extractVisibleText(html).slice(0, 1000);
-					const { result } = await safeLLMCall(
-						deps.chatLLM,
-						{
-							prompt: `Suggest a clear, descriptive H1 heading for this web page.\n\nCurrent title tag: ${title}\n\nContent excerpt:\n${pageText}`,
-							system_instruction:
-								"You are a web content expert. Write a single H1 heading that is clear, descriptive, and optimized for both users and LLM engines. It should accurately represent the page content. Output ONLY the heading text — no HTML tags, no quotes, no explanation. Keep it under 80 characters.",
-							json_mode: false,
-							temperature: 0.3,
-							max_tokens: 100,
-						},
-						(content) => {
-							const trimmed = content.trim().replace(/^["'#]+|["']+$/g, "");
-							return trimmed || title;
-						},
-						title,
-					);
-					heading = result;
-				}
+				const pageText = extractVisibleText(html).slice(0, 1000);
+				const { result: heading } = await safeLLMCall(
+					deps?.chatLLM,
+					{
+						prompt: `Suggest a clear, descriptive H1 heading for this web page.\n\nCurrent title tag: ${title}\n\nContent excerpt:\n${pageText}`,
+						system_instruction:
+							"You are a web content expert. Write a single H1 heading that is clear, descriptive, and optimized for both users and LLM engines. It should accurately represent the page content. Output ONLY the heading text — no HTML tags, no quotes, no explanation. Keep it under 80 characters.",
+						json_mode: false,
+						temperature: 0.3,
+						max_tokens: 100,
+					},
+					(content) => {
+						const trimmed = content.trim().replace(/^["'#]+|["']+$/g, "");
+						return trimmed || title;
+					},
+				);
 
 				html = html.replace(/<body[^>]*>/i, (match) => `${match}\n<h1>${escapeHtml(heading)}</h1>`);
 				fileModified = true;
@@ -371,37 +307,23 @@ async function optimizeContentDensity(
 			// 콘텐츠가 300단어 미만이면 보강 필요
 			if (wordCount >= 300) continue;
 
-			if (deps?.chatLLM) {
-				const title = extractTitle(html);
-				const { result } = await safeLLMCall(
-					deps.chatLLM,
-					{
-						prompt: `This web page has thin content (${wordCount} words). Title: "${title}"\nContent: "${text.slice(0, 1500)}"\n\nWrite 2-3 additional paragraphs of factual, informative content that would help this page be better understood by LLMs. Write in the same language as the existing content. Output only the HTML paragraphs (wrapped in <section> tags).`,
-						system_instruction:
-							"You are a GEO content specialist. Generate factual, relevant content to improve page density for LLM consumption. Never fabricate data. Use semantic HTML.",
-						json_mode: false,
-						temperature: 0.4,
-						max_tokens: 1000,
-					},
-					(content) => content.trim(),
-					"",
-				);
-				if (result) {
-					html = html.replace("</body>", `\n${result}\n</body>`);
-					await input.writeFile(htmlFile, html);
-					modified.push(htmlFile);
-				}
-			} else {
-				// Fallback: 구조적 개선 — nav가 없으면 추가
-				if (!/<nav[\s>]/i.test(html)) {
-					html = html.replace(
-						/<body[^>]*>/i,
-						(m) =>
-							`${m}\n<nav aria-label="Main navigation"><ul><li><a href="/">Home</a></li></ul></nav>`,
-					);
-					await input.writeFile(htmlFile, html);
-					modified.push(htmlFile);
-				}
+			const title = extractTitle(html);
+			const { result } = await safeLLMCall(
+				deps?.chatLLM,
+				{
+					prompt: `This web page has thin content (${wordCount} words). Title: "${title}"\nContent: "${text.slice(0, 1500)}"\n\nWrite 2-3 additional paragraphs of factual, informative content that would help this page be better understood by LLMs. Write in the same language as the existing content. Output only the HTML paragraphs (wrapped in <section> tags).`,
+					system_instruction:
+						"You are a GEO content specialist. Generate factual, relevant content to improve page density for LLM consumption. Never fabricate data. Use semantic HTML.",
+					json_mode: false,
+					temperature: 0.4,
+					max_tokens: 1000,
+				},
+				(content) => content.trim(),
+			);
+			if (result) {
+				html = html.replace("</body>", `\n${result}\n</body>`);
+				await input.writeFile(htmlFile, html);
+				modified.push(htmlFile);
 			}
 		}
 		return { success: modified.length > 0, files_modified: modified };
@@ -427,27 +349,25 @@ async function optimizeFaqAddition(
 			// 이미 FAQ 스키마가 있으면 skip
 			if (/FAQPage/i.test(html)) continue;
 
-			if (deps?.chatLLM) {
-				const title = extractTitle(html);
-				const text = extractVisibleText(html).slice(0, 2000);
-				const { result } = await safeLLMCall(
-					deps.chatLLM,
-					{
-						prompt: `Based on this page content, generate a FAQ section with 3-5 questions and answers.\nTitle: "${title}"\nContent: "${text}"\n\nOutput JSON: { "faqs": [{ "question": "...", "answer": "..." }] }`,
-						system_instruction:
-							"Generate factual FAQ items based on the page content. Never invent information not present in the content.",
-						json_mode: true,
-						temperature: 0.3,
-						max_tokens: 1500,
-					},
-					(content) => {
-						const parsed = JSON.parse(content);
-						return parsed.faqs as Array<{ question: string; answer: string }>;
-					},
-					[],
-				);
+			const title = extractTitle(html);
+			const text = extractVisibleText(html).slice(0, 2000);
+			const { result } = await safeLLMCall(
+				deps?.chatLLM,
+				{
+					prompt: `Based on this page content, generate a FAQ section with 3-5 questions and answers.\nTitle: "${title}"\nContent: "${text}"\n\nOutput JSON: { "faqs": [{ "question": "...", "answer": "..." }] }`,
+					system_instruction:
+						"Generate factual FAQ items based on the page content. Never invent information not present in the content.",
+					json_mode: true,
+					temperature: 0.3,
+					max_tokens: 1500,
+				},
+				(content) => {
+					const parsed = JSON.parse(content);
+					return parsed.faqs as Array<{ question: string; answer: string }>;
+				},
+			);
 
-				if (result.length > 0) {
+			if (result.length > 0) {
 					// FAQ HTML section
 					const faqHtml = `<section class="faq" itemscope itemtype="https://schema.org/FAQPage">\n<h2>자주 묻는 질문</h2>\n${result.map((f) => `<div itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">\n<h3 itemprop="name">${escapeHtml(f.question)}</h3>\n<div itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer"><p itemprop="text">${escapeHtml(f.answer)}</p></div>\n</div>`).join("\n")}\n</section>`;
 
@@ -469,8 +389,6 @@ async function optimizeFaqAddition(
 					await input.writeFile(htmlFile, html);
 					modified.push(htmlFile);
 				}
-			}
-			// No fallback — FAQ 생성은 LLM 없이는 의미 없음
 		}
 		return { success: modified.length > 0, files_modified: modified };
 	} catch (err) {

@@ -52,6 +52,35 @@ function makeCrawlData(overrides: Partial<CrawlData> = {}): CrawlData {
 	};
 }
 
+// ── Mock chatLLM ───────────────────────────────────────────
+
+function mockChatLLM() {
+	const assessment = {
+		brand_recognition: { score: 75, identified_brand: "Test", identified_products: ["Product"], reasoning: "test" },
+		content_quality: { score: 80, clarity: 85, completeness: 70, factual_density: 75, reasoning: "test" },
+		information_gaps: [],
+		llm_consumption_issues: [],
+		overall_assessment: "Good quality page",
+	};
+	const readabilityResponse = {
+		readability_level: "general",
+		reasoning: "Everyday language accessible to most adults",
+	};
+	return vi.fn().mockImplementation((req: { prompt: string }) => {
+		const content = req.prompt.includes("readability")
+			? JSON.stringify(readabilityResponse)
+			: JSON.stringify(assessment);
+		return Promise.resolve({
+			content,
+			model: "gpt-4o",
+			provider: "openai",
+			usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+			latency_ms: 300,
+			cost_usd: 0.02,
+		});
+	});
+}
+
 // ── Mock Dependencies ───────────────────────────────────────
 
 function makeDeps(crawlOverrides?: Partial<CrawlData>) {
@@ -87,6 +116,7 @@ function makeDeps(crawlOverrides?: Partial<CrawlData>) {
 				{ site_type: "generic", confidence: 0.25, signals: [] },
 			],
 		}),
+		chatLLM: mockChatLLM(),
 		_crawlData: crawlData,
 	};
 }
@@ -201,6 +231,46 @@ describe("Analysis Agent", () => {
 			const deps = makeDeps();
 			const result = await runAnalysis(defaultInput, deps);
 			expect(result.report.content_analysis.word_count).toBeGreaterThan(0);
+		});
+
+		it("report.content_analysis.readability_level uses LLM judgment", async () => {
+			const deps = makeDeps();
+			const result = await runAnalysis(defaultInput, deps);
+			// mockChatLLM returns "general" for readability prompts
+			expect(result.report.content_analysis.readability_level).toBe("general");
+		});
+
+		it("report.content_analysis.readability_level falls back to heuristic without chatLLM", async () => {
+			const deps = makeDeps();
+			// Replace chatLLM with one that only handles the content quality assessment (not readability)
+			// By removing chatLLM entirely and providing a minimal one that throws for readability
+			// but we can't remove it since safeLLMCall requires it.
+			// Instead, test heuristic fallback when LLM readability call fails.
+			const failOnReadabilityLLM = vi.fn().mockImplementation((req: { prompt: string }) => {
+				if (req.prompt.includes("readability")) {
+					return Promise.reject(new Error("LLM unavailable"));
+				}
+				const assessment = {
+					brand_recognition: { score: 75, identified_brand: "Test", identified_products: ["Product"], reasoning: "test" },
+					content_quality: { score: 80, clarity: 85, completeness: 70, factual_density: 75, reasoning: "test" },
+					information_gaps: [],
+					llm_consumption_issues: [],
+					overall_assessment: "Good quality page",
+				};
+				return Promise.resolve({
+					content: JSON.stringify(assessment),
+					model: "gpt-4o",
+					provider: "openai",
+					usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+					latency_ms: 300,
+					cost_usd: 0.02,
+				});
+			});
+			const result = await runAnalysis(defaultInput, { ...deps, chatLLM: failOnReadabilityLLM });
+			// Falls back to heuristic — should still be a valid level
+			expect(["technical", "general", "simplified"]).toContain(
+				result.report.content_analysis.readability_level,
+			);
 		});
 
 		it("report.current_geo_score has structured_score from S2", async () => {
@@ -353,7 +423,13 @@ describe("Analysis Agent — with LLM content quality assessment", () => {
 
 	it("includes llm_assessment when chatLLM provided", async () => {
 		const deps = makeDeps();
-		const chatLLM = vi.fn().mockResolvedValue(makeLLMResponse(JSON.stringify(mockLLMAssessment)));
+		const readabilityResponse = { readability_level: "general", reasoning: "test" };
+		const chatLLM = vi.fn().mockImplementation((req: { prompt: string }) => {
+			const content = req.prompt.includes("readability")
+				? JSON.stringify(readabilityResponse)
+				: JSON.stringify(mockLLMAssessment);
+			return Promise.resolve(makeLLMResponse(content));
+		});
 		const depsWithLLM = { ...deps, chatLLM };
 
 		const result = await runAnalysis(defaultInput, depsWithLLM);
@@ -366,25 +442,28 @@ describe("Analysis Agent — with LLM content quality assessment", () => {
 		expect(result.llm_assessment!.information_gaps[0].category).toBe("pricing");
 		expect(result.llm_assessment!.llm_consumption_issues).toHaveLength(1);
 		expect(result.llm_assessment!.overall_assessment).toBe("Decent page with room for improvement");
-		expect(chatLLM).toHaveBeenCalledOnce();
+		// chatLLM called for: readability, eval data extraction(s), content quality assessment
+		expect(chatLLM.mock.calls.length).toBeGreaterThanOrEqual(2);
 	});
 
-	it("llm_assessment is null when chatLLM not provided", async () => {
+	it("throws when chatLLM not provided", async () => {
 		const deps = makeDeps();
-		const result = await runAnalysis(defaultInput, deps);
-		expect(result.llm_assessment).toBeNull();
+		// Remove chatLLM to simulate missing LLM provider
+		const { chatLLM: _, ...depsWithoutLLM } = deps;
+
+		await expect(runAnalysis(defaultInput, depsWithoutLLM as any)).rejects.toThrow(
+			"LLM provider is not configured",
+		);
 	});
 
-	it("llm_assessment is null when chatLLM fails", async () => {
+	it("throws when chatLLM fails after retry", async () => {
 		const deps = makeDeps();
-		const chatLLM = vi.fn().mockRejectedValue(new Error("API rate limit exceeded"));
-		const depsWithLLM = { ...deps, chatLLM };
+		const failingChatLLM = vi.fn().mockRejectedValue(new Error("API rate limit exceeded"));
+		const depsWithLLM = { ...deps, chatLLM: failingChatLLM };
 
-		const result = await runAnalysis(defaultInput, depsWithLLM);
-		expect(result.llm_assessment).toBeNull();
-		// Should still have all other fields
-		expect(result.report).toBeDefined();
-		expect(result.geo_scores).toBeDefined();
+		await expect(runAnalysis(defaultInput, depsWithLLM)).rejects.toThrow(
+			"LLM call failed after retry: API rate limit exceeded",
+		);
 	});
 });
 
@@ -409,6 +488,7 @@ describe("Analysis Agent — smoke test with real classifySite", () => {
 				],
 			}),
 			classifySite,
+			chatLLM: mockChatLLM(),
 		};
 
 		const result = await runAnalysis(defaultInput, deps);

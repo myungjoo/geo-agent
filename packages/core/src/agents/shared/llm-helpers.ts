@@ -1,7 +1,7 @@
 /**
  * LLM Helper Utilities for Pipeline Agents
  *
- * - safeLLMCall: wraps LLM calls with try/catch + fallback
+ * - safeLLMCall: wraps LLM calls with 1-retry + throw on failure (4-D: no fallback)
  * - truncateHtml: strips scripts/styles, truncates
  * - buildPageContext: creates compact JSON from HTML for LLM prompts
  * - parseJsonResponse: handles markdown fences + Zod validation
@@ -42,29 +42,38 @@ export interface SafeLLMResult<T> {
 }
 
 /**
- * Wraps an LLM call with error handling and fallback.
- * Returns fallback if chatLLM is undefined or call fails with non-auth errors.
- * Re-throws auth errors (401, 403, invalid key) to stop the pipeline.
+ * Wraps an LLM call with error handling and 1-retry on transient errors.
+ * Throws if chatLLM is undefined (4-D: LLM required, no fallback).
+ * Auth errors (401, 403, invalid key) fail immediately without retry.
+ * Non-auth errors retry once, then throw with clear error message.
  */
 export async function safeLLMCall<T>(
 	chatLLM: ((req: LLMRequest) => Promise<LLMResponse>) | undefined,
 	request: LLMRequest,
 	parser: (content: string) => T,
-	fallback: T,
 ): Promise<SafeLLMResult<T>> {
-	if (!chatLLM) return { result: fallback, llm_used: false };
-	try {
-		const response = await chatLLM(request);
-		const parsed = parser(response.content);
-		return { result: parsed, llm_used: true, latency_ms: response.latency_ms };
-	} catch (err) {
-		// Auth errors must not be silently swallowed — re-throw to stop pipeline
-		if (isLLMAuthError(err)) {
-			throw err;
-		}
-		const errorMsg = err instanceof Error ? err.message : String(err);
-		return { result: fallback, llm_used: false, error: errorMsg };
+	if (!chatLLM) {
+		throw new Error(
+			"LLM provider is not configured. Pipeline requires a working LLM provider to proceed.",
+		);
 	}
+	let lastError: unknown;
+	for (let attempt = 0; attempt < 2; attempt++) {
+		try {
+			const response = await chatLLM(request);
+			const parsed = parser(response.content);
+			return { result: parsed, llm_used: true, latency_ms: response.latency_ms };
+		} catch (err) {
+			// Auth errors must not be retried — fail immediately
+			if (isLLMAuthError(err)) {
+				throw err;
+			}
+			lastError = err;
+			if (attempt === 0) continue; // retry once for transient errors
+		}
+	}
+	const errorMsg = lastError instanceof Error ? lastError.message : String(lastError);
+	throw new Error(`LLM call failed after retry: ${errorMsg}`);
 }
 
 // ── HTML Truncation ─────────────────────────────────────────

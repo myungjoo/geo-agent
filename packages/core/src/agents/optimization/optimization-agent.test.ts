@@ -52,31 +52,110 @@ function makeInput(
 	};
 }
 
+function makeLLMResponse(content: string) {
+	return {
+		content,
+		model: "gpt-4o",
+		provider: "openai",
+		usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+		latency_ms: 200,
+		cost_usd: 0.01,
+	};
+}
+
+/**
+ * Creates a mock chatLLM that returns appropriate responses based on prompt content.
+ * Each optimization type needs different response formats.
+ */
+function makeSmartChatLLM() {
+	return vi.fn().mockImplementation(async (req: { prompt: string }) => {
+		const prompt = req.prompt.toLowerCase();
+
+		// FAQ_ADDITION: needs JSON with faqs array
+		if (prompt.includes("faq") || prompt.includes("questions and answers")) {
+			return makeLLMResponse(
+				JSON.stringify({
+					faqs: [
+						{ question: "What is this page about?", answer: "This is a test page." },
+					],
+				}),
+			);
+		}
+
+		// SCHEMA_MARKUP / JSON-LD: needs valid JSON with @context
+		if (prompt.includes("json-ld") || prompt.includes("structured data")) {
+			return makeLLMResponse(
+				JSON.stringify({
+					"@context": "https://schema.org",
+					"@type": "WebPage",
+					name: "Test Page",
+					description: "A test page",
+				}),
+			);
+		}
+
+		// LLMS_TXT: markdown text
+		if (prompt.includes("llms.txt")) {
+			return makeLLMResponse(
+				"# Test Page\n\nA detailed description of the site.\n\n## Key Content\n- Main content area",
+			);
+		}
+
+		// CONTENT_DENSITY: HTML section content
+		if (prompt.includes("thin content") || prompt.includes("additional paragraphs")) {
+			return makeLLMResponse(
+				"<section><p>Additional informative content about the page topic.</p></section>",
+			);
+		}
+
+		// SEMANTIC_STRUCTURE / H1 heading: plain text
+		if (prompt.includes("h1 heading") || prompt.includes("heading for this web page")) {
+			return makeLLMResponse("Test Page Heading");
+		}
+
+		// METADATA OG description
+		if (prompt.includes("open graph")) {
+			return makeLLMResponse("A compelling description for social sharing");
+		}
+
+		// METADATA meta description (default for meta-related prompts)
+		if (prompt.includes("meta description")) {
+			return makeLLMResponse("Test Page - A concise meta description for LLM discoverability");
+		}
+
+		// Default fallback
+		return makeLLMResponse("Generated content for optimization");
+	});
+}
+
 describe("Optimization Agent", () => {
 	describe("runOptimization — METADATA tasks", () => {
 		it("adds meta description when missing", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const input = makeInput([
 				makeTask({ change_type: "METADATA", title: "Meta description 추가" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			expect(result.applied_tasks).toHaveLength(1);
 			expect(result.files_modified).toContain("index.html");
 			expect(input.writeFile).toHaveBeenCalled();
 		});
 
 		it("adds OG tags when missing", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const input = makeInput([
 				makeTask({ change_type: "METADATA", title: "Open Graph 메타태그 추가" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			expect(result.applied_tasks).toHaveLength(1);
 		});
 
 		it("creates robots.txt for bot access", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const input = makeInput([
 				makeTask({ change_type: "METADATA", title: "robots.txt에서 AI 봇 허용" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			expect(result.applied_tasks).toHaveLength(1);
 			expect(result.files_modified).toContain("robots.txt");
 		});
@@ -84,10 +163,11 @@ describe("Optimization Agent", () => {
 
 	describe("runOptimization — SCHEMA_MARKUP tasks", () => {
 		it("adds JSON-LD when missing", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const input = makeInput([
 				makeTask({ change_type: "SCHEMA_MARKUP", title: "JSON-LD 구조화 데이터 추가" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			expect(result.applied_tasks).toHaveLength(1);
 
 			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
@@ -98,19 +178,21 @@ describe("Optimization Agent", () => {
 		});
 
 		it("skips when JSON-LD already exists", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const input = makeInput([makeTask({ change_type: "SCHEMA_MARKUP", title: "JSON-LD 추가" })], {
 				"index.html":
 					'<html><head><script type="application/ld+json">{"@type":"WebPage"}</script></head><body></body></html>',
 			});
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			expect(result.skipped_tasks).toHaveLength(1);
 		});
 	});
 
 	describe("runOptimization — LLMS_TXT tasks", () => {
 		it("creates llms.txt file", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const input = makeInput([makeTask({ change_type: "LLMS_TXT", title: "llms.txt 파일 생성" })]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			expect(result.applied_tasks).toHaveLength(1);
 			expect(result.files_modified).toContain("llms.txt");
 		});
@@ -118,10 +200,11 @@ describe("Optimization Agent", () => {
 
 	describe("runOptimization — SEMANTIC_STRUCTURE tasks", () => {
 		it("adds H1 when missing", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const input = makeInput([
 				makeTask({ change_type: "SEMANTIC_STRUCTURE", title: "헤딩 계층 구조 수정" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			expect(result.applied_tasks).toHaveLength(1);
 
 			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
@@ -151,21 +234,23 @@ describe("Optimization Agent", () => {
 
 	describe("runOptimization — multiple tasks", () => {
 		it("processes multiple tasks sequentially", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const input = makeInput([
 				makeTask({ task_id: "t1", change_type: "METADATA", title: "Meta description 추가" }),
 				makeTask({ task_id: "t2", change_type: "LLMS_TXT", title: "llms.txt 파일 생성" }),
 				makeTask({ task_id: "t3", change_type: "SCHEMA_MARKUP", title: "JSON-LD 추가" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			expect(result.applied_tasks.length).toBeGreaterThanOrEqual(2);
 		});
 
 		it("deduplicates modified files", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const input = makeInput([
 				makeTask({ task_id: "t1", change_type: "METADATA", title: "Meta description 추가" }),
 				makeTask({ task_id: "t2", change_type: "SCHEMA_MARKUP", title: "JSON-LD 추가" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			const indexCount = result.files_modified.filter((f) => f === "index.html").length;
 			expect(indexCount).toBeLessThanOrEqual(1);
 		});
@@ -173,24 +258,14 @@ describe("Optimization Agent", () => {
 
 	describe("runOptimization — error handling", () => {
 		it("captures file read errors as failed tasks", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const input = makeInput([makeTask({ change_type: "SCHEMA_MARKUP", title: "JSON-LD 추가" })]);
 			(input.readFile as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("Read failed"));
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			expect(result.failed_tasks).toHaveLength(1);
 			expect(result.failed_tasks[0].error).toContain("Read failed");
 		});
 	});
-
-	function makeLLMResponse(content: string) {
-		return {
-			content,
-			model: "gpt-4o",
-			provider: "openai",
-			usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
-			latency_ms: 200,
-			cost_usd: 0.01,
-		};
-	}
 
 	describe("runOptimization — with LLM", () => {
 		it("generates real meta description via LLM", async () => {
@@ -259,7 +334,7 @@ describe("Optimization Agent", () => {
 			);
 		});
 
-		it("falls back to hardcoded when LLM fails", async () => {
+		it("fails when LLM returns error (no fallback)", async () => {
 			const chatLLM = vi.fn().mockRejectedValue(new Error("API error"));
 			const input = makeInput([
 				makeTask({ change_type: "METADATA", title: "Meta description 추가" }),
@@ -267,13 +342,66 @@ describe("Optimization Agent", () => {
 
 			const result = await runOptimization(input, { chatLLM });
 
-			expect(result.applied_tasks).toHaveLength(1);
-			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
-				(c: string[]) => c[0] === "index.html",
-			);
-			expect(writeCall).toBeTruthy();
-			// Should have the context-based fallback description (title-based)
-			expect(writeCall![1]).toContain("Test Page - Official information");
+			// safeLLMCall throws after retry, caught by optimizer → failed_task
+			expect(result.failed_tasks).toHaveLength(1);
+			expect(result.failed_tasks[0].error).toContain("API error");
+			expect(result.applied_tasks).toHaveLength(0);
+		});
+	});
+
+	describe("runOptimization — LLM required (no fallback)", () => {
+		it("METADATA fails without chatLLM", async () => {
+			const input = makeInput([
+				makeTask({ change_type: "METADATA", title: "Meta description 추가" }),
+			]);
+			const result = await runOptimization(input);
+			expect(result.failed_tasks).toHaveLength(1);
+			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
+		});
+
+		it("SCHEMA_MARKUP fails without chatLLM", async () => {
+			const input = makeInput([
+				makeTask({ change_type: "SCHEMA_MARKUP", title: "JSON-LD 추가" }),
+			]);
+			const result = await runOptimization(input);
+			expect(result.failed_tasks).toHaveLength(1);
+			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
+		});
+
+		it("LLMS_TXT fails without chatLLM", async () => {
+			const input = makeInput([
+				makeTask({ change_type: "LLMS_TXT", title: "llms.txt 파일 생성" }),
+			]);
+			const result = await runOptimization(input);
+			expect(result.failed_tasks).toHaveLength(1);
+			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
+		});
+
+		it("SEMANTIC_STRUCTURE fails without chatLLM", async () => {
+			const input = makeInput([
+				makeTask({ change_type: "SEMANTIC_STRUCTURE", title: "헤딩 계층 구조 수정" }),
+			]);
+			const result = await runOptimization(input);
+			expect(result.failed_tasks).toHaveLength(1);
+			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
+		});
+
+		it("CONTENT_DENSITY fails without chatLLM", async () => {
+			const input = makeInput([
+				makeTask({ change_type: "CONTENT_DENSITY", title: "콘텐츠 확충" }),
+			]);
+			const result = await runOptimization(input);
+			expect(result.failed_tasks).toHaveLength(1);
+			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
+		});
+
+		it("FAQ_ADDITION fails without chatLLM", async () => {
+			const input = makeInput([
+				makeTask({ change_type: "FAQ_ADDITION", title: "FAQ 추가" }),
+			]);
+			const result = await runOptimization(input);
+			expect(result.failed_tasks).toHaveLength(1);
+			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
 		});
 	});
 
@@ -297,10 +425,11 @@ describe("Optimization Agent", () => {
 		}
 
 		it("METADATA applies meta description to ALL html files", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const input = makeMultiPageInput([
 				makeTask({ change_type: "METADATA", title: "Meta description 추가" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			expect(result.applied_tasks).toHaveLength(1);
 			expect(result.files_modified).toContain("index.html");
 			expect(result.files_modified).toContain("products.html");
@@ -309,26 +438,29 @@ describe("Optimization Agent", () => {
 		});
 
 		it("SCHEMA_MARKUP adds JSON-LD to ALL html files without it", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const input = makeMultiPageInput([
 				makeTask({ change_type: "SCHEMA_MARKUP", title: "JSON-LD 추가" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			expect(result.files_modified).toContain("index.html");
 			expect(result.files_modified).toContain("products.html");
 			expect(result.files_modified).toContain("about.html");
 		});
 
 		it("SEMANTIC_STRUCTURE adds H1 to ALL html files missing it", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const input = makeMultiPageInput([
 				makeTask({ change_type: "SEMANTIC_STRUCTURE", title: "헤딩 계층 구조 수정" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			expect(result.files_modified).toContain("index.html");
 			expect(result.files_modified).toContain("products.html");
 			expect(result.files_modified).toContain("about.html");
 		});
 
 		it("skips HTML files that already have the target element", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const files: Record<string, string> = {
 				"index.html":
 					'<html><head><title>Home</title><meta name="description" content="existing"></head><body></body></html>',
@@ -343,17 +475,18 @@ describe("Optimization Agent", () => {
 				writeFile: vi.fn(async () => {}),
 				listFiles: vi.fn(async () => Object.keys(files)),
 			};
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			// index.html already has meta description, products.html doesn't
 			expect(result.files_modified).toContain("products.html");
 			expect(result.files_modified).not.toContain("index.html");
 		});
 
 		it("OG tags applied to all pages", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const input = makeMultiPageInput([
 				makeTask({ change_type: "METADATA", title: "Open Graph 메타태그 추가" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			expect(result.files_modified.length).toBe(3);
 			// Verify writeFile was called with OG content for each
 			const writeCalls = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls;
@@ -365,13 +498,6 @@ describe("Optimization Agent", () => {
 	});
 
 	describe("runOptimization — new ChangeType handlers", () => {
-		it("CONTENT_DENSITY adds nav when no LLM (fallback)", async () => {
-			const input = makeInput([makeTask({ change_type: "CONTENT_DENSITY", title: "콘텐츠 확충" })]);
-			const result = await runOptimization(input);
-			expect(result.applied_tasks).toHaveLength(1);
-			expect(result.files_modified).toContain("index.html");
-		});
-
 		it("CONTENT_DENSITY generates content with LLM", async () => {
 			const generatedHtml =
 				"<section><p>Generated factual content about the product.</p></section>";
@@ -394,6 +520,7 @@ describe("Optimization Agent", () => {
 		});
 
 		it("CONTENT_DENSITY skips pages with enough words", async () => {
+			const chatLLM = makeSmartChatLLM();
 			const longContent = "word ".repeat(400);
 			const input = makeInput(
 				[makeTask({ change_type: "CONTENT_DENSITY", title: "콘텐츠 확충" })],
@@ -401,7 +528,7 @@ describe("Optimization Agent", () => {
 					"index.html": `<html><head><title>T</title></head><body><p>${longContent}</p></body></html>`,
 				},
 			);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM });
 			expect(result.skipped_tasks).toHaveLength(1);
 		});
 
@@ -430,12 +557,6 @@ describe("Optimization Agent", () => {
 			const result = await runOptimization(input, { chatLLM });
 			// FAQPage found in HTML → skipped
 			expect(result.files_modified).toHaveLength(0);
-		});
-
-		it("FAQ_ADDITION does nothing without LLM", async () => {
-			const input = makeInput([makeTask({ change_type: "FAQ_ADDITION", title: "FAQ 추가" })]);
-			const result = await runOptimization(input);
-			expect(result.skipped_tasks).toHaveLength(1);
 		});
 
 		it("AUTHORITY_SIGNAL adds dateModified and canonical", async () => {

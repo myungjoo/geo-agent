@@ -279,7 +279,7 @@ export function createAnalysisToolHandlers(
 				crawl_data: p.crawl_data,
 			})) ?? [];
 
-			const evalData = extractGeoEvaluationData(crawlData, subPages, dimensions);
+			const evalData = await extractGeoEvaluationData(crawlData, subPages, dimensions, deps.chatLLM);
 			state.evalData = evalData;
 			return JSON.stringify(evalData);
 		},

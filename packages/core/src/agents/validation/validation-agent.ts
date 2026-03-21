@@ -175,55 +175,48 @@ export async function runValidation(
 		stopReason = `max_cycles: ${input.cycle_number + 1} >= ${maxCycles}`;
 	}
 
-	// 6. LLM 품질 검증 (선택) — 결과를 사이클 제어에도 반영
+	// 6. LLM 품질 검증 (4-D: LLM required, no fallback)
 	let llmVerdict: ValidationVerdict | null = null;
-	if (deps.chatLLM) {
-		try {
-			const { result } = await safeLLMCall(
-				deps.chatLLM,
-				{
-					prompt: `Compare the optimization results. Score changed from ${input.before_score} to ${effectiveAfterScore} (delta: ${delta}).\n\nDimension changes:\n${dimensionDeltas.map((d) => `${d.label}: ${d.before} → ${d.after} (${d.delta >= 0 ? "+" : ""}${d.delta})`).join("\n")}\n\nAssess the optimization quality. Respond in JSON format.`,
-					system_instruction:
-						'You are a GEO validation expert. Assess optimization quality. Respond with JSON:\n{"improved_aspects":["string"],"remaining_issues":["string"],"llm_friendliness_verdict":"much_better|better|marginally_better|no_change|worse","specific_recommendations":["string"],"confidence":0.0-1.0}',
-					json_mode: true,
-					temperature: 0.1,
-					max_tokens: 1500,
-				},
-				(content) => parseJsonResponse(content, ValidationVerdictSchema),
-				null,
-			);
-			if (result) {
-				llmVerdict = {
-					improved_aspects: result.improved_aspects ?? [],
-					remaining_issues: result.remaining_issues ?? [],
-					llm_friendliness_verdict: result.llm_friendliness_verdict,
-					specific_recommendations: result.specific_recommendations ?? [],
-					confidence: result.confidence ?? 0.5,
-				};
-				// LLM verdict에 따른 사이클 제어 보정
-				if (llmVerdict.confidence >= 0.7) {
-					if (llmVerdict.llm_friendliness_verdict === "worse" && needsMoreCycles) {
-						needsMoreCycles = false;
-						stopReason = `llm_verdict_worse: LLM assessment says quality worsened (confidence: ${llmVerdict.confidence})`;
-					} else if (
-						llmVerdict.llm_friendliness_verdict === "no_change" &&
-						needsMoreCycles &&
-						input.cycle_number > 0
-					) {
-						needsMoreCycles = false;
-						stopReason = `llm_verdict_no_change: LLM assessment says no improvement (confidence: ${llmVerdict.confidence})`;
-					} else if (
-						llmVerdict.remaining_issues.length === 0 &&
-						effectiveAfterScore >= 70 &&
-						needsMoreCycles
-					) {
-						needsMoreCycles = false;
-						stopReason = `llm_verdict_sufficient: LLM found no remaining issues (score: ${effectiveAfterScore})`;
-					}
-				}
+	const { result: verdictResult } = await safeLLMCall(
+		deps.chatLLM,
+		{
+			prompt: `Compare the optimization results. Score changed from ${input.before_score} to ${effectiveAfterScore} (delta: ${delta}).\n\nDimension changes:\n${dimensionDeltas.map((d) => `${d.label}: ${d.before} → ${d.after} (${d.delta >= 0 ? "+" : ""}${d.delta})`).join("\n")}\n\nAssess the optimization quality. Respond in JSON format.`,
+			system_instruction:
+				'You are a GEO validation expert. Assess optimization quality. Respond with JSON:\n{"improved_aspects":["string"],"remaining_issues":["string"],"llm_friendliness_verdict":"much_better|better|marginally_better|no_change|worse","specific_recommendations":["string"],"confidence":0.0-1.0}',
+			json_mode: true,
+			temperature: 0.1,
+			max_tokens: 1500,
+		},
+		(content) => parseJsonResponse(content, ValidationVerdictSchema),
+	);
+	if (verdictResult) {
+		llmVerdict = {
+			improved_aspects: verdictResult.improved_aspects ?? [],
+			remaining_issues: verdictResult.remaining_issues ?? [],
+			llm_friendliness_verdict: verdictResult.llm_friendliness_verdict,
+			specific_recommendations: verdictResult.specific_recommendations ?? [],
+			confidence: verdictResult.confidence ?? 0.5,
+		};
+		// LLM verdict에 따른 사이클 제어 보정
+		if (llmVerdict.confidence >= 0.7) {
+			if (llmVerdict.llm_friendliness_verdict === "worse" && needsMoreCycles) {
+				needsMoreCycles = false;
+				stopReason = `llm_verdict_worse: LLM assessment says quality worsened (confidence: ${llmVerdict.confidence})`;
+			} else if (
+				llmVerdict.llm_friendliness_verdict === "no_change" &&
+				needsMoreCycles &&
+				input.cycle_number > 0
+			) {
+				needsMoreCycles = false;
+				stopReason = `llm_verdict_no_change: LLM assessment says no improvement (confidence: ${llmVerdict.confidence})`;
+			} else if (
+				llmVerdict.remaining_issues.length === 0 &&
+				effectiveAfterScore >= 70 &&
+				needsMoreCycles
+			) {
+				needsMoreCycles = false;
+				stopReason = `llm_verdict_sufficient: LLM found no remaining issues (score: ${effectiveAfterScore})`;
 			}
-		} catch {
-			// Non-fatal
 		}
 	}
 

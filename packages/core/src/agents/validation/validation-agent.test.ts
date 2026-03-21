@@ -43,6 +43,24 @@ function makeInput(overrides: Partial<ValidationInput> = {}): ValidationInput {
 	};
 }
 
+/** Creates a mock chatLLM that returns a valid ValidationVerdict JSON */
+function mockChatLLM() {
+	return vi.fn().mockResolvedValue({
+		content: JSON.stringify({
+			improved_aspects: ["schema markup"],
+			remaining_issues: ["content density"],
+			llm_friendliness_verdict: "better",
+			specific_recommendations: ["Add FAQ"],
+			confidence: 0.8,
+		}),
+		model: "gpt-4o",
+		provider: "openai",
+		usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+		latency_ms: 200,
+		cost_usd: 0.005,
+	});
+}
+
 function makeDeps(afterScore = 65) {
 	const afterDimensions = baseDimensions.map((d) => ({
 		...d,
@@ -56,6 +74,7 @@ function makeDeps(afterScore = 65) {
 			grade: afterScore >= 75 ? "Good" : "Needs Improvement",
 			dimensions: afterDimensions,
 		}),
+		chatLLM: mockChatLLM(),
 	};
 }
 
@@ -201,22 +220,37 @@ describe("Validation Agent", () => {
 			expect(chatLLM).toHaveBeenCalledOnce();
 		});
 
-		it("llm_verdict is null without chatLLM", async () => {
-			const result = await runValidation(makeInput(), makeDeps(65));
-			expect(result.llm_verdict).toBeNull();
+		it("throws without chatLLM", async () => {
+			const deps = {
+				crawlClone: vi.fn().mockResolvedValue(makeCrawlData()),
+				scoreTarget: vi.fn().mockReturnValue({
+					overall_score: 65,
+					grade: "Needs Improvement",
+					dimensions: baseDimensions.map((d) => ({
+						...d,
+						score: d.score + 15,
+						details: ["Improved by 15"],
+					})),
+				}),
+				// no chatLLM
+			};
+			await expect(runValidation(makeInput(), deps)).rejects.toThrow(
+				"LLM provider is not configured",
+			);
 		});
 
-		it("llm_verdict is null when chatLLM fails", async () => {
+		it("throws when chatLLM fails after retry", async () => {
 			const deps = makeDeps(65);
-			const chatLLM = vi.fn().mockRejectedValue(new Error("LLM timeout"));
+			const chatLLM = vi
+				.fn()
+				.mockRejectedValueOnce(new Error("LLM timeout"))
+				.mockRejectedValueOnce(new Error("LLM timeout"));
 			const depsWithLLM = { ...deps, chatLLM };
 
-			const result = await runValidation(makeInput(), depsWithLLM);
-			expect(result.llm_verdict).toBeNull();
-			// Other fields should still be correct
-			expect(result.after_score).toBe(65);
-			expect(result.delta).toBe(15);
-			expect(result.improved).toBe(true);
+			await expect(runValidation(makeInput(), depsWithLLM)).rejects.toThrow(
+				"LLM call failed after retry",
+			);
+			expect(chatLLM).toHaveBeenCalledTimes(2);
 		});
 	});
 
@@ -225,6 +259,7 @@ describe("Validation Agent", () => {
 			const deps = {
 				crawlClone: vi.fn().mockRejectedValue(new Error("Clone not found")),
 				scoreTarget: vi.fn(),
+				chatLLM: mockChatLLM(),
 			};
 			await expect(runValidation(makeInput(), deps)).rejects.toThrow("Clone not found");
 		});

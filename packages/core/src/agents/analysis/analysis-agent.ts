@@ -116,7 +116,11 @@ function computeStructureQuality(html: string) {
 	};
 }
 
-function computeContentAnalysis(html: string, topics: string[]) {
+async function computeContentAnalysis(
+	html: string,
+	topics: string[],
+	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>,
+) {
 	const textContent = html
 		.replace(/<[^>]+>/g, "")
 		.replace(/\s+/g, " ")
@@ -127,9 +131,40 @@ function computeContentAnalysis(html: string, topics: string[]) {
 	// Content density: text bytes vs total bytes
 	const density = Math.round((textContent.length / Math.max(html.length, 1)) * 100);
 
-	// Simple readability heuristic
-	const avgWordLen = words.reduce((sum, w) => sum + w.length, 0) / Math.max(wordCount, 1);
-	const readability = avgWordLen > 7 ? "technical" : avgWordLen > 5 ? "general" : "simplified";
+	// Readability level: LLM-based when available, heuristic fallback
+	let readability: "technical" | "general" | "simplified";
+	if (chatLLM) {
+		const excerpt = textContent.slice(0, 500);
+		try {
+			const response = await chatLLM({
+				prompt: `Analyze the readability level of the following text excerpt. Classify it as one of: "technical", "general", or "simplified".\n\n- "technical": specialized vocabulary, complex sentence structures, assumes domain expertise\n- "general": everyday language accessible to most adults, moderate complexity\n- "simplified": very simple language, short sentences, basic vocabulary\n\nText excerpt:\n"""\n${excerpt}\n"""\n\nRespond with JSON only: { "readability_level": "technical"|"general"|"simplified", "reasoning": "brief explanation" }`,
+				system_instruction:
+					"You are a readability analyst. Classify text readability. Respond with JSON only.",
+				json_mode: true,
+				temperature: 0.1,
+				max_tokens: 200,
+			});
+			const parsed = JSON.parse(response.content);
+			const level = parsed.readability_level;
+			if (level === "technical" || level === "general" || level === "simplified") {
+				readability = level;
+			} else {
+				// Invalid LLM response — fall back to heuristic
+				const avgWordLen =
+					words.reduce((sum, w) => sum + w.length, 0) / Math.max(wordCount, 1);
+				readability = avgWordLen > 7 ? "technical" : avgWordLen > 5 ? "general" : "simplified";
+			}
+		} catch {
+			// LLM call failed — fall back to heuristic
+			const avgWordLen =
+				words.reduce((sum, w) => sum + w.length, 0) / Math.max(wordCount, 1);
+			readability = avgWordLen > 7 ? "technical" : avgWordLen > 5 ? "general" : "simplified";
+		}
+	} else {
+		// No LLM available — use heuristic
+		const avgWordLen = words.reduce((sum, w) => sum + w.length, 0) / Math.max(wordCount, 1);
+		readability = avgWordLen > 7 ? "technical" : avgWordLen > 5 ? "general" : "simplified";
+	}
 
 	// Topic alignment: check how many target topics appear in content
 	const lowerText = textContent.toLowerCase();
@@ -138,7 +173,7 @@ function computeContentAnalysis(html: string, topics: string[]) {
 	return {
 		word_count: wordCount,
 		content_density: Math.min(density, 100),
-		readability_level: readability as "technical" | "general" | "simplified",
+		readability_level: readability,
 		key_topics_found: found,
 		topic_alignment: topics.length > 0 ? found.length / topics.length : 0,
 	};
@@ -303,7 +338,7 @@ export async function runAnalysis(
 
 	// 5. Build AnalysisReport
 	const structureQuality = computeStructureQuality(crawlData.html);
-	const contentAnalysis = computeContentAnalysis(crawlData.html, []);
+	const contentAnalysis = await computeContentAnalysis(crawlData.html, [], deps.chatLLM);
 
 	const effectiveScore = multiPage?.aggregate_score ?? geoScores.overall_score;
 	const effectiveGrade = multiPage?.aggregate_grade ?? geoScores.grade;
@@ -366,39 +401,32 @@ export async function runAnalysis(
 			filename: p.filename,
 			crawl_data: p.crawl_data,
 		})) ?? [];
-	const evalData = extractGeoEvaluationData(crawlData, subPages, geoScores.dimensions);
+	const evalData = await extractGeoEvaluationData(crawlData, subPages, geoScores.dimensions, deps.chatLLM);
 
-	// 7. LLM content quality assessment (optional)
+	// 7. LLM content quality assessment (4-D: LLM required, no fallback)
 	let llmAssessment: ContentQualityAssessment | null = null;
-	if (deps.chatLLM) {
-		try {
-			const pageContext = buildPageContext(crawlData.html, crawlData.url, {
-				robots_txt: crawlData.robots_txt,
-				llms_txt: crawlData.llms_txt,
-				json_ld: crawlData.json_ld,
-				meta_tags: crawlData.meta_tags,
-				title: crawlData.title,
-				site_type: classification.site_type,
-				scores: Object.fromEntries(geoScores.dimensions.map((d) => [d.id, d.score])),
-			});
+	const pageContext = buildPageContext(crawlData.html, crawlData.url, {
+		robots_txt: crawlData.robots_txt,
+		llms_txt: crawlData.llms_txt,
+		json_ld: crawlData.json_ld,
+		meta_tags: crawlData.meta_tags,
+		title: crawlData.title,
+		site_type: classification.site_type,
+		scores: Object.fromEntries(geoScores.dimensions.map((d) => [d.id, d.score])),
+	});
 
-			const { result } = await safeLLMCall(
-				deps.chatLLM,
-				{
-					prompt: `Evaluate this web page for LLM consumption quality. Analyze brand recognition, content quality, information gaps, and issues that affect how well LLMs can understand and cite this page. Respond in JSON format.\n\nPage context:\n${JSON.stringify(pageContext, null, 2)}`,
-					system_instruction: `You are a GEO (Generative Engine Optimization) expert. Evaluate web pages for LLM consumption quality. Respond with JSON only:\n{\n  "brand_recognition": { "score": 0-100, "identified_brand": "string", "identified_products": ["string"], "reasoning": "string" },\n  "content_quality": { "score": 0-100, "clarity": 0-100, "completeness": 0-100, "factual_density": 0-100, "reasoning": "string" },\n  "information_gaps": [{ "category": "string", "description": "string", "importance": "critical|high|medium|low" }],\n  "llm_consumption_issues": [{ "issue": "string", "recommendation": "string" }],\n  "overall_assessment": "string"\n}`,
-					json_mode: true,
-					temperature: 0.3,
-					max_tokens: 2000,
-				},
-				(content) => parseJsonResponse(content, ContentQualityAssessmentSchema),
-				null,
-			);
-			llmAssessment = result;
-		} catch {
-			// LLM assessment failure is non-fatal
-		}
-	}
+	const { result } = await safeLLMCall(
+		deps.chatLLM,
+		{
+			prompt: `Evaluate this web page for LLM consumption quality. Analyze brand recognition, content quality, information gaps, and issues that affect how well LLMs can understand and cite this page. Respond in JSON format.\n\nPage context:\n${JSON.stringify(pageContext, null, 2)}`,
+			system_instruction: `You are a GEO (Generative Engine Optimization) expert. Evaluate web pages for LLM consumption quality. Respond with JSON only:\n{\n  "brand_recognition": { "score": 0-100, "identified_brand": "string", "identified_products": ["string"], "reasoning": "string" },\n  "content_quality": { "score": 0-100, "clarity": 0-100, "completeness": 0-100, "factual_density": 0-100, "reasoning": "string" },\n  "information_gaps": [{ "category": "string", "description": "string", "importance": "critical|high|medium|low" }],\n  "llm_consumption_issues": [{ "issue": "string", "recommendation": "string" }],\n  "overall_assessment": "string"\n}`,
+			json_mode: true,
+			temperature: 0.3,
+			max_tokens: 2000,
+		},
+		(content) => parseJsonResponse(content, ContentQualityAssessmentSchema),
+	);
+	llmAssessment = result;
 
 	return {
 		report,

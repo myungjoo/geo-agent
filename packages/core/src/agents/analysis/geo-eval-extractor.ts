@@ -13,6 +13,7 @@
  * - 제품/가격/스펙 정보 추출
  */
 import type { CrawlData, PageScoreResult } from "../shared/types.js";
+import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
 
 // ── AI Bot Policy ──────────────────────────────────────────
 
@@ -118,10 +119,55 @@ const SCHEMA_TYPES_TO_CHECK = [
 	"SearchAction",
 ];
 
-export function extractSchemaCoverage(
+/**
+ * Collect JSON-LD snippets for a given schema type across pages (truncated for LLM context).
+ */
+function collectJsonLdSnippets(
+	schemaType: string,
 	pages: Array<{ url: string; filename: string; crawl_data: CrawlData }>,
-): SchemaCoverageEntry[] {
-	return SCHEMA_TYPES_TO_CHECK.map((schemaType) => {
+	maxSnippets = 3,
+	maxSnippetLength = 500,
+): string[] {
+	const snippets: string[] = [];
+	for (const page of pages) {
+		if (snippets.length >= maxSnippets) break;
+		for (const ld of page.crawl_data.json_ld) {
+			if (snippets.length >= maxSnippets) break;
+			const obj = ld as Record<string, unknown>;
+			const t = String(obj["@type"] ?? "").toLowerCase();
+			if (t === schemaType.toLowerCase()) {
+				const raw = JSON.stringify(ld);
+				snippets.push(raw.length > maxSnippetLength ? `${raw.slice(0, maxSnippetLength)}...` : raw);
+				continue;
+			}
+			// Check @graph
+			const graph = obj["@graph"];
+			if (Array.isArray(graph)) {
+				for (const item of graph) {
+					if (snippets.length >= maxSnippets) break;
+					const it = item as Record<string, unknown>;
+					if (String(it["@type"] ?? "").toLowerCase() === schemaType.toLowerCase()) {
+						const raw = JSON.stringify(item);
+						snippets.push(raw.length > maxSnippetLength ? `${raw.slice(0, maxSnippetLength)}...` : raw);
+					}
+				}
+			}
+		}
+	}
+	return snippets;
+}
+
+export async function extractSchemaCoverage(
+	pages: Array<{ url: string; filename: string; crawl_data: CrawlData }>,
+	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>,
+): Promise<SchemaCoverageEntry[]> {
+	// Step 1: Hardcoded schema type existence checking
+	const entries: Array<{
+		schemaType: string;
+		foundOn: string[];
+		present: boolean;
+		snippets: string[];
+	}> = SCHEMA_TYPES_TO_CHECK.map((schemaType) => {
 		const foundOn: string[] = [];
 		for (const page of pages) {
 			const hasType = page.crawl_data.json_ld.some((ld) => {
@@ -143,19 +189,93 @@ export function extractSchemaCoverage(
 				foundOn.push(page.filename);
 			}
 		}
-
 		const present = foundOn.length > 0;
-		const coverage = foundOn.length / Math.max(pages.length, 1);
+		const snippets = present ? collectJsonLdSnippets(schemaType, pages) : [];
+		return { schemaType, foundOn, present, snippets };
+	});
+
+	// Step 2: Quality judgment — LLM-based if chatLLM provided, otherwise coverage-ratio heuristic
+	if (chatLLM) {
+		const presentEntries = entries.filter((e) => e.present);
+		if (presentEntries.length > 0) {
+			// Build LLM prompt with collected data
+			const schemaDataForLLM = presentEntries.map((e) => ({
+				schema_type: e.schemaType,
+				presence_count: e.foundOn.length,
+				total_pages: pages.length,
+				sample_snippets: e.snippets,
+			}));
+
+			const prompt = `Evaluate the quality of each schema.org type implementation based on completeness of properties, correctness of values, and adherence to best practices.
+
+For each schema type below, I provide the presence count (how many pages have it) and sample JSON-LD snippets.
+
+${JSON.stringify(schemaDataForLLM, null, 2)}
+
+For each schema type, assess quality as one of:
+- "excellent": Complete properties, correct values, follows best practices
+- "good": Most important properties present, minor issues
+- "partial": Minimal implementation, missing key properties
+- "none": Should not be used (only for types not present)
+
+Return ONLY a JSON object mapping schema type names to quality values, like:
+{"Organization": "good", "Product": "excellent", "WebPage": "partial"}`;
+
+			try {
+				const response = await chatLLM({
+					prompt,
+					system_instruction: "You are a schema.org expert. Return only valid JSON.",
+					temperature: 0.1,
+					json_mode: false,
+				});
+
+				const content = response.content.trim();
+				const jsonMatch = content.match(/\{[\s\S]*\}/);
+				if (jsonMatch) {
+					const qualityMap = JSON.parse(jsonMatch[0]) as Record<string, string>;
+					const validQualities = ["excellent", "good", "partial", "none"];
+
+					return entries.map((e) => {
+						const llmQuality = qualityMap[e.schemaType];
+						let quality: SchemaCoverageEntry["quality"];
+						if (e.present && llmQuality && validQualities.includes(llmQuality)) {
+							quality = llmQuality as SchemaCoverageEntry["quality"];
+						} else if (!e.present) {
+							quality = "none";
+						} else {
+							// LLM didn't provide quality for this type — use heuristic fallback
+							const coverage = e.foundOn.length / Math.max(pages.length, 1);
+							quality = coverage >= 0.8 ? "excellent" : coverage >= 0.5 ? "good" : "partial";
+						}
+						return {
+							schema_type: e.schemaType,
+							present: e.present,
+							pages: e.foundOn,
+							quality,
+							details: e.present
+								? `Found on ${e.foundOn.length}/${pages.length} pages`
+								: "Not found on any page",
+						};
+					});
+				}
+			} catch {
+				// LLM call failed — fall through to heuristic
+			}
+		}
+	}
+
+	// Fallback: coverage-ratio heuristic
+	return entries.map((e) => {
+		const coverage = e.foundOn.length / Math.max(pages.length, 1);
 		const quality: SchemaCoverageEntry["quality"] =
 			coverage >= 0.8 ? "excellent" : coverage >= 0.5 ? "good" : coverage > 0 ? "partial" : "none";
-
 		return {
-			schema_type: schemaType,
-			present,
-			pages: foundOn,
+			schema_type: e.schemaType,
+			present: e.present,
+			pages: e.foundOn,
 			quality,
-			details: present
-				? `Found on ${foundOn.length}/${pages.length} pages`
+			details: e.present
+				? `Found on ${e.foundOn.length}/${pages.length} pages`
 				: "Not found on any page",
 		};
 	});
@@ -170,62 +290,94 @@ export interface MarketingClaim {
 	verifiability: "verifiable" | "partial" | "unverifiable" | "factual";
 }
 
-/** Superlative/claim patterns that need verification */
-const CLAIM_PATTERNS = [
-	/world['']?s?\s+(?:first|best|fastest|thinnest|lightest|most|largest|smallest)/gi,
-	/(?:the\s+)?most\s+(?:preferred|popular|advanced|powerful|innovative)/gi,
-	/(?:industry|market)[\s-]leading/gi,
-	/#1\s+(?:in|for|brand)/gi,
-	/(?:award[\s-]winning|best[\s-]in[\s-]class)/gi,
-	/(?:revolutionary|breakthrough|game[\s-]changing)/gi,
-];
-
-export function extractMarketingClaims(html: string, pageUrl: string): MarketingClaim[] {
-	const textContent = html
+/**
+ * Strip HTML tags and extract visible text content, truncated to a max length.
+ */
+function stripHtmlToText(html: string, maxLength = 2000): string {
+	return html
 		.replace(/<script[\s\S]*?<\/script>/gi, "")
 		.replace(/<style[\s\S]*?<\/style>/gi, "")
 		.replace(/<[^>]+>/g, " ")
 		.replace(/\s+/g, " ")
-		.trim();
+		.trim()
+		.slice(0, maxLength);
+}
 
-	const claims: MarketingClaim[] = [];
-	const seen = new Set<string>();
+/**
+ * LLM-based marketing claim extraction.
+ *
+ * For each page, sends visible text to the LLM and asks it to identify
+ * marketing claims matching the MarketingClaim interface.
+ */
+export async function extractMarketingClaims(
+	pages: Array<{ url: string; html: string }>,
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>,
+): Promise<MarketingClaim[]> {
+	const allClaims: MarketingClaim[] = [];
 
-	for (const pattern of CLAIM_PATTERNS) {
-		// Reset lastIndex for global regex
-		pattern.lastIndex = 0;
-		let match = pattern.exec(textContent);
-		while (match) {
-			// Extract surrounding context (up to 80 chars around the match)
-			const start = Math.max(0, match.index - 20);
-			const end = Math.min(textContent.length, match.index + match[0].length + 40);
-			const context = textContent.slice(start, end).trim();
+	for (const page of pages) {
+		const text = stripHtmlToText(page.html);
+		if (text.length < 20) continue;
 
-			if (!seen.has(context.toLowerCase().slice(0, 50))) {
-				seen.add(context.toLowerCase().slice(0, 50));
+		const prompt = `Analyze the following web page text and identify marketing claims — superlative statements, unverified assertions, award claims, or competitive positioning statements that an LLM fact-checker might question.
 
-				// Check if there's a citation nearby (link, footnote, ™, ®, *)
-				const nearby = textContent.slice(
-					Math.max(0, match.index - 5),
-					Math.min(textContent.length, match.index + match[0].length + 100),
-				);
-				const hasSource =
-					/\bhttps?:\/\/\S+/i.test(nearby) ||
-					/\*|†|‡|¹|²|³|®|©/i.test(nearby) ||
-					/source:|according to|per\s/i.test(nearby);
+Page URL: ${page.url}
 
-				claims.push({
-					text: context.slice(0, 120),
-					location: pageUrl,
-					has_source: hasSource,
-					verifiability: hasSource ? "partial" : "unverifiable",
-				});
+--- PAGE TEXT ---
+${text}
+--- END ---
+
+Return a JSON array of marketing claims. Each claim must have:
+- "text": the exact claim text (max 120 chars)
+- "location": the page URL "${page.url}"
+- "has_source": boolean — true if the claim includes or references a source, citation, trademark symbol, or evidence
+- "verifiability": one of "verifiable", "partial", "unverifiable", "factual"
+  - "verifiable" = claim can be clearly fact-checked with public data (awards, rankings, patents)
+  - "partial" = claim has some supporting evidence but not fully sourced
+  - "unverifiable" = factual-sounding claim with no evidence ("world's first", "#1 brand")
+  - "factual" = objectively true and easily confirmed fact
+
+If there are no marketing claims, return an empty array: []
+
+Respond with ONLY the JSON array, no other text.`;
+
+		try {
+			const response = await chatLLM({
+				prompt,
+				system_instruction: "You are a marketing claim analyzer. Return only valid JSON arrays.",
+				temperature: 0.1,
+				json_mode: false,
+			});
+
+			const content = response.content.trim();
+			// Extract JSON array from response (handle markdown code blocks)
+			const jsonMatch = content.match(/\[[\s\S]*\]/);
+			if (jsonMatch) {
+				const parsed = JSON.parse(jsonMatch[0]) as unknown[];
+				for (const item of parsed) {
+					const claim = item as Record<string, unknown>;
+					if (
+						typeof claim.text === "string" &&
+						typeof claim.location === "string" &&
+						typeof claim.has_source === "boolean" &&
+						typeof claim.verifiability === "string" &&
+						["verifiable", "partial", "unverifiable", "factual"].includes(claim.verifiability)
+					) {
+						allClaims.push({
+							text: String(claim.text).slice(0, 120),
+							location: String(claim.location),
+							has_source: Boolean(claim.has_source),
+							verifiability: claim.verifiability as MarketingClaim["verifiability"],
+						});
+					}
+				}
 			}
-			match = pattern.exec(textContent);
+		} catch {
+			// LLM call failed for this page — skip silently
 		}
 	}
 
-	return claims;
+	return allClaims;
 }
 
 // ── Product/Price/Spec Extraction ──────────────────────────
@@ -349,6 +501,169 @@ export function extractProductInfo(crawlData: CrawlData): ExtractedProductInfo {
 
 // ── JS Dependency Analysis ─────────────────────────────────
 
+/**
+ * Extract script-related content from HTML for framework detection.
+ * Returns script src URLs and truncated inline script content.
+ */
+function extractScriptEvidence(html: string): string {
+	const parts: string[] = [];
+
+	// Extract script src attributes
+	const srcMatches = html.matchAll(/<script[^>]+src=["']([^"']+)["'][^>]*>/gi);
+	for (const m of srcMatches) {
+		parts.push(`src: ${m[1]}`);
+	}
+
+	// Extract inline script content (truncated)
+	const inlineMatches = html.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi);
+	for (const m of inlineMatches) {
+		const content = m[1].trim();
+		if (content.length > 0) {
+			parts.push(`inline: ${content.slice(0, 500)}`);
+		}
+	}
+
+	return parts.join("\n");
+}
+
+/**
+ * Detect frameworks from script tags only (avoiding body text false positives).
+ * When chatLLM is provided, uses LLM for accurate detection.
+ * Otherwise, applies heuristics scoped to script tags and known DOM markers.
+ */
+async function detectFrameworks(
+	html: string,
+	scriptTags: string[],
+	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>,
+): Promise<string[]> {
+	if (chatLLM) {
+		return detectFrameworksLLM(html, chatLLM);
+	}
+	return detectFrameworksHeuristic(html, scriptTags);
+}
+
+/**
+ * Heuristic framework detection: only examines script tags (src + inline content)
+ * and a small set of reliable DOM markers (e.g., id="__next", data-reactroot).
+ */
+function detectFrameworksHeuristic(html: string, scriptTags: string[]): string[] {
+	const frameworks: string[] = [];
+
+	// Collect script src URLs and inline content for matching
+	const scriptContent = extractScriptEvidence(html).toLowerCase();
+
+	// Check script-related evidence
+	if (
+		scriptContent.includes("react") ||
+		scriptContent.includes("__next") ||
+		scriptContent.includes("next.js")
+	) {
+		frameworks.push("React/Next.js");
+	}
+	if (
+		scriptContent.includes("vue") ||
+		scriptContent.includes("__nuxt") ||
+		scriptContent.includes("nuxt")
+	) {
+		frameworks.push("Vue/Nuxt");
+	}
+	if (scriptContent.includes("angular")) {
+		frameworks.push("Angular");
+	}
+	if (scriptContent.includes("svelte")) {
+		frameworks.push("Svelte");
+	}
+	if (scriptContent.includes("jquery") || scriptContent.includes("jquery.min.js")) {
+		frameworks.push("jQuery");
+	}
+
+	// Also check reliable DOM markers (these are framework-generated, not body text)
+	const lowerHtml = html.toLowerCase();
+	if (
+		!frameworks.includes("React/Next.js") &&
+		(lowerHtml.includes('id="__next"') ||
+			lowerHtml.includes("data-reactroot") ||
+			lowerHtml.includes("data-react-helmet"))
+	) {
+		frameworks.push("React/Next.js");
+	}
+	if (
+		!frameworks.includes("Vue/Nuxt") &&
+		(lowerHtml.includes('id="__nuxt"') ||
+			lowerHtml.includes("data-v-") ||
+			lowerHtml.includes("data-server-rendered"))
+	) {
+		frameworks.push("Vue/Nuxt");
+	}
+	if (
+		!frameworks.includes("Angular") &&
+		(lowerHtml.includes("ng-version") || lowerHtml.includes("_ngcontent"))
+	) {
+		frameworks.push("Angular");
+	}
+
+	return frameworks;
+}
+
+/**
+ * LLM-based framework detection using script tag evidence.
+ */
+async function detectFrameworksLLM(
+	html: string,
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>,
+): Promise<string[]> {
+	const evidence = extractScriptEvidence(html);
+	if (!evidence) {
+		return [];
+	}
+
+	const prompt = `Analyze these script tags from a web page and identify which JavaScript frameworks are used.
+
+## Script evidence
+${evidence.slice(0, 3000)}
+
+## Instructions
+Based ONLY on the script tag evidence above (src URLs and inline code), identify which JavaScript frameworks or libraries are used on this page. Only report frameworks you can confirm from the script evidence.
+
+Use these canonical names: "React/Next.js", "Vue/Nuxt", "Angular", "Svelte", "jQuery", or other framework names.
+
+Return ONLY a JSON object: {"frameworks": ["React/Next.js", "jQuery"]}
+If no frameworks are detected, return: {"frameworks": []}`;
+
+	try {
+		const response = await chatLLM({
+			prompt,
+			system_instruction:
+				"You are a web technology expert. Identify JavaScript frameworks from script tags. Return only valid JSON.",
+			temperature: 0.1,
+			json_mode: false,
+		});
+
+		const content = response.content.trim();
+		const jsonMatch = content.match(/\{[\s\S]*\}/);
+		if (jsonMatch) {
+			const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+			if (Array.isArray(parsed.frameworks)) {
+				return parsed.frameworks.filter(
+					(f: unknown): f is string => typeof f === "string" && f.length > 0,
+				);
+			}
+		}
+	} catch {
+		// LLM call failed — fall back to heuristic
+	}
+
+	// Fallback: use heuristic if LLM fails
+	const scriptTags = html.match(/<script[^>]*>/gi) ?? [];
+	return detectFrameworksHeuristic(html, scriptTags);
+}
+
+export interface LLMAccessImpact {
+	blocks_access: boolean;
+	severity: "none" | "low" | "moderate" | "high";
+	reasoning: string;
+}
+
 export interface JsDependencyInfo {
 	script_count: number;
 	external_scripts: number;
@@ -356,20 +671,20 @@ export interface JsDependencyInfo {
 	frameworks_detected: string[];
 	/** Estimated ratio of content only accessible via JS (0-1) */
 	estimated_js_dependency: number;
+	/** LLM-based judgment of whether JS blocks LLM content access (present only when chatLLM provided) */
+	llm_access_impact?: LLMAccessImpact;
 }
 
-export function analyzeJsDependency(html: string): JsDependencyInfo {
+export async function analyzeJsDependency(
+	html: string,
+	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>,
+): Promise<JsDependencyInfo> {
 	const scriptTags = html.match(/<script[^>]*>/gi) ?? [];
 	const externalScripts = scriptTags.filter((s) => /src=/i.test(s));
 	const inlineScripts = scriptTags.filter((s) => !/src=/i.test(s));
 
-	const frameworks: string[] = [];
-	const lowerHtml = html.toLowerCase();
-	if (lowerHtml.includes("react") || lowerHtml.includes("__next")) frameworks.push("React/Next.js");
-	if (lowerHtml.includes("vue") || lowerHtml.includes("__nuxt")) frameworks.push("Vue/Nuxt");
-	if (lowerHtml.includes("angular")) frameworks.push("Angular");
-	if (lowerHtml.includes("svelte")) frameworks.push("Svelte");
-	if (lowerHtml.includes("jquery")) frameworks.push("jQuery");
+	// Extract framework info from script tags only (not body text) to avoid false positives
+	const frameworks: string[] = await detectFrameworks(html, scriptTags, chatLLM);
 
 	// Estimate JS dependency: high script count + framework = likely JS-heavy
 	const textContent = html
@@ -383,13 +698,68 @@ export function analyzeJsDependency(html: string): JsDependencyInfo {
 	const textRatio = textContent.length / Math.max(html.length, 1);
 	const estimated = textRatio < 0.05 ? 0.9 : textRatio < 0.1 ? 0.7 : textRatio < 0.2 ? 0.4 : 0.2;
 
-	return {
+	const result: JsDependencyInfo = {
 		script_count: scriptTags.length,
 		external_scripts: externalScripts.length,
 		inline_scripts: inlineScripts.length,
 		frameworks_detected: frameworks,
 		estimated_js_dependency: Math.round(estimated * 100) / 100,
 	};
+
+	// LLM-based judgment of whether JS blocks LLM crawler content access
+	if (chatLLM) {
+		const textExcerpt = textContent.slice(0, 1500);
+		const prompt = `You are analyzing a web page's JavaScript dependency to determine if JS blocks LLM crawlers from accessing key content.
+
+## Metrics
+- Total script tags: ${scriptTags.length}
+- External scripts: ${externalScripts.length}
+- Inline scripts: ${inlineScripts.length}
+- Frameworks detected: ${frameworks.length > 0 ? frameworks.join(", ") : "none"}
+- Text-to-HTML ratio: ${(textRatio * 100).toFixed(1)}%
+- Estimated JS dependency: ${(estimated * 100).toFixed(0)}%
+
+## Static HTML text excerpt (first 1500 chars after stripping scripts/styles/tags)
+${textExcerpt || "(empty — no visible text in static HTML)"}
+
+## Question
+Based on these JS metrics and the static HTML content, does JavaScript block LLM crawlers from accessing the page's key content? Most LLM crawlers only read static HTML and do not execute JavaScript.
+
+Return ONLY a JSON object:
+{"blocks_access": true/false, "severity": "none"|"low"|"moderate"|"high", "reasoning": "one sentence explanation"}`;
+
+		try {
+			const response = await chatLLM({
+				prompt,
+				system_instruction: "You are a web accessibility and crawlability expert. Return only valid JSON.",
+				temperature: 0.1,
+				json_mode: false,
+			});
+
+			const content = response.content.trim();
+			const jsonMatch = content.match(/\{[\s\S]*\}/);
+			if (jsonMatch) {
+				const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+				const validSeverities = ["none", "low", "moderate", "high"];
+				if (
+					typeof parsed.blocks_access === "boolean" &&
+					typeof parsed.severity === "string" &&
+					validSeverities.includes(parsed.severity) &&
+					typeof parsed.reasoning === "string"
+				) {
+					result.llm_access_impact = {
+						blocks_access: parsed.blocks_access,
+						severity: parsed.severity as LLMAccessImpact["severity"],
+						reasoning: String(parsed.reasoning).slice(0, 500),
+					};
+				}
+			}
+		} catch {
+			// LLM call failed — leave llm_access_impact undefined
+		}
+	}
+
+	return result;
 }
 
 // ── Strengths / Weaknesses / Opportunities ──────────────────
@@ -401,7 +771,177 @@ export interface Finding {
 }
 
 /**
- * 분석 데이터로부터 잘 된 점 / 취약점 / 기회를 자동 생성한다.
+ * Build a concise text summary of all evaluation data for the LLM prompt.
+ */
+function buildFindingsSummary(
+	botPolicies: BotPolicyEntry[],
+	llmsTxt: { exists: boolean; content_preview: string | null },
+	schemaCoverage: SchemaCoverageEntry[],
+	productInfo: Array<{ page_url: string; filename: string; info: ExtractedProductInfo }>,
+	jsDependency: JsDependencyInfo,
+	marketingClaims: MarketingClaim[],
+	dimensions?: Array<{ id: string; label: string; score: number }>,
+): string {
+	const lines: string[] = [];
+
+	// Bot policies
+	const allowed = botPolicies.filter((b) => b.status === "allowed");
+	const partial = botPolicies.filter((b) => b.status === "partial");
+	const blocked = botPolicies.filter((b) => b.status === "blocked");
+	const notSpec = botPolicies.filter((b) => b.status === "not_specified");
+	lines.push("## AI Bot Policies (robots.txt)");
+	if (allowed.length > 0) lines.push(`- Allowed: ${allowed.map((b) => b.bot_name).join(", ")}`);
+	if (partial.length > 0)
+		lines.push(
+			`- Partial: ${partial.map((b) => `${b.bot_name} (blocked: ${b.disallowed_paths.join(", ")})`).join("; ")}`,
+		);
+	if (blocked.length > 0) lines.push(`- Blocked: ${blocked.map((b) => b.bot_name).join(", ")}`);
+	if (notSpec.length > 0) lines.push(`- Not specified: ${notSpec.map((b) => b.bot_name).join(", ")}`);
+
+	// llms.txt
+	lines.push(`\n## llms.txt`);
+	lines.push(`- Exists: ${llmsTxt.exists}`);
+
+	// Schema coverage
+	const present = schemaCoverage.filter((s) => s.present);
+	const missing = schemaCoverage.filter((s) => !s.present);
+	lines.push(`\n## Schema Coverage`);
+	if (present.length > 0)
+		lines.push(`- Present: ${present.map((s) => `${s.schema_type} (${s.quality})`).join(", ")}`);
+	if (missing.length > 0)
+		lines.push(`- Missing: ${missing.map((s) => s.schema_type).join(", ")}`);
+
+	// JS dependency
+	lines.push(`\n## JS Dependency`);
+	lines.push(
+		`- Script count: ${jsDependency.script_count}, Estimated JS dependency: ${Math.round(jsDependency.estimated_js_dependency * 100)}%`,
+	);
+	if (jsDependency.frameworks_detected.length > 0)
+		lines.push(`- Frameworks: ${jsDependency.frameworks_detected.join(", ")}`);
+
+	// Product info
+	const pagesWithProduct = productInfo.filter(
+		(p) => p.info.product_name || p.info.specs_in_schema.length > 0,
+	);
+	lines.push(`\n## Product Info`);
+	lines.push(`- Pages with product data: ${pagesWithProduct.length}/${productInfo.length}`);
+	for (const p of pagesWithProduct.slice(0, 3)) {
+		lines.push(
+			`  - ${p.filename}: ${p.info.product_name ?? "unnamed"}, prices: ${p.info.prices.length}, schema specs: ${p.info.specs_in_schema.length}, html specs: ${p.info.specs_in_html.length}, rating: ${p.info.has_aggregate_rating}`,
+		);
+	}
+
+	// Marketing claims
+	if (marketingClaims.length > 0) {
+		const unverifiable = marketingClaims.filter((c) => c.verifiability === "unverifiable").length;
+		lines.push(`\n## Marketing Claims`);
+		lines.push(
+			`- Total: ${marketingClaims.length}, Unverifiable: ${unverifiable}`,
+		);
+	}
+
+	// Dimensions
+	if (dimensions && dimensions.length > 0) {
+		lines.push(`\n## GEO Dimension Scores`);
+		for (const d of dimensions) {
+			lines.push(`- ${d.id} ${d.label}: ${d.score.toFixed(0)}/100`);
+		}
+	}
+
+	return lines.join("\n");
+}
+
+/**
+ * LLM 기반 Findings 생성.
+ *
+ * 수집된 정적 분석 데이터 요약을 LLM에 전달하여
+ * GEO 관점의 강점/약점/기회를 생성한다.
+ */
+export async function generateFindingsLLM(
+	botPolicies: BotPolicyEntry[],
+	llmsTxt: { exists: boolean; content_preview: string | null },
+	schemaCoverage: SchemaCoverageEntry[],
+	productInfo: Array<{ page_url: string; filename: string; info: ExtractedProductInfo }>,
+	jsDependency: JsDependencyInfo,
+	marketingClaims: MarketingClaim[],
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>,
+	dimensions?: Array<{ id: string; label: string; score: number }>,
+): Promise<{ strengths: Finding[]; weaknesses: Finding[]; opportunities: Finding[] }> {
+	const summary = buildFindingsSummary(
+		botPolicies,
+		llmsTxt,
+		schemaCoverage,
+		productInfo,
+		jsDependency,
+		marketingClaims,
+		dimensions,
+	);
+
+	const prompt = `You are a GEO (Generative Engine Optimization) expert. Analyze the following website evaluation data and generate findings from a GEO perspective — how well this site is optimized for LLM-based search engines (ChatGPT, Claude, Gemini, Perplexity).
+
+${summary}
+
+Based on this data, generate:
+1. **strengths**: Things the site does well for GEO (max 5)
+2. **weaknesses**: Issues that hurt GEO performance (max 5)
+3. **opportunities**: Actionable improvements that could significantly boost GEO (max 5)
+
+Each finding must have:
+- "title": concise title in Korean (max 40 chars)
+- "description": detailed explanation in Korean (1-2 sentences)
+- "icon": emoji icon ("✅" for strengths, "❌" or "⚠️" for weaknesses, "🚀" for opportunities)
+
+Return ONLY a JSON object with this structure:
+{
+  "strengths": [{"title": "...", "description": "...", "icon": "✅"}],
+  "weaknesses": [{"title": "...", "description": "...", "icon": "❌"}],
+  "opportunities": [{"title": "...", "description": "...", "icon": "🚀"}]
+}`;
+
+	const response = await chatLLM({
+		prompt,
+		system_instruction:
+			"You are a GEO analysis expert. Return only valid JSON. All titles and descriptions must be in Korean.",
+		temperature: 0.3,
+		json_mode: false,
+	});
+
+	const content = response.content.trim();
+	// Extract JSON object from response (handle markdown code blocks)
+	const jsonMatch = content.match(/\{[\s\S]*\}/);
+	if (!jsonMatch) {
+		return { strengths: [], weaknesses: [], opportunities: [] };
+	}
+
+	const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+	const result: { strengths: Finding[]; weaknesses: Finding[]; opportunities: Finding[] } = {
+		strengths: [],
+		weaknesses: [],
+		opportunities: [],
+	};
+
+	for (const key of ["strengths", "weaknesses", "opportunities"] as const) {
+		const arr = parsed[key];
+		if (!Array.isArray(arr)) continue;
+		for (const item of arr) {
+			const f = item as Record<string, unknown>;
+			if (typeof f.title === "string" && typeof f.description === "string") {
+				result[key].push({
+					title: String(f.title).slice(0, 60),
+					description: String(f.description).slice(0, 300),
+					icon: typeof f.icon === "string" ? f.icon : key === "strengths" ? "✅" : key === "weaknesses" ? "❌" : "🚀",
+				});
+			}
+		}
+		result[key] = result[key].slice(0, 5);
+	}
+
+	return result;
+}
+
+/**
+ * Rule-based fallback: 분석 데이터로부터 잘 된 점 / 취약점 / 기회를 자동 생성한다.
+ * chatLLM이 없거나 LLM 호출 실패 시 사용.
  */
 export function generateFindings(
 	botPolicies: BotPolicyEntry[],
@@ -829,11 +1369,12 @@ export function generateImprovements(
 /**
  * CrawlData + 멀티페이지 결과로부터 전체 GEO 평가 상세 데이터를 추출한다.
  */
-export function extractGeoEvaluationData(
+export async function extractGeoEvaluationData(
 	homepage: CrawlData,
 	subPages: Array<{ url: string; filename: string; crawl_data: CrawlData }>,
 	dimensions?: Array<{ id: string; label: string; score: number }>,
-): GeoEvaluationData {
+	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>,
+): Promise<GeoEvaluationData> {
 	const allPages = [
 		{ url: homepage.url, filename: "index.html", crawl_data: homepage },
 		...subPages,
@@ -848,18 +1389,18 @@ export function extractGeoEvaluationData(
 		content_preview: homepage.llms_txt?.slice(0, 500) ?? null,
 	};
 
-	// 3. Schema coverage across all pages
-	const schemaCoverage = extractSchemaCoverage(allPages);
+	// 3. Schema coverage across all pages (LLM-enhanced quality if chatLLM available)
+	const schemaCoverage = await extractSchemaCoverage(allPages, chatLLM);
 
-	// 4. Marketing claims (from all pages)
-	const allClaims: MarketingClaim[] = [];
-	for (const page of allPages) {
-		const claims = extractMarketingClaims(page.crawl_data.html, page.url);
-		allClaims.push(...claims);
+	// 4. Marketing claims (from all pages, LLM-based)
+	let allClaims: MarketingClaim[] = [];
+	if (chatLLM) {
+		const pages = allPages.map((p) => ({ url: p.url, html: p.crawl_data.html }));
+		allClaims = await extractMarketingClaims(pages, chatLLM);
 	}
 
-	// 5. JS dependency (homepage)
-	const jsDependency = analyzeJsDependency(homepage.html);
+	// 5. JS dependency (homepage) — LLM-enhanced if chatLLM available
+	const jsDependency = await analyzeJsDependency(homepage.html, chatLLM);
 
 	// 6. Product info per page
 	const productInfo = allPages.map((page) => ({
@@ -876,16 +1417,43 @@ export function extractGeoEvaluationData(
 	// 8. Path access analysis
 	const pathAccess = analyzePathAccess(homepage.robots_txt);
 
-	// 9. Strengths / Weaknesses / Opportunities
-	const findings = generateFindings(
-		botPolicies,
-		llmsTxt,
-		schemaCoverage,
-		productInfo,
-		jsDependency,
-		allClaims,
-		dimensions,
-	);
+	// 9. Strengths / Weaknesses / Opportunities (LLM-based with rule-based fallback)
+	let findings: { strengths: Finding[]; weaknesses: Finding[]; opportunities: Finding[] };
+	if (chatLLM) {
+		try {
+			findings = await generateFindingsLLM(
+				botPolicies,
+				llmsTxt,
+				schemaCoverage,
+				productInfo,
+				jsDependency,
+				allClaims,
+				chatLLM,
+				dimensions,
+			);
+		} catch {
+			// LLM call failed — fall back to rule-based
+			findings = generateFindings(
+				botPolicies,
+				llmsTxt,
+				schemaCoverage,
+				productInfo,
+				jsDependency,
+				allClaims,
+				dimensions,
+			);
+		}
+	} else {
+		findings = generateFindings(
+			botPolicies,
+			llmsTxt,
+			schemaCoverage,
+			productInfo,
+			jsDependency,
+			allClaims,
+			dimensions,
+		);
+	}
 
 	const baseData = {
 		bot_policies: botPolicies,
