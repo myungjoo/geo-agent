@@ -138,14 +138,24 @@ app.get("/dashboard", (c) => {
 });
 
 // Root — API info + dashboard link
-// ── Git version info (cached at startup) ─────────────────────
+// ── Build-time version info ──────────────────────────────────
 let gitInfo = { sha: "unknown", date: "unknown", short: "unknown" };
 try {
-	const sha = execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
-	const date = execSync("git log -1 --format=%ci", { encoding: "utf-8" }).trim();
-	gitInfo = { sha, date, short: sha.slice(0, 7) };
+	const buildInfoPath = join(__dirname, "build-info.json");
+	const raw = readFileSync(buildInfoPath, "utf-8");
+	const info = JSON.parse(raw);
+	gitInfo = { sha: info.sha, date: info.date, short: info.short };
 } catch {
-	// Not a git repo or git not available
+	// build-info.json not found (dev mode) — fall back to live git
+	try {
+		const sha = execSync("git rev-parse HEAD", { encoding: "utf-8" }).trim();
+		const date = execSync("git log -1 --format=%ci", {
+			encoding: "utf-8",
+		}).trim();
+		gitInfo = { sha, date, short: sha.slice(0, 7) };
+	} catch {
+		// Not a git repo or git not available
+	}
 }
 
 app.get("/api/version", (c) => c.json(gitInfo));

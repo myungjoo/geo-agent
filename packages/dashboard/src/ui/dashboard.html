@@ -1945,10 +1945,14 @@ function esc(s) { const d = document.createElement('div'); d.textContent = s || 
 // ── Init ─────────────────────────────────────────────
 checkHealth();
 
-// Load version info
+// Load version info (build-time commit SHA + date/time)
 api('/api/version').then(function(v) {
-	document.getElementById('versionInfo').textContent = v.short + ' · ' + v.date.split(' ')[0];
-	document.getElementById('versionInfo').title = 'Commit: ' + v.sha + '\nDate: ' + v.date;
+	var parts = v.date.split(' ');
+	var dateStr = parts[0] || '';
+	var timeStr = (parts[1] || '').replace(/:\d{2}$/, ''); // HH:MM (drop seconds)
+	var display = v.short + ' · ' + dateStr + ' ' + timeStr;
+	document.getElementById('versionInfo').textContent = display.trim();
+	document.getElementById('versionInfo').title = 'Build Commit: ' + v.sha + '\nDate: ' + v.date;
 }).catch(function() { /* ignore */ });
 
 // Restore active tab from URL hash, default to 'targets'
