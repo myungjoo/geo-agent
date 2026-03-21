@@ -28,12 +28,14 @@ export interface SkillDefinition {
  * Parse a SKILL.md file into a SkillDefinition.
  */
 export function parseSkillMd(content: string): SkillDefinition {
-	const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+	// Normalize CRLF → LF for cross-platform compatibility
+	const normalized = content.replace(/\r\n/g, "\n");
+	const frontmatterMatch = normalized.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
 	if (!frontmatterMatch) {
 		throw new Error("Invalid SKILL.md: missing frontmatter delimiters (---)");
 	}
 
-	const [, frontmatterStr, body] = frontmatterMatch;
+	const [, frontmatterStr, body] = frontmatterMatch as RegExpMatchArray;
 	const frontmatter = parseSimpleYaml(frontmatterStr);
 
 	return {
