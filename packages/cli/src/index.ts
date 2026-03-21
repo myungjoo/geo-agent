@@ -71,33 +71,32 @@ program
 		console.log(`   Output: ${outputDir}`);
 		console.log();
 
-		// Configure LLM if provided
-		let chatLLM: PipelineDeps["chatLLM"] | undefined;
-		if (opts.llm !== false && opts.apiKey) {
-			const manager = new ProviderConfigManager(settings.workspace_dir);
-			const providerId = opts.provider || "microsoft";
-
-			// Disable all, enable selected
-			for (const p of manager.loadAll()) {
-				manager.save({ ...p, enabled: false });
-			}
-			const provider = manager.load(providerId);
-			manager.save({
-				...provider,
-				enabled: true,
-				api_key: opts.apiKey,
-				api_base_url: opts.apiBase || provider.api_base_url,
-				default_model: opts.model || provider.default_model,
-			});
-
-			const client = new GeoLLMClient(settings.workspace_dir);
-			chatLLM = (req) => client.chat(req);
-			console.log(`   LLM: ${providerId} (${opts.model || provider.default_model})`);
-		} else if (opts.llm === false) {
-			console.log("   LLM: disabled (static analysis only)");
-		} else {
-			console.log("   LLM: not configured (use --api-key to enable)");
+		// Configure LLM (필수 — ARCHITECTURE.md 9-A.1)
+		if (!opts.apiKey) {
+			console.error("❌ LLM API Key가 필요합니다. --api-key 옵션으로 API Key를 지정하세요.");
+			console.error("   예: geo run https://example.com --api-key sk-xxx");
+			process.exit(1);
 		}
+
+		const manager = new ProviderConfigManager(settings.workspace_dir);
+		const providerId = opts.provider || "microsoft";
+
+		// Disable all, enable selected
+		for (const p of manager.loadAll()) {
+			manager.save({ ...p, enabled: false });
+		}
+		const provider = manager.load(providerId);
+		manager.save({
+			...provider,
+			enabled: true,
+			api_key: opts.apiKey,
+			api_base_url: opts.apiBase || provider.api_base_url,
+			default_model: opts.model || provider.default_model,
+		});
+
+		const client = new GeoLLMClient(settings.workspace_dir);
+		const chatLLM: PipelineDeps["chatLLM"] = (req) => client.chat(req);
+		console.log(`   LLM: ${providerId} (${opts.model || provider.default_model})`);
 		console.log();
 
 		// Build pipeline deps
