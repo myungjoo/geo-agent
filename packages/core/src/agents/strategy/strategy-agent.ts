@@ -2,8 +2,7 @@
  * Strategy Agent
  *
  * AnalysisReport 기반으로 OptimizationPlan을 생성.
- * - 규칙 기반 전략 (LLM 없이 동작)
- * - LLM 강화 전략 (API Key 있을 때)
+ * - 규칙 기반 태스크 생성 + LLM 전략 요약 (LLM 필수)
  *
  * 점수가 낮은 차원 우선, 영향도/난이도 기반 태스크 정렬.
  */
@@ -20,8 +19,6 @@ import { StrategyLLMResponseSchema } from "../shared/llm-response-schemas.js";
 export interface StrategyInput {
 	target_id: string;
 	analysis_report: AnalysisReport;
-	/** 선택: LLM으로 전략 강화 */
-	use_llm?: boolean;
 }
 
 export interface StrategyOutput {
@@ -160,8 +157,8 @@ const STRATEGY_RULES: StrategyRule[] = [
 
 export async function runStrategy(
 	input: StrategyInput,
-	deps?: {
-		chatLLM?: (request: LLMRequest) => Promise<LLMResponse>;
+	deps: {
+		chatLLM: (request: LLMRequest) => Promise<LLMResponse>;
 	},
 ): Promise<StrategyOutput> {
 	const { analysis_report } = input;
@@ -190,7 +187,7 @@ export async function runStrategy(
 		t.order = i;
 	});
 
-	// 3. LLM 강화 (선택사항)
+	// 3. LLM 전략 생성 (필수 — 실패 시 에러 전파, ARCHITECTURE.md 9-A.1)
 	let strategyRationale =
 		`규칙 기반 분석으로 ${tasks.length}개 최적화 태스크를 생성했습니다. ` +
 		`현재 GEO 점수: ${analysis_report.current_geo_score.total}/100. ` +
@@ -199,13 +196,12 @@ export async function runStrategy(
 	let llmEstimatedDelta: number | null = null;
 	let llmConfidence: number | null = null;
 
-	if (input.use_llm && deps?.chatLLM) {
-		const geoScores = analysis_report.current_geo_score;
-		const structuredData = analysis_report.structured_data;
-		const contentAnalysis = analysis_report.content_analysis;
-		const machineReadability = analysis_report.machine_readability;
+	const geoScores = analysis_report.current_geo_score;
+	const structuredData = analysis_report.structured_data;
+	const contentAnalysis = analysis_report.content_analysis;
+	const machineReadability = analysis_report.machine_readability;
 
-		const prompt = `You are a GEO (Generative Engine Optimization) strategist. Analyze the following website assessment and generate a complete optimization strategy with prioritized tasks.
+	const prompt = `You are a GEO (Generative Engine Optimization) strategist. Analyze the following website assessment and generate a complete optimization strategy with prioritized tasks.
 
 ## Current GEO Scores
 - Total: ${geoScores.total}/100
@@ -236,52 +232,51 @@ ${tasks.map((t) => `- [${t.priority}] ${t.title}: ${t.description}`).join("\n")}
 
 Generate a complete strategy as JSON. Include tasks that address the most impactful improvements. Use change_type values from: METADATA, SCHEMA_MARKUP, LLMS_TXT, SEMANTIC_STRUCTURE, CONTENT_DENSITY, FAQ_SECTION, INTERNAL_LINKING, IMAGE_ALT, CANONICAL, SITEMAP.`;
 
-		const { result: llmStrategy } = await safeLLMCall(
-			deps.chatLLM,
-			{
-				prompt,
-				system_instruction:
-					'You are a GEO optimization expert. Respond with JSON only:\n{"strategy_rationale":"detailed explanation","tasks":[{"change_type":"SCHEMA_MARKUP","title":"...","description":"specific instructions","target_element":null,"priority":"critical","expected_impact":"...","specific_data":{}}],"estimated_delta":15,"confidence":0.7}',
-				json_mode: true,
-				temperature: 0.2,
-				max_tokens: 3000,
-			},
-			(content) => parseJsonResponse(content, StrategyLLMResponseSchema),
-		);
+	const { result: llmStrategy } = await safeLLMCall(
+		deps.chatLLM,
+		{
+			prompt,
+			system_instruction:
+				'You are a GEO optimization expert. Respond with JSON only:\n{"strategy_rationale":"detailed explanation","tasks":[{"change_type":"SCHEMA_MARKUP","title":"...","description":"specific instructions","target_element":null,"priority":"critical","expected_impact":"...","specific_data":{}}],"estimated_delta":15,"confidence":0.7}',
+			json_mode: true,
+			temperature: 0.2,
+			max_tokens: 3000,
+		},
+		(content) => parseJsonResponse(content, StrategyLLMResponseSchema),
+	);
 
-		if (llmStrategy) {
-			strategyRationale = llmStrategy.strategy_rationale;
-			llmEstimatedDelta = llmStrategy.estimated_delta ?? 0;
-			llmConfidence = llmStrategy.confidence ?? 0.5;
+	if (llmStrategy) {
+		strategyRationale = llmStrategy.strategy_rationale;
+		llmEstimatedDelta = llmStrategy.estimated_delta ?? 0;
+		llmConfidence = llmStrategy.confidence ?? 0.5;
 
-			// Merge LLM tasks with rule-based tasks (LLM tasks take precedence, deduplicate by change_type)
-			const llmTasks: OptimizationTask[] = llmStrategy.tasks.map((lt) => ({
-				task_id: uuidv4(),
-				change_type: lt.change_type as ChangeType,
-				title: lt.title,
-				description: lt.description,
-				target_element: lt.target_element ?? null,
-				priority: lt.priority,
-				info_recognition_ref: null,
-				order: 0,
-				status: "pending" as const,
-				change_record_ref: null,
-			}));
+		// Merge LLM tasks with rule-based tasks (LLM tasks take precedence, deduplicate by change_type)
+		const llmTasks: OptimizationTask[] = llmStrategy.tasks.map((lt) => ({
+			task_id: uuidv4(),
+			change_type: lt.change_type as ChangeType,
+			title: lt.title,
+			description: lt.description,
+			target_element: lt.target_element ?? null,
+			priority: lt.priority,
+			info_recognition_ref: null,
+			order: 0,
+			status: "pending" as const,
+			change_record_ref: null,
+		}));
 
-			// LLM tasks take precedence: remove rule-based tasks that share a change_type with LLM tasks
-			const llmChangeTypes = new Set(llmTasks.map((t) => t.change_type));
-			const filteredRuleTasks = tasks.filter((t) => !llmChangeTypes.has(t.change_type));
+		// LLM tasks take precedence: remove rule-based tasks that share a change_type with LLM tasks
+		const llmChangeTypes = new Set(llmTasks.map((t) => t.change_type));
+		const filteredRuleTasks = tasks.filter((t) => !llmChangeTypes.has(t.change_type));
 
-			// Combine: LLM tasks first, then remaining rule-based tasks
-			tasks.length = 0;
-			tasks.push(...llmTasks, ...filteredRuleTasks);
+		// Combine: LLM tasks first, then remaining rule-based tasks
+		tasks.length = 0;
+		tasks.push(...llmTasks, ...filteredRuleTasks);
 
-			// Re-sort by priority and re-index
-			tasks.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
-			tasks.forEach((t, i) => {
-				t.order = i;
-			});
-		}
+		// Re-sort by priority and re-index
+		tasks.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+		tasks.forEach((t, i) => {
+			t.order = i;
+		});
 	}
 
 	// 4. 영향도 추정

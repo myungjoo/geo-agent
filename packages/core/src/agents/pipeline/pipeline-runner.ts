@@ -116,7 +116,7 @@ export interface PipelineDeps {
 		matched_signals: string[];
 		all_signals: Array<{ site_type: string; confidence: number; signals: string[] }>;
 	};
-	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>;
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>;
 	/** Override for the LLM analysis step (for testing). If not provided, uses runLLMAnalysis with resolveModel. */
 	runLLMAnalysisOverride?: (
 		input: { target_id: string; target_url: string },
@@ -162,49 +162,47 @@ export async function runPipeline(
 	let currentStageForLog = "INIT";
 
 	// Wrap chatLLM to track which models are actually used + collect errors + full call log
-	const trackedChatLLM = deps.chatLLM
-		? async (req: LLMRequest): Promise<LLMResponse> => {
-				const seq = ++llmCallSeq;
-				const startMs = Date.now();
-				const promptText = req.prompt ?? "";
-				try {
-					const response = await deps.chatLLM!(req);
-					llmModelsUsed.add(`${response.provider}/${response.model}`);
-					llmCallLog.push({
-						seq,
-						timestamp: new Date().toISOString(),
-						stage: currentStageForLog,
-						provider: response.provider,
-						model: response.model,
-						prompt_summary: promptText.slice(0, 500),
-						response_summary: (response.content ?? "").slice(0, 1000),
-						tokens_in: response.usage?.prompt_tokens,
-						tokens_out: response.usage?.completion_tokens,
-						duration_ms: Date.now() - startMs,
-					});
-					return response;
-				} catch (err) {
-					const msg = err instanceof Error ? err.message : String(err);
-					llmErrors.push(msg);
-					llmCallLog.push({
-						seq,
-						timestamp: new Date().toISOString(),
-						stage: currentStageForLog,
-						provider: req.provider ?? "unknown",
-						model: req.model ?? "unknown",
-						prompt_summary: promptText.slice(0, 500),
-						response_summary: "",
-						duration_ms: Date.now() - startMs,
-						error: msg.slice(0, 500),
-					});
-					// Auth errors (401, 403, invalid key) → stop pipeline immediately
-					if (isLLMAuthError(err)) {
-						orchestrator.stop();
-					}
-					throw err; // Re-throw so safeLLMCall can handle fallback (or stop for auth errors)
-				}
+	const trackedChatLLM = async (req: LLMRequest): Promise<LLMResponse> => {
+		const seq = ++llmCallSeq;
+		const startMs = Date.now();
+		const promptText = req.prompt ?? "";
+		try {
+			const response = await deps.chatLLM(req);
+			llmModelsUsed.add(`${response.provider}/${response.model}`);
+			llmCallLog.push({
+				seq,
+				timestamp: new Date().toISOString(),
+				stage: currentStageForLog,
+				provider: response.provider,
+				model: response.model,
+				prompt_summary: promptText.slice(0, 500),
+				response_summary: (response.content ?? "").slice(0, 1000),
+				tokens_in: response.usage?.prompt_tokens,
+				tokens_out: response.usage?.completion_tokens,
+				duration_ms: Date.now() - startMs,
+			});
+			return response;
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			llmErrors.push(msg);
+			llmCallLog.push({
+				seq,
+				timestamp: new Date().toISOString(),
+				stage: currentStageForLog,
+				provider: req.provider ?? "unknown",
+				model: req.model ?? "unknown",
+				prompt_summary: promptText.slice(0, 500),
+				response_summary: "",
+				duration_ms: Date.now() - startMs,
+				error: msg.slice(0, 500),
+			});
+			// Auth errors (401, 403, invalid key) → stop pipeline immediately
+			if (isLLMAuthError(err)) {
+				orchestrator.stop();
 			}
-		: undefined;
+			throw err; // Re-throw so safeLLMCall can handle fallback (or stop for auth errors)
+		}
+	};
 
 	const orchestrator = new Orchestrator({
 		maxRetries: config.max_retries ?? 3,
@@ -414,16 +412,15 @@ export async function runPipeline(
 	orchestrator.registerHandler("STRATEGIZING", async (ctx: StageContext) => {
 		await trackStage(
 			"STRATEGIZING",
-			`Generating optimization plan (cycle ${cycleCount}), use_llm: ${!!trackedChatLLM}`,
+			`Generating optimization plan (cycle ${cycleCount})`,
 			async () => {
 				if (!analysisOutput) throw new Error("Analysis output missing");
 				strategyOutput = await runStrategy(
 					{
 						target_id: config.target_id,
 						analysis_report: analysisOutput.report,
-						use_llm: !!trackedChatLLM,
 					},
-					trackedChatLLM ? { chatLLM: trackedChatLLM } : undefined,
+					{ chatLLM: trackedChatLLM },
 				);
 				ctx.setRef("optimization", strategyOutput.plan.plan_id);
 				return strategyOutput;
@@ -456,7 +453,7 @@ export async function runPipeline(
 						listFiles: async () => cloneManager!.listWorkingFiles(tid),
 						target_url: config.target_url,
 					},
-					trackedChatLLM ? { chatLLM: trackedChatLLM } : undefined,
+					{ chatLLM: trackedChatLLM },
 				);
 				return optimizationResult;
 			},

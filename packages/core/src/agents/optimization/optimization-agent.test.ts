@@ -1,6 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
+import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
 import type { OptimizationPlan, OptimizationTask } from "../../models/optimization-plan.js";
 import { type OptimizationInput, runOptimization } from "./optimization-agent.js";
+
+const mockChatLLM: () => (req: LLMRequest) => Promise<LLMResponse> = () =>
+	vi.fn().mockResolvedValue({
+		content: "test",
+		model: "gpt-4o",
+		provider: "openai",
+		usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+		latency_ms: 100,
+		cost_usd: 0.001,
+	});
 
 function makeTask(overrides: Partial<OptimizationTask> = {}): OptimizationTask {
 	return {
@@ -218,14 +229,14 @@ describe("Optimization Agent", () => {
 				makeTask({ status: "completed", task_id: "t1" }),
 				makeTask({ status: "in_progress", task_id: "t2" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM: mockChatLLM() });
 			expect(result.skipped_tasks).toEqual(["t1", "t2"]);
 			expect(result.applied_tasks).toHaveLength(0);
 		});
 
 		it("skips unknown change types", async () => {
 			const input = makeInput([makeTask({ change_type: "UNKNOWN_TYPE" as "METADATA" })]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM: mockChatLLM() });
 			expect(result.skipped_tasks).toHaveLength(1);
 		});
 	});
@@ -348,50 +359,56 @@ describe("Optimization Agent", () => {
 	});
 
 	describe("runOptimization — LLM required (no fallback)", () => {
-		it("METADATA fails without chatLLM", async () => {
+		it("METADATA records failure when LLM errors", async () => {
+			const failingLLM = vi.fn().mockRejectedValue(new Error("LLM auth error"));
 			const input = makeInput([
 				makeTask({ change_type: "METADATA", title: "Meta description 추가" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM: failingLLM });
 			expect(result.failed_tasks).toHaveLength(1);
-			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
+			expect(result.failed_tasks[0].error).toContain("LLM");
 		});
 
-		it("SCHEMA_MARKUP fails without chatLLM", async () => {
+		it("SCHEMA_MARKUP records failure when LLM errors", async () => {
+			const failingLLM = vi.fn().mockRejectedValue(new Error("LLM auth error"));
 			const input = makeInput([makeTask({ change_type: "SCHEMA_MARKUP", title: "JSON-LD 추가" })]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM: failingLLM });
 			expect(result.failed_tasks).toHaveLength(1);
-			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
+			expect(result.failed_tasks[0].error).toContain("LLM");
 		});
 
-		it("LLMS_TXT fails without chatLLM", async () => {
+		it("LLMS_TXT records failure when LLM errors", async () => {
+			const failingLLM = vi.fn().mockRejectedValue(new Error("LLM auth error"));
 			const input = makeInput([makeTask({ change_type: "LLMS_TXT", title: "llms.txt 파일 생성" })]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM: failingLLM });
 			expect(result.failed_tasks).toHaveLength(1);
-			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
+			expect(result.failed_tasks[0].error).toContain("LLM");
 		});
 
-		it("SEMANTIC_STRUCTURE fails without chatLLM", async () => {
+		it("records failure when LLM throws error", async () => {
+			const failingLLM = vi.fn().mockRejectedValue(new Error("LLM API 401 Unauthorized"));
 			const input = makeInput([
 				makeTask({ change_type: "SEMANTIC_STRUCTURE", title: "헤딩 계층 구조 수정" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM: failingLLM });
 			expect(result.failed_tasks).toHaveLength(1);
-			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
+			expect(result.failed_tasks[0].error).toContain("LLM");
 		});
 
-		it("CONTENT_DENSITY fails without chatLLM", async () => {
+		it("CONTENT_DENSITY records failure when LLM errors", async () => {
+			const failingLLM = vi.fn().mockRejectedValue(new Error("LLM API error"));
 			const input = makeInput([makeTask({ change_type: "CONTENT_DENSITY", title: "콘텐츠 확충" })]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM: failingLLM });
 			expect(result.failed_tasks).toHaveLength(1);
-			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
+			expect(result.failed_tasks[0].error).toContain("LLM");
 		});
 
-		it("FAQ_ADDITION fails without chatLLM", async () => {
+		it("FAQ_ADDITION records failure when LLM errors", async () => {
+			const failingLLM = vi.fn().mockRejectedValue(new Error("LLM API error"));
 			const input = makeInput([makeTask({ change_type: "FAQ_ADDITION", title: "FAQ 추가" })]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM: failingLLM });
 			expect(result.failed_tasks).toHaveLength(1);
-			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
+			expect(result.failed_tasks[0].error).toContain("LLM");
 		});
 	});
 
@@ -553,7 +570,7 @@ describe("Optimization Agent", () => {
 			const input = makeInput([
 				makeTask({ change_type: "AUTHORITY_SIGNAL", title: "권위 신호 강화" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM: mockChatLLM() });
 			expect(result.applied_tasks).toHaveLength(1);
 			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
 				(c: string[]) => c[0] === "index.html",
@@ -570,7 +587,7 @@ describe("Optimization Agent", () => {
 						"<html><head></head><body><main><h2>Section One</h2><p>Content</p></main></body></html>",
 				},
 			);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM: mockChatLLM() });
 			expect(result.applied_tasks).toHaveLength(1);
 			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
 				(c: string[]) => c[0] === "index.html",
@@ -584,7 +601,7 @@ describe("Optimization Agent", () => {
 				[makeTask({ change_type: "READABILITY_FIX", title: "가독성 개선" })],
 				{ "index.html": '<html><head></head><body><img src="/photo.jpg" alt=""></body></html>' },
 			);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM: mockChatLLM() });
 			expect(result.applied_tasks).toHaveLength(1);
 			const writeCall = (input.writeFile as ReturnType<typeof vi.fn>).mock.calls.find(
 				(c: string[]) => c[0] === "index.html",
@@ -597,7 +614,7 @@ describe("Optimization Agent", () => {
 			const input = makeInput([
 				makeTask({ change_type: "EXTERNAL" as "METADATA", title: "외부 변경" }),
 			]);
-			const result = await runOptimization(input);
+			const result = await runOptimization(input, { chatLLM: mockChatLLM() });
 			expect(result.applied_tasks).toHaveLength(1);
 			expect(result.files_modified).toHaveLength(0);
 		});

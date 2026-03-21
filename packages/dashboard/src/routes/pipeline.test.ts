@@ -768,7 +768,7 @@ describe("LLM integration in pipeline execution", () => {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 		});
-		// Verify pipeline was created in DB (with FAILED status)
+		// Verify pipeline was created in DB (with error status)
 		const listRes = await app.request(`/api/targets/${targetId}/pipeline`);
 		const pipelines = await listRes.json();
 		expect(pipelines.length).toBeGreaterThanOrEqual(1);

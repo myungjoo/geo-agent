@@ -3,8 +3,8 @@ import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
  * Optimization Agent
  *
  * OptimizationPlan의 태스크를 Clone 파일에 실제로 적용.
- * - 규칙 기반 수정 (LLM 없이): 메타태그, JSON-LD, llms.txt 등 구조적 수정
- * - LLM 강화 수정 (선택): 콘텐츠 개선, 설명 보강 등
+ * - 구조적 수정: 메타태그, JSON-LD, llms.txt 등
+ * - LLM은 필수 의존성 (ARCHITECTURE.md 9-A.1)
  */
 import type { OptimizationPlan, OptimizationTask } from "../../models/optimization-plan.js";
 import {
@@ -40,7 +40,7 @@ export interface OptimizationResult {
 type TaskOptimizer = (
 	task: OptimizationTask,
 	input: OptimizationInput,
-	deps?: { chatLLM?: (req: LLMRequest) => Promise<LLMResponse> },
+	deps: { chatLLM: (req: LLMRequest) => Promise<LLMResponse> },
 ) => Promise<{ success: boolean; files_modified: string[]; error?: string }>;
 
 /** Helper: get all HTML files from clone */
@@ -53,7 +53,7 @@ async function getHtmlFiles(input: OptimizationInput): Promise<string[]> {
 async function optimizeMetadata(
 	task: OptimizationTask,
 	input: OptimizationInput,
-	deps?: { chatLLM?: (req: LLMRequest) => Promise<LLMResponse> },
+	deps: { chatLLM: (req: LLMRequest) => Promise<LLMResponse> },
 ): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
 	const htmlFiles = await getHtmlFiles(input);
 	const modified: string[] = [];
@@ -78,7 +78,7 @@ async function optimizeMetadata(
 					const pageText = extractVisibleText(html).slice(0, 1500);
 					const pageTitle = extractTitle(html);
 					const { result: description } = await safeLLMCall(
-						deps?.chatLLM,
+						deps.chatLLM,
 						{
 							prompt: `Write a concise meta description (max 160 characters) for this web page.\n\nTitle: ${pageTitle}\n\nContent excerpt:\n${pageText}`,
 							system_instruction:
@@ -106,7 +106,7 @@ async function optimizeMetadata(
 					const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || "Page";
 					const pageText = extractVisibleText(html).slice(0, 1500);
 					const { result: ogDescription } = await safeLLMCall(
-						deps?.chatLLM,
+						deps.chatLLM,
 						{
 							prompt: `Write a compelling Open Graph description (max 200 characters) for social sharing of this page.\n\nTitle: ${title.trim()}\n\nContent excerpt:\n${pageText}`,
 							system_instruction:
@@ -144,7 +144,7 @@ async function optimizeMetadata(
 async function optimizeSchemaMarkup(
 	_task: OptimizationTask,
 	input: OptimizationInput,
-	deps?: { chatLLM?: (req: LLMRequest) => Promise<LLMResponse> },
+	deps: { chatLLM: (req: LLMRequest) => Promise<LLMResponse> },
 ): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
 	const htmlFiles = await getHtmlFiles(input);
 	const modified: string[] = [];
@@ -167,7 +167,7 @@ async function optimizeSchemaMarkup(
 				const existingLd = existingLdMatches ? existingLdMatches.join("\n") : "None";
 
 				const { result: jsonLdStr } = await safeLLMCall(
-					deps?.chatLLM,
+					deps.chatLLM,
 					{
 						prompt: `Generate a rich JSON-LD (schema.org) structured data object for this web page.\n\nTitle: ${pageTitle}\nMeta description: ${metaDesc}\nExisting JSON-LD: ${existingLd}\n\nContent excerpt:\n${pageText}`,
 						system_instruction:
@@ -204,7 +204,7 @@ async function optimizeSchemaMarkup(
 async function optimizeLlmsTxt(
 	_task: OptimizationTask,
 	input: OptimizationInput,
-	deps?: { chatLLM?: (req: LLMRequest) => Promise<LLMResponse> },
+	deps: { chatLLM: (req: LLMRequest) => Promise<LLMResponse> },
 ): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
 	try {
 		// Gather summaries from available HTML pages
@@ -223,7 +223,7 @@ async function optimizeLlmsTxt(
 		}
 
 		const { result: content } = await safeLLMCall(
-			deps?.chatLLM,
+			deps.chatLLM,
 			{
 				prompt: `Generate an llms.txt file for a website with these pages:\n\n${pageSummaries.join("\n")}\n\nTotal pages: ${htmlFiles.length}`,
 				system_instruction:
@@ -245,7 +245,7 @@ async function optimizeLlmsTxt(
 async function optimizeSemanticStructure(
 	task: OptimizationTask,
 	input: OptimizationInput,
-	deps?: { chatLLM?: (req: LLMRequest) => Promise<LLMResponse> },
+	deps: { chatLLM: (req: LLMRequest) => Promise<LLMResponse> },
 ): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
 	const htmlFiles = await getHtmlFiles(input);
 	const modified: string[] = [];
@@ -262,7 +262,7 @@ async function optimizeSemanticStructure(
 
 				const pageText = extractVisibleText(html).slice(0, 1000);
 				const { result: heading } = await safeLLMCall(
-					deps?.chatLLM,
+					deps.chatLLM,
 					{
 						prompt: `Suggest a clear, descriptive H1 heading for this web page.\n\nCurrent title tag: ${title}\n\nContent excerpt:\n${pageText}`,
 						system_instruction:
@@ -298,7 +298,7 @@ async function optimizeSemanticStructure(
 async function optimizeContentDensity(
 	task: OptimizationTask,
 	input: OptimizationInput,
-	deps?: { chatLLM?: (req: LLMRequest) => Promise<LLMResponse> },
+	deps: { chatLLM: (req: LLMRequest) => Promise<LLMResponse> },
 ): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
 	const htmlFiles = await getHtmlFiles(input);
 	const modified: string[] = [];
@@ -314,7 +314,7 @@ async function optimizeContentDensity(
 
 			const title = extractTitle(html);
 			const { result } = await safeLLMCall(
-				deps?.chatLLM,
+				deps.chatLLM,
 				{
 					prompt: `This web page has thin content (${wordCount} words). Title: "${title}"\nContent: "${text.slice(0, 1500)}"\n\nWrite 2-3 additional paragraphs of factual, informative content that would help this page be better understood by LLMs. Write in the same language as the existing content. Output only the HTML paragraphs (wrapped in <section> tags).`,
 					system_instruction:
@@ -342,7 +342,7 @@ async function optimizeContentDensity(
 async function optimizeFaqAddition(
 	task: OptimizationTask,
 	input: OptimizationInput,
-	deps?: { chatLLM?: (req: LLMRequest) => Promise<LLMResponse> },
+	deps: { chatLLM: (req: LLMRequest) => Promise<LLMResponse> },
 ): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
 	const htmlFiles = await getHtmlFiles(input);
 	const modified: string[] = [];
@@ -357,7 +357,7 @@ async function optimizeFaqAddition(
 			const title = extractTitle(html);
 			const text = extractVisibleText(html).slice(0, 2000);
 			const { result } = await safeLLMCall(
-				deps?.chatLLM,
+				deps.chatLLM,
 				{
 					prompt: `Based on this page content, generate a FAQ section with 3-5 questions and answers.\nTitle: "${title}"\nContent: "${text}"\n\nOutput JSON: { "faqs": [{ "question": "...", "answer": "..." }] }`,
 					system_instruction:
@@ -505,7 +505,7 @@ async function optimizeContentChunking(
 async function optimizeReadabilityFix(
 	_task: OptimizationTask,
 	input: OptimizationInput,
-	deps?: { chatLLM?: (req: LLMRequest) => Promise<LLMResponse> },
+	deps: { chatLLM: (req: LLMRequest) => Promise<LLMResponse> },
 ): Promise<{ success: boolean; files_modified: string[]; error?: string }> {
 	const htmlFiles = await getHtmlFiles(input);
 	const modified: string[] = [];
@@ -570,8 +570,8 @@ const OPTIMIZERS: Record<string, TaskOptimizer> = {
 
 export async function runOptimization(
 	input: OptimizationInput,
-	deps?: {
-		chatLLM?: (req: LLMRequest) => Promise<LLMResponse>;
+	deps: {
+		chatLLM: (req: LLMRequest) => Promise<LLMResponse>;
 	},
 ): Promise<OptimizationResult> {
 	const result: OptimizationResult = {

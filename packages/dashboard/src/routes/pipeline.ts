@@ -146,22 +146,14 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 			},
 		};
 
-		// Build chatLLM dependency
-		let chatLLM: PipelineDeps["chatLLM"] | undefined;
+		// Build chatLLM dependency — LLM is REQUIRED (ARCHITECTURE.md 9-A.1)
 		const workspaceDir = sharedSettings?.workspace_dir ?? "./run";
+		let chatLLM: PipelineDeps["chatLLM"];
 		try {
 			const configManager = new ProviderConfigManager(workspaceDir);
 			const enabledProviders = configManager.getEnabled();
-			if (enabledProviders.length > 0 && enabledProviders.some((p) => p.api_key)) {
-				const client = new GeoLLMClient(workspaceDir);
-				chatLLM = (req) => client.chat(req);
-				console.log(
-					`🤖 LLM enabled: ${enabledProviders
-						.filter((p) => p.api_key)
-						.map((p) => p.provider_id)
-						.join(", ")}`,
-				);
-			} else {
+			const providersWithKey = enabledProviders.filter((p) => p.api_key);
+			if (providersWithKey.length === 0) {
 				// API Key 미설정 → 파이프라인 실행 거부
 				const errMsg =
 					"LLM API Key가 설정되지 않았습니다. Dashboard > LLM Providers 탭에서 API Key를 입력하세요.";
@@ -174,8 +166,13 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 				});
 				return c.json({ ...pipeline, error: errMsg }, 201);
 			}
+			const client = new GeoLLMClient(workspaceDir);
+			chatLLM = (req) => client.chat(req);
+			console.log(
+				`🤖 LLM enabled: ${providersWithKey.map((p) => p.provider_id).join(", ")}`,
+			);
 		} catch (err) {
-			// API key가 설정되어 있는데 초기화 실패 → 파이프라인 중단
+			// LLM 초기화 실패 → 파이프라인 중단
 			const errMsg = err instanceof Error ? err.message : String(err);
 			console.error("❌ LLM initialization failed:", errMsg);
 			await repo.setError(pipeline.pipeline_id, `LLM 초기화 실패: ${errMsg}`);
@@ -251,8 +248,7 @@ async function executePipelineAsync(
 	repo: PipelineRepository,
 ): Promise<void> {
 	try {
-		const llmMode = deps.chatLLM ? "LLM-enhanced" : "rule-based only";
-		console.log(`⏳ Pipeline started for target ${targetId} (${config.target_url}) [${llmMode}]`);
+		console.log(`⏳ Pipeline started for target ${targetId} (${config.target_url}) [LLM-enhanced]`);
 		const result = await runPipeline(config, deps);
 
 		// LLM 인증 에러가 있으면 성공 여부와 관계없이 실패 처리
