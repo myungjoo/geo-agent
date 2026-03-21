@@ -200,7 +200,7 @@ export async function runPipeline(
 			if (isLLMAuthError(err)) {
 				orchestrator.stop();
 			}
-			throw err; // Re-throw so safeLLMCall can handle fallback (or stop for auth errors)
+			throw err; // Re-throw — auth errors stop pipeline, other errors propagate to caller
 		}
 	};
 
@@ -280,8 +280,8 @@ export async function runPipeline(
 				currentDimensions = analysisOutput.geo_scores.dimensions;
 				initialScore = currentScore;
 
-				// Run Synthetic Probes if LLM is available
-				if (trackedChatLLM) {
+				// Run Synthetic Probes (LLM 필수)
+				{
 					try {
 						const productInfos = analysisOutput.eval_data?.product_info ?? [];
 						const productNames = productInfos

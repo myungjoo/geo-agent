@@ -119,7 +119,7 @@ function computeStructureQuality(html: string) {
 async function computeContentAnalysis(
 	html: string,
 	topics: string[],
-	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>,
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>,
 ) {
 	const textContent = html
 		.replace(/<[^>]+>/g, "")
@@ -131,35 +131,23 @@ async function computeContentAnalysis(
 	// Content density: text bytes vs total bytes
 	const density = Math.round((textContent.length / Math.max(html.length, 1)) * 100);
 
-	// Readability level: LLM-based when available, heuristic fallback
+	// Readability level: LLM-based (필수 — ARCHITECTURE.md 9-A.1)
 	let readability: "technical" | "general" | "simplified";
-	if (chatLLM) {
-		const excerpt = textContent.slice(0, 500);
-		try {
-			const response = await chatLLM({
-				prompt: `Analyze the readability level of the following text excerpt. Classify it as one of: "technical", "general", or "simplified".\n\n- "technical": specialized vocabulary, complex sentence structures, assumes domain expertise\n- "general": everyday language accessible to most adults, moderate complexity\n- "simplified": very simple language, short sentences, basic vocabulary\n\nText excerpt:\n"""\n${excerpt}\n"""\n\nRespond with JSON only: { "readability_level": "technical"|"general"|"simplified", "reasoning": "brief explanation" }`,
-				system_instruction:
-					"You are a readability analyst. Classify text readability. Respond with JSON only.",
-				json_mode: true,
-				temperature: 0.1,
-				max_tokens: 200,
-			});
-			const parsed = JSON.parse(response.content);
-			const level = parsed.readability_level;
-			if (level === "technical" || level === "general" || level === "simplified") {
-				readability = level;
-			} else {
-				// Invalid LLM response — fall back to heuristic
-				const avgWordLen = words.reduce((sum, w) => sum + w.length, 0) / Math.max(wordCount, 1);
-				readability = avgWordLen > 7 ? "technical" : avgWordLen > 5 ? "general" : "simplified";
-			}
-		} catch {
-			// LLM call failed — fall back to heuristic
-			const avgWordLen = words.reduce((sum, w) => sum + w.length, 0) / Math.max(wordCount, 1);
-			readability = avgWordLen > 7 ? "technical" : avgWordLen > 5 ? "general" : "simplified";
-		}
+	const excerpt = textContent.slice(0, 500);
+	const response = await chatLLM({
+		prompt: `Analyze the readability level of the following text excerpt. Classify it as one of: "technical", "general", or "simplified".\n\n- "technical": specialized vocabulary, complex sentence structures, assumes domain expertise\n- "general": everyday language accessible to most adults, moderate complexity\n- "simplified": very simple language, short sentences, basic vocabulary\n\nText excerpt:\n"""\n${excerpt}\n"""\n\nRespond with JSON only: { "readability_level": "technical"|"general"|"simplified", "reasoning": "brief explanation" }`,
+		system_instruction:
+			"You are a readability analyst. Classify text readability. Respond with JSON only.",
+		json_mode: true,
+		temperature: 0.1,
+		max_tokens: 200,
+	});
+	const parsed = JSON.parse(response.content);
+	const level = parsed.readability_level;
+	if (level === "technical" || level === "general" || level === "simplified") {
+		readability = level;
 	} else {
-		// No LLM available — use heuristic
+		// Invalid LLM response — use heuristic as last resort
 		const avgWordLen = words.reduce((sum, w) => sum + w.length, 0) / Math.max(wordCount, 1);
 		readability = avgWordLen > 7 ? "technical" : avgWordLen > 5 ? "general" : "simplified";
 	}
@@ -233,7 +221,7 @@ export interface AnalysisDeps {
 		maxPages?: number,
 		timeoutMs?: number,
 	) => Promise<MultiPageCrawlResult>;
-	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>;
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>;
 }
 
 /**

@@ -48,15 +48,10 @@ export interface SafeLLMResult<T> {
  * Non-auth errors retry once, then throw with clear error message.
  */
 export async function safeLLMCall<T>(
-	chatLLM: ((req: LLMRequest) => Promise<LLMResponse>) | undefined,
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>,
 	request: LLMRequest,
 	parser: (content: string) => T,
 ): Promise<SafeLLMResult<T>> {
-	if (!chatLLM) {
-		throw new Error(
-			"LLM provider is not configured. Pipeline requires a working LLM provider to proceed.",
-		);
-	}
 	let lastError: unknown;
 	for (let attempt = 0; attempt < 2; attempt++) {
 		try {

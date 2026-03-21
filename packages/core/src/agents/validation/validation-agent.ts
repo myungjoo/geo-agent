@@ -89,8 +89,8 @@ export interface ValidationDeps {
 	};
 	/** 멀티 페이지: 클론의 모든 페이지를 CrawlData로 반환 */
 	crawlClonePages?: () => Promise<Array<{ filename: string; crawl_data: CrawlData }>>;
-	/** LLM 기반 품질 검증 (선택) */
-	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>;
+	/** LLM 기반 품질 검증 (필수 — ARCHITECTURE.md 9-A.1) */
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>;
 }
 
 export async function runValidation(
