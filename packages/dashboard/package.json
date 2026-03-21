@@ -12,7 +12,7 @@
 		}
 	},
 	"scripts": {
-		"build": "tsc -b && node -e \"const fs=require('fs'),p=require('path');const s=p.join('src','ui');const d=p.join('dist','ui');fs.mkdirSync(d,{recursive:true});fs.readdirSync(s).filter(f=>f.endsWith('.html')).forEach(f=>fs.copyFileSync(p.join(s,f),p.join(d,f)));\"",
+		"build": "tsc -b && node -e \"const fs=require('fs'),p=require('path');const s=p.join('src','ui');const d=p.join('dist','ui');fs.mkdirSync(d,{recursive:true});fs.readdirSync(s).filter(f=>f.endsWith('.html')).forEach(f=>fs.copyFileSync(p.join(s,f),p.join(d,f)));\" && node -e \"const{execSync:e}=require('child_process'),fs=require('fs'),p=require('path');try{const sha=e('git rev-parse HEAD',{encoding:'utf-8'}).trim();const date=e('git log -1 --format=%ci',{encoding:'utf-8'}).trim();fs.writeFileSync(p.join('dist','build-info.json'),JSON.stringify({sha,date,short:sha.slice(0,7),buildTime:new Date().toISOString()}));}catch{fs.writeFileSync(p.join('dist','build-info.json'),JSON.stringify({sha:'unknown',date:'unknown',short:'unknown',buildTime:new Date().toISOString()}));}\"",
 		"dev": "node --import tsx src/server.ts",
 		"test": "vitest run",
 		"clean": "rimraf dist .tsbuildinfo"
