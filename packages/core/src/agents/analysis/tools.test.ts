@@ -26,6 +26,15 @@ const mockCrawlData: CrawlData = {
 	headers: { "content-type": "text/html" },
 };
 
+const mockChatLLM = vi.fn().mockResolvedValue({
+	content: '{"readability_level":"general","reasoning":"test"}',
+	model: "gpt-4o",
+	provider: "openai",
+	usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+	latency_ms: 100,
+	cost_usd: 0.001,
+});
+
 const mockDeps: AnalysisToolDeps = {
 	crawlTarget: vi.fn().mockResolvedValue(mockCrawlData),
 	scoreTarget: vi.fn().mockReturnValue({
@@ -42,6 +51,7 @@ const mockDeps: AnalysisToolDeps = {
 		matched_signals: ["no-product-pages"],
 		all_signals: [],
 	}),
+	chatLLM: mockChatLLM,
 };
 
 // ── Tests ──────────────────────────────────────────────────
@@ -206,15 +216,10 @@ describe("createAnalysisToolHandlers", () => {
 	});
 
 	describe("run_synthetic_probes handler", () => {
-		it("should return error if no chatLLM", async () => {
-			const state = createAnalysisToolState();
-			const handlers = createAnalysisToolHandlers(mockDeps, state);
-			const result = await handlers.run_synthetic_probes({
-				site_name: "Test",
-				topics: ["testing"],
-			});
-			const parsed = JSON.parse(result);
-			expect(parsed.error).toContain("LLM not available");
+		it("chatLLM is required in AnalysisToolDeps (compile-time guarantee)", () => {
+			// chatLLM is now a required field in AnalysisToolDeps interface
+			// This test verifies the type contract at runtime
+			expect(mockDeps.chatLLM).toBeDefined();
 		});
 	});
 

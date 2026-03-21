@@ -161,7 +161,7 @@ export interface AnalysisToolDeps {
 		maxPages?: number,
 		timeoutMs?: number,
 	) => Promise<MultiPageCrawlResult>;
-	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>;
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>;
 }
 
 // ── Shared State (accumulated across tool calls) ────────────
@@ -701,10 +701,6 @@ export function createAnalysisToolHandlers(
 		},
 
 		run_synthetic_probes: async (params: any) => {
-			if (!deps.chatLLM) {
-				return JSON.stringify({ error: "LLM not available — cannot run synthetic probes" });
-			}
-
 			// Dynamic import to avoid circular dependencies
 			const { runProbes } = await import("../probes/synthetic-probes.js");
 
