@@ -220,25 +220,6 @@ describe("Validation Agent", () => {
 			expect(chatLLM).toHaveBeenCalledOnce();
 		});
 
-		it("throws without chatLLM", async () => {
-			const deps = {
-				crawlClone: vi.fn().mockResolvedValue(makeCrawlData()),
-				scoreTarget: vi.fn().mockReturnValue({
-					overall_score: 65,
-					grade: "Needs Improvement",
-					dimensions: baseDimensions.map((d) => ({
-						...d,
-						score: d.score + 15,
-						details: ["Improved by 15"],
-					})),
-				}),
-				// no chatLLM
-			};
-			await expect(runValidation(makeInput(), deps)).rejects.toThrow(
-				"LLM provider is not configured",
-			);
-		});
-
 		it("throws when chatLLM fails after retry", async () => {
 			const deps = makeDeps(65);
 			const chatLLM = vi

@@ -27,12 +27,6 @@ function makeLLMResponse(content: string): LLMResponse {
 // ── safeLLMCall ─────────────────────────────────────────────
 
 describe("safeLLMCall", () => {
-	it("throws when chatLLM is undefined (4-D: LLM required)", async () => {
-		await expect(
-			safeLLMCall(undefined, { prompt: "test", json_mode: false }, (c) => c),
-		).rejects.toThrow("LLM provider is not configured");
-	});
-
 	it("returns parsed result when chatLLM succeeds", async () => {
 		const chatLLM = vi.fn().mockResolvedValue(makeLLMResponse("hello world"));
 		const result = await safeLLMCall(chatLLM, { prompt: "test", json_mode: false }, (c) =>

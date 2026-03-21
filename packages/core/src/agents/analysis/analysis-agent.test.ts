@@ -251,12 +251,8 @@ describe("Analysis Agent", () => {
 			expect(result.report.content_analysis.readability_level).toBe("general");
 		});
 
-		it("report.content_analysis.readability_level falls back to heuristic without chatLLM", async () => {
+		it("report.content_analysis.readability_level throws when LLM readability call fails", async () => {
 			const deps = makeDeps();
-			// Replace chatLLM with one that only handles the content quality assessment (not readability)
-			// By removing chatLLM entirely and providing a minimal one that throws for readability
-			// but we can't remove it since safeLLMCall requires it.
-			// Instead, test heuristic fallback when LLM readability call fails.
 			const failOnReadabilityLLM = vi.fn().mockImplementation((req: { prompt: string }) => {
 				if (req.prompt.includes("readability")) {
 					return Promise.reject(new Error("LLM unavailable"));
@@ -288,11 +284,10 @@ describe("Analysis Agent", () => {
 					cost_usd: 0.02,
 				});
 			});
-			const result = await runAnalysis(defaultInput, { ...deps, chatLLM: failOnReadabilityLLM });
-			// Falls back to heuristic — should still be a valid level
-			expect(["technical", "general", "simplified"]).toContain(
-				result.report.content_analysis.readability_level,
-			);
+			// chatLLM is called directly for readability, so error propagates
+			await expect(
+				runAnalysis(defaultInput, { ...deps, chatLLM: failOnReadabilityLLM }),
+			).rejects.toThrow("LLM unavailable");
 		});
 
 		it("report.current_geo_score has structured_score from S2", async () => {
@@ -468,23 +463,13 @@ describe("Analysis Agent — with LLM content quality assessment", () => {
 		expect(chatLLM.mock.calls.length).toBeGreaterThanOrEqual(2);
 	});
 
-	it("throws when chatLLM not provided", async () => {
-		const deps = makeDeps();
-		// Remove chatLLM to simulate missing LLM provider
-		const { chatLLM: _, ...depsWithoutLLM } = deps;
-
-		await expect(runAnalysis(defaultInput, depsWithoutLLM as any)).rejects.toThrow(
-			"LLM provider is not configured",
-		);
-	});
-
-	it("throws when chatLLM fails after retry", async () => {
+	it("throws when chatLLM fails", async () => {
 		const deps = makeDeps();
 		const failingChatLLM = vi.fn().mockRejectedValue(new Error("API rate limit exceeded"));
 		const depsWithLLM = { ...deps, chatLLM: failingChatLLM };
 
 		await expect(runAnalysis(defaultInput, depsWithLLM)).rejects.toThrow(
-			"LLM call failed after retry: API rate limit exceeded",
+			"API rate limit exceeded",
 		);
 	});
 });

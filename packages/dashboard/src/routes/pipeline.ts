@@ -205,10 +205,10 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 			stageCallbacks,
 		};
 
-		// Determine configured LLM mode for UI display
+		// LLM mode is always "llm" (chatLLM is required, ARCHITECTURE.md 9-A.1)
 		const configManager2 = new ProviderConfigManager(workspaceDir);
 		const enabledForDisplay = configManager2.getEnabled().filter((p) => p.api_key);
-		const llmMode = chatLLM !== undefined ? "llm" : "rule-based";
+		const llmMode = "llm";
 		const configuredProviders = enabledForDisplay.map((p) => {
 			return `${p.provider_id}/${p.default_model ?? "default"}`;
 		});

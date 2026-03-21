@@ -506,15 +506,15 @@ describe("generateFindingsLLM", () => {
 // ── analyzeJsDependency ────────────────────────────────
 
 describe("analyzeJsDependency", () => {
-	it("returns mechanical metrics without chatLLM", async () => {
+	it("returns mechanical metrics and LLM access impact with chatLLM", async () => {
 		const html =
 			'<html><head><script src="app.js"></script></head><body><h1>Hello World</h1><p>Some content here.</p></body></html>';
-		const result = await analyzeJsDependency(html);
+		const mockLLM = createMockChatLLM();
+		const result = await analyzeJsDependency(html, mockLLM);
 		expect(result.script_count).toBe(1);
 		expect(result.external_scripts).toBe(1);
 		expect(result.inline_scripts).toBe(0);
 		expect(result.estimated_js_dependency).toBeGreaterThanOrEqual(0);
-		expect(result.llm_access_impact).toBeUndefined();
 	});
 
 	it("includes LLM access impact when chatLLM provided", async () => {
@@ -573,23 +573,53 @@ describe("analyzeJsDependency", () => {
 		expect(result.llm_access_impact).toBeUndefined();
 	});
 
-	it("detects frameworks from script tags (heuristic fallback, no LLM)", async () => {
+	it("detects frameworks from script tags (heuristic fallback when LLM framework detection fails)", async () => {
 		const html =
 			'<html><head><script src="https://cdn.example.com/react.production.min.js"></script></head><body><h1>Hello</h1></body></html>';
-		const result = await analyzeJsDependency(html);
+		const failingLLM = async (req: LLMRequest): Promise<LLMResponse> => {
+			const promptText = req.prompt ?? "";
+			if (promptText.includes("JavaScript frameworks")) {
+				throw new Error("LLM unavailable");
+			}
+			return {
+				content: JSON.stringify(MOCK_JS_IMPACT_RESPONSE),
+				model: "mock-model",
+				provider: "mock",
+				usage: { prompt_tokens: 40, completion_tokens: 30, total_tokens: 70 },
+				latency_ms: 15,
+				cost_usd: 0,
+			};
+		};
+		const result = await analyzeJsDependency(html, failingLLM);
 		expect(result.frameworks_detected).toContain("React/Next.js");
 	});
 
-	it("detects frameworks from DOM markers (heuristic fallback, no LLM)", async () => {
-		const html = '<html><body><div id="__next">React SSR content</div></body></html>';
-		const result = await analyzeJsDependency(html);
+	it("detects frameworks from DOM markers (heuristic fallback when LLM framework detection fails)", async () => {
+		// Must include a <script> tag so extractScriptEvidence is non-empty and LLM path is attempted
+		const html = '<html><head><script src="bundle.js"></script></head><body><div id="__next">React SSR content</div></body></html>';
+		const failingLLM = async (req: LLMRequest): Promise<LLMResponse> => {
+			const promptText = req.prompt ?? "";
+			if (promptText.includes("JavaScript frameworks")) {
+				throw new Error("LLM unavailable");
+			}
+			return {
+				content: JSON.stringify(MOCK_JS_IMPACT_RESPONSE),
+				model: "mock-model",
+				provider: "mock",
+				usage: { prompt_tokens: 40, completion_tokens: 30, total_tokens: 70 },
+				latency_ms: 15,
+				cost_usd: 0,
+			};
+		};
+		const result = await analyzeJsDependency(html, failingLLM);
 		expect(result.frameworks_detected).toContain("React/Next.js");
 	});
 
-	it("does NOT false-positive on body text mentioning framework names (no LLM)", async () => {
+	it("does NOT false-positive on body text mentioning framework names", async () => {
 		const html =
 			"<html><body><p>React is great for building UIs. Angular is also popular. We love jQuery.</p></body></html>";
-		const result = await analyzeJsDependency(html);
+		const mockLLM = createMockChatLLM([], undefined, { frameworks: [] });
+		const result = await analyzeJsDependency(html, mockLLM);
 		expect(result.frameworks_detected).toEqual([]);
 	});
 
@@ -690,20 +720,18 @@ describe("extractGeoEvaluationData", () => {
 		expect(result.opportunities[0]?.title).toBe("스키마 확장");
 	});
 
-	it("works without chatLLM (rule-based findings fallback)", async () => {
+	it("produces rule-based findings with a mock chatLLM", async () => {
 		const homepage = makeCrawlData();
-		const result = await extractGeoEvaluationData(homepage, []);
-		expect(result.marketing_claims).toEqual([]);
-		// Without chatLLM, should use rule-based findings
+		const result = await extractGeoEvaluationData(homepage, [], undefined, mockLLM);
 		expect(Array.isArray(result.strengths)).toBe(true);
 		expect(Array.isArray(result.weaknesses)).toBe(true);
 		expect(Array.isArray(result.opportunities)).toBe(true);
 	});
 
-	it("falls back to rule-based findings when LLM fails", async () => {
+	it("throws when LLM findings call fails", async () => {
 		const failingLLM = async (req: LLMRequest): Promise<LLMResponse> => {
-			// Allow marketing claims call to succeed (returns empty)
 			const promptText = req.prompt ?? "";
+			// Allow marketing claims call to succeed (returns empty)
 			if (promptText.includes("marketing claim")) {
 				return {
 					content: "[]",
@@ -714,14 +742,13 @@ describe("extractGeoEvaluationData", () => {
 					cost_usd: 0,
 				};
 			}
-			// Fail on findings prompt
+			// Fail on all other prompts
 			throw new Error("LLM unavailable");
 		};
 		const homepage = makeCrawlData();
-		const result = await extractGeoEvaluationData(homepage, [], undefined, failingLLM);
-		// Should still have findings from rule-based fallback
-		expect(Array.isArray(result.strengths)).toBe(true);
-		expect(Array.isArray(result.weaknesses)).toBe(true);
+		await expect(
+			extractGeoEvaluationData(homepage, [], undefined, failingLLM),
+		).rejects.toThrow("LLM unavailable");
 	});
 });
 

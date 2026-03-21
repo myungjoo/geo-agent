@@ -161,7 +161,7 @@ function collectJsonLdSnippets(
 
 export async function extractSchemaCoverage(
 	pages: Array<{ url: string; filename: string; crawl_data: CrawlData }>,
-	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>,
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>,
 ): Promise<SchemaCoverageEntry[]> {
 	// Step 1: Hardcoded schema type existence checking
 	const entries: Array<{
@@ -196,8 +196,8 @@ export async function extractSchemaCoverage(
 		return { schemaType, foundOn, present, snippets };
 	});
 
-	// Step 2: Quality judgment — LLM-based if chatLLM provided, otherwise coverage-ratio heuristic
-	if (chatLLM) {
+	// Step 2: Quality judgment — LLM-based (필수, ARCHITECTURE.md 9-A.1)
+	{
 		const presentEntries = entries.filter((e) => e.present);
 		if (presentEntries.length > 0) {
 			// Build LLM prompt with collected data
@@ -536,12 +536,9 @@ function extractScriptEvidence(html: string): string {
 async function detectFrameworks(
 	html: string,
 	scriptTags: string[],
-	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>,
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>,
 ): Promise<string[]> {
-	if (chatLLM) {
-		return detectFrameworksLLM(html, chatLLM);
-	}
-	return detectFrameworksHeuristic(html, scriptTags);
+	return detectFrameworksLLM(html, chatLLM);
 }
 
 /**
@@ -679,7 +676,7 @@ export interface JsDependencyInfo {
 
 export async function analyzeJsDependency(
 	html: string,
-	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>,
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>,
 ): Promise<JsDependencyInfo> {
 	const scriptTags = html.match(/<script[^>]*>/gi) ?? [];
 	const externalScripts = scriptTags.filter((s) => /src=/i.test(s));
@@ -708,8 +705,8 @@ export async function analyzeJsDependency(
 		estimated_js_dependency: Math.round(estimated * 100) / 100,
 	};
 
-	// LLM-based judgment of whether JS blocks LLM crawler content access
-	if (chatLLM) {
+	// LLM-based judgment of whether JS blocks LLM crawler content access (필수)
+	{
 		const textExcerpt = textContent.slice(0, 1500);
 		const prompt = `You are analyzing a web page's JavaScript dependency to determine if JS blocks LLM crawlers from accessing key content.
 
@@ -1381,7 +1378,7 @@ export async function extractGeoEvaluationData(
 	homepage: CrawlData,
 	subPages: Array<{ url: string; filename: string; crawl_data: CrawlData }>,
 	dimensions?: Array<{ id: string; label: string; score: number }>,
-	chatLLM?: (req: LLMRequest) => Promise<LLMResponse>,
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>,
 ): Promise<GeoEvaluationData> {
 	const allPages = [
 		{ url: homepage.url, filename: "index.html", crawl_data: homepage },
@@ -1400,12 +1397,9 @@ export async function extractGeoEvaluationData(
 	// 3. Schema coverage across all pages (LLM-enhanced quality if chatLLM available)
 	const schemaCoverage = await extractSchemaCoverage(allPages, chatLLM);
 
-	// 4. Marketing claims (from all pages, LLM-based)
-	let allClaims: MarketingClaim[] = [];
-	if (chatLLM) {
-		const pages = allPages.map((p) => ({ url: p.url, html: p.crawl_data.html }));
-		allClaims = await extractMarketingClaims(pages, chatLLM);
-	}
+	// 4. Marketing claims (from all pages, LLM-based — 필수)
+	const claimPages = allPages.map((p) => ({ url: p.url, html: p.crawl_data.html }));
+	const allClaims = await extractMarketingClaims(claimPages, chatLLM);
 
 	// 5. JS dependency (homepage) — LLM-enhanced if chatLLM available
 	const jsDependency = await analyzeJsDependency(homepage.html, chatLLM);
@@ -1425,43 +1419,17 @@ export async function extractGeoEvaluationData(
 	// 8. Path access analysis
 	const pathAccess = analyzePathAccess(homepage.robots_txt);
 
-	// 9. Strengths / Weaknesses / Opportunities (LLM-based with rule-based fallback)
-	let findings: { strengths: Finding[]; weaknesses: Finding[]; opportunities: Finding[] };
-	if (chatLLM) {
-		try {
-			findings = await generateFindingsLLM(
-				botPolicies,
-				llmsTxt,
-				schemaCoverage,
-				productInfo,
-				jsDependency,
-				allClaims,
-				chatLLM,
-				dimensions,
-			);
-		} catch {
-			// LLM call failed — fall back to rule-based
-			findings = generateFindings(
-				botPolicies,
-				llmsTxt,
-				schemaCoverage,
-				productInfo,
-				jsDependency,
-				allClaims,
-				dimensions,
-			);
-		}
-	} else {
-		findings = generateFindings(
-			botPolicies,
-			llmsTxt,
-			schemaCoverage,
-			productInfo,
-			jsDependency,
-			allClaims,
-			dimensions,
-		);
-	}
+	// 9. Strengths / Weaknesses / Opportunities (LLM-based — 필수)
+	const findings = await generateFindingsLLM(
+		botPolicies,
+		llmsTxt,
+		schemaCoverage,
+		productInfo,
+		jsDependency,
+		allClaims,
+		chatLLM,
+		dimensions,
+	);
 
 	const baseData = {
 		bot_policies: botPolicies,
