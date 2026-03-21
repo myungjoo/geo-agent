@@ -1377,8 +1377,8 @@ export function generateImprovements(
 export async function extractGeoEvaluationData(
 	homepage: CrawlData,
 	subPages: Array<{ url: string; filename: string; crawl_data: CrawlData }>,
-	dimensions?: Array<{ id: string; label: string; score: number }>,
 	chatLLM: (req: LLMRequest) => Promise<LLMResponse>,
+	dimensions?: Array<{ id: string; label: string; score: number }>,
 ): Promise<GeoEvaluationData> {
 	const allPages = [
 		{ url: homepage.url, filename: "index.html", crawl_data: homepage },

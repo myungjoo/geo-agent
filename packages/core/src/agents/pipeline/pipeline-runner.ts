@@ -279,60 +279,56 @@ export async function runPipeline(
 				currentGrade = analysisOutput.geo_scores.grade;
 				currentDimensions = analysisOutput.geo_scores.dimensions;
 				initialScore = currentScore;
+				try {
+					const productInfos = analysisOutput.eval_data?.product_info ?? [];
+					const productNames = productInfos
+						.map((pi) => pi.info.product_name)
+						.filter((n): n is string => n !== null);
+					const productPrices = productInfos.flatMap((pi) => pi.info.prices);
+					const brandName = new URL(config.target_url).hostname.replace("www.", "").split(".")[0];
+					const probeContext: ProbeContext = {
+						site_name: analysisOutput.crawl_data.title || new URL(config.target_url).hostname,
+						site_url: config.target_url,
+						site_type: analysisOutput.classification.site_type,
+						topics: analysisOutput.report.content_analysis?.key_topics_found ?? [],
+						products: productNames,
+						prices: productPrices,
+						brand: brandName,
+					};
+					probeResults = await runProbes(
+						probeContext,
+						{ chatLLM: trackedChatLLM },
+						{ delayMs: 500 },
+					);
 
-				// Run Synthetic Probes (LLM 필수)
-				{
-					try {
-						const productInfos = analysisOutput.eval_data?.product_info ?? [];
-						const productNames = productInfos
-							.map((pi) => pi.info.product_name)
-							.filter((n): n is string => n !== null);
-						const productPrices = productInfos.flatMap((pi) => pi.info.prices);
-						const brandName = new URL(config.target_url).hostname.replace("www.", "").split(".")[0];
-						const probeContext: ProbeContext = {
-							site_name: analysisOutput.crawl_data.title || new URL(config.target_url).hostname,
-							site_url: config.target_url,
-							site_type: analysisOutput.classification.site_type,
-							topics: analysisOutput.report.content_analysis?.key_topics_found ?? [],
-							products: productNames,
-							prices: productPrices,
-							brand: brandName,
-						};
-						probeResults = await runProbes(
-							probeContext,
-							{ chatLLM: trackedChatLLM },
-							{ delayMs: 500 },
+					// Reflect probe results in GeoScore
+					if (probeResults) {
+						analysisOutput.report.current_geo_score.citation_rate = Math.round(
+							probeResults.summary.citation_rate * 100,
 						);
-
-						// Reflect probe results in GeoScore
-						if (probeResults) {
-							analysisOutput.report.current_geo_score.citation_rate = Math.round(
-								probeResults.summary.citation_rate * 100,
-							);
-							analysisOutput.report.current_geo_score.citation_accuracy = Math.round(
-								probeResults.summary.average_accuracy * 100,
-							);
-							analysisOutput.report.current_geo_score.info_recognition_score = Math.round(
-								((probeResults.summary.pass + probeResults.summary.partial * 0.5) /
-									Math.max(probeResults.summary.total, 1)) *
-									100,
-							);
-							// rank_position: citation rate + info recognition 기반 추정 (0-100)
-							// 높은 citation + 높은 recognition = 높은 rank position
-							const citRate = probeResults.summary.citation_rate;
-							const infoRate =
-								(probeResults.summary.pass + probeResults.summary.partial * 0.5) /
-								Math.max(probeResults.summary.total, 1);
-							analysisOutput.report.current_geo_score.rank_position = Math.round(
-								(citRate * 0.6 + infoRate * 0.4) * 100,
-							);
-						}
-					} catch (probeErr) {
-						console.warn(
-							"⚠️ Synthetic Probes failed (non-fatal):",
-							probeErr instanceof Error ? probeErr.message : String(probeErr),
+						analysisOutput.report.current_geo_score.citation_accuracy = Math.round(
+							probeResults.summary.average_accuracy * 100,
+						);
+						analysisOutput.report.current_geo_score.info_recognition_score = Math.round(
+							((probeResults.summary.pass + probeResults.summary.partial * 0.5) /
+								Math.max(probeResults.summary.total, 1)) *
+								100,
+						);
+						// rank_position: citation rate + info recognition 기반 추정 (0-100)
+						// 높은 citation + 높은 recognition = 높은 rank position
+						const citRate = probeResults.summary.citation_rate;
+						const infoRate =
+							(probeResults.summary.pass + probeResults.summary.partial * 0.5) /
+							Math.max(probeResults.summary.total, 1);
+						analysisOutput.report.current_geo_score.rank_position = Math.round(
+							(citRate * 0.6 + infoRate * 0.4) * 100,
 						);
 					}
+				} catch (probeErr) {
+					console.warn(
+						"⚠️ Synthetic Probes failed (non-fatal):",
+						probeErr instanceof Error ? probeErr.message : String(probeErr),
+					);
 				}
 
 				return analysisOutput;

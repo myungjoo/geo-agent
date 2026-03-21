@@ -468,9 +468,7 @@ describe("Analysis Agent — with LLM content quality assessment", () => {
 		const failingChatLLM = vi.fn().mockRejectedValue(new Error("API rate limit exceeded"));
 		const depsWithLLM = { ...deps, chatLLM: failingChatLLM };
 
-		await expect(runAnalysis(defaultInput, depsWithLLM)).rejects.toThrow(
-			"API rate limit exceeded",
-		);
+		await expect(runAnalysis(defaultInput, depsWithLLM)).rejects.toThrow("API rate limit exceeded");
 	});
 });
 
