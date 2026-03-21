@@ -250,6 +250,42 @@ npx vitest run packages/skills/
 npx vitest run packages/core/src/agents/analysis/analysis-agent.test.ts
 ```
 
+## LLM API 호출 비용 추정
+
+파이프라인 1회 실행 시 예상 LLM API 호출 수와 비용입니다.
+
+### 호출 수 내역
+
+| 스테이지 | 호출 목적 | 호출 수 | 비고 |
+|---|---|---|---|
+| ANALYZING (초기 1회) | 콘텐츠 품질 평가 | 1 | HTML 요약 → LLM 평가 |
+| ANALYZING (초기 1회) | LLM Probe 테스트 | 8+ | 사이트 종류별 프로브 프롬프트 |
+| STRATEGIZING (매 사이클) | 전략 수립 LLM 강화 | 1 | 규칙 기반 + LLM 보강 |
+| OPTIMIZING (매 사이클) | 콘텐츠 생성/수정 | ~4 | 태스크당 1회, 평균 4태스크 |
+| VALIDATING (매 사이클) | Analysis Agent Clone 모드 | 9+ | 품질 평가 1 + Probe 8+ |
+| **사이클당 소계** | | **~14** | STRATEGIZING + OPTIMIZING + VALIDATING |
+
+### 총 예상 호출 수
+
+| 시나리오 | 사이클 수 | 총 호출 수 |
+|---|---|---|
+| 빠른 수렴 | 1 | ~23 |
+| 기본 (default) | 5 | ~79 |
+| 최대 | 10 | ~149 |
+
+### 예상 비용 (Target 1개 기준)
+
+평균 호출당 입력 ~3,000 토큰, 출력 ~1,000 토큰 기준:
+
+| 모델 | 5 사이클 | 10 사이클 | 호출당 비용 |
+|---|---|---|---|
+| GPT-4o-mini | ~$0.08 | ~$0.16 | ~$0.001 |
+| GPT-4o | ~$1.40 | ~$2.60 | ~$0.018 |
+| Claude Sonnet | ~$1.90 | ~$3.60 | ~$0.024 |
+| Claude Opus | ~$8.70 | ~$16.40 | ~$0.110 |
+
+> 위 비용은 추정치이며 실제 토큰 사용량에 따라 달라집니다. 멀티 페이지 분석(최대 20페이지)이 활성화되면 Probe 호출 수가 페이지 수에 비례하여 증가할 수 있습니다.
+
 ## 라이선스
 
 Private
