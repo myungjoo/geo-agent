@@ -29,6 +29,27 @@
   - LLM이 해야 할 판단을 hardcoded 코드로 대체하지 않음
   - **기계적 작업**(파싱, 카운트, 비율 계산)은 코드로, **판단 작업**(품질 평가, 인용 판정, 정확도 평가)은 LLM으로
 
+## GEO 점수 체계 (2-Level 계층)
+
+### Level 1: GEO Score (최종 성과 — LLM 프로브 필요)
+- Citation Rate: 25%
+- Citation Accuracy: 20%
+- Info Recognition: 20%
+- Coverage: 15%
+- Rank Position: 10%
+- Readiness Score: 10% ← Level 2 전체 점수 투입
+
+### Level 2: GEO Readiness Score (사이트 준비도 — 정적 분석, API 불필요)
+- S1 LLM 크롤링 접근성: 15%
+- S2 구조화 데이터 품질: 25%
+- S3 콘텐츠 기계가독성: 20%
+- S4 콘텐츠 팩트 밀도: 10%
+- S5 브랜드/조직 메시지: 10%
+- S6 AI 친화적 인프라: 10%
+- S7 콘텐츠 탐색 구조: 10%
+
+> API Key 없으면 Level 2만 산출 (현재 동작). API Key 있으면 Level 1이 권위 점수.
+
 ## 파이프라인
 
 ```
