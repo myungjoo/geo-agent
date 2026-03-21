@@ -306,12 +306,14 @@ describe("ArchiveBuilder", () => {
 			expect(builder.getReport("no-target", "no-report")).toBeNull();
 		});
 
-		it("should return null for corrupted JSON", () => {
+		it("should throw for corrupted JSON", () => {
 			const dirPath = path.join(tmpDir, "reports", "target-001", "rpt-corrupt");
 			fs.mkdirSync(dirPath, { recursive: true });
 			fs.writeFileSync(path.join(dirPath, "report.json"), "{ invalid json !!!", "utf-8");
 
-			expect(builder.getReport("target-001", "rpt-corrupt")).toBeNull();
+			expect(() => builder.getReport("target-001", "rpt-corrupt")).toThrow(
+				/Failed to parse report/,
+			);
 		});
 	});
 

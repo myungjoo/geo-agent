@@ -104,8 +104,10 @@ export class ArchiveBuilder {
 		if (!fs.existsSync(reportPath)) return null;
 		try {
 			return JSON.parse(fs.readFileSync(reportPath, "utf-8"));
-		} catch {
-			return null;
+		} catch (err) {
+			throw new Error(
+				`Failed to parse report ${reportPath}: ${err instanceof Error ? err.message : String(err)}`,
+			);
 		}
 	}
 

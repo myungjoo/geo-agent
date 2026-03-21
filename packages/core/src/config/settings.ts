@@ -32,8 +32,10 @@ export function loadSettings(workspaceDir?: string): AppSettings {
 	if (fs.existsSync(configPath)) {
 		try {
 			raw = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-		} catch {
-			// Ignore parse errors, use defaults
+		} catch (err) {
+			throw new Error(
+				`Failed to parse config file ${configPath}: ${err instanceof Error ? err.message : String(err)}`,
+			);
 		}
 	}
 

@@ -129,8 +129,10 @@ export class ProviderConfigManager {
 		try {
 			const raw = JSON.parse(fs.readFileSync(configPath, "utf-8"));
 			return z.array(LLMProviderSettingsSchema).parse(raw);
-		} catch {
-			return DEFAULT_PROVIDERS.map((p) => ({ ...p }));
+		} catch (err) {
+			throw new Error(
+				`Failed to parse LLM provider config ${configPath}: ${err instanceof Error ? err.message : String(err)}`,
+			);
 		}
 	}
 

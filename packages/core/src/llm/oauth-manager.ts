@@ -84,8 +84,10 @@ export class OAuthManager {
 				const raw = readFileSync(this.statePath, "utf-8");
 				return OAuthStateSchema.parse(JSON.parse(raw));
 			}
-		} catch {
-			// Corrupted state, start fresh
+		} catch (err) {
+			throw new Error(
+				`Corrupted OAuth state file ${this.statePath}: ${err instanceof Error ? err.message : String(err)}`,
+			);
 		}
 		return { tokens: {}, credentials: {} };
 	}
@@ -226,8 +228,10 @@ export class OAuthManager {
 				try {
 					const refreshed = await this.refreshToken(provider);
 					return refreshed.access_token;
-				} catch {
-					return null;
+				} catch (err) {
+					throw new Error(
+						`OAuth token refresh failed for ${provider}: ${err instanceof Error ? err.message : String(err)}`,
+					);
 				}
 			}
 			return null;
@@ -258,8 +262,10 @@ export class OAuthManager {
 				await fetch(`${endpoints.revoke_url}?token=${token.access_token}`, {
 					method: "POST",
 				});
-			} catch {
-				// Best effort revocation
+			} catch (err) {
+				throw new Error(
+					`OAuth token revocation failed for ${provider}: ${err instanceof Error ? err.message : String(err)}`,
+				);
 			}
 		}
 

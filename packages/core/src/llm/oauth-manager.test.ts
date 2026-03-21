@@ -117,12 +117,11 @@ describe("OAuthManager", () => {
 		expect(creds!.client_id).toBe("id-1");
 	});
 
-	it("handles corrupted state file gracefully", () => {
+	it("throws on corrupted state file", () => {
 		const dir = makeTmpDir();
 		fs.mkdirSync(path.join(dir, "auth"), { recursive: true });
 		fs.writeFileSync(path.join(dir, "auth", "oauth-state.json"), "NOT JSON");
-		const manager = new OAuthManager(dir);
-		expect(manager.getCredentials("google")).toBeNull();
+		expect(() => new OAuthManager(dir)).toThrow(/Corrupted OAuth state file/);
 	});
 
 	describe("Credentials management", () => {

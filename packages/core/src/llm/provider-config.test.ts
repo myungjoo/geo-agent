@@ -191,11 +191,10 @@ describe("ProviderConfigManager", () => {
 			expect(providers[0].enabled).toBe(true);
 		});
 
-		it("returns defaults when config file is malformed JSON", () => {
+		it("throws when config file is malformed JSON", () => {
 			fs.writeFileSync(path.join(tmpDir, "llm-providers.json"), "not valid json!!");
 
-			const providers = manager.loadAll();
-			expect(providers).toHaveLength(6);
+			expect(() => manager.loadAll()).toThrow(/Failed to parse LLM provider config/);
 		});
 
 		it("returns a copy, not a reference to DEFAULT_PROVIDERS", () => {

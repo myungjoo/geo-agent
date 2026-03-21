@@ -126,8 +126,10 @@ export class CloneManager {
 		try {
 			const raw = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
 			return CloneMetadataSchema.parse(raw);
-		} catch {
-			return null;
+		} catch (err) {
+			throw new Error(
+				`Failed to parse clone metadata ${metaPath}: ${err instanceof Error ? err.message : String(err)}`,
+			);
 		}
 	}
 

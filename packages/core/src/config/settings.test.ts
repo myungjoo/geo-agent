@@ -132,15 +132,11 @@ describe("loadSettings", () => {
 		expect(settings.port).toBe(2222);
 	});
 
-	it("handles malformed JSON in config.json by falling back to defaults", () => {
+	it("throws on malformed JSON in config.json", () => {
 		const dir = trackTmpDir();
 		fs.writeFileSync(path.join(dir, "config.json"), "{ not valid json !!");
 
-		const settings = loadSettings(dir);
-
-		expect(settings.workspace_dir).toBe(dir);
-		expect(settings.port).toBe(3000);
-		expect(settings.default_model).toBe("gpt-4o");
+		expect(() => loadSettings(dir)).toThrow(/Failed to parse config file/);
 	});
 
 	it("handles a non-existent directory gracefully", () => {
