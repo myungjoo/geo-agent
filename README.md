@@ -4,7 +4,9 @@
 
 ## 핵심 개념
 
-- **GEO Score**: 7차원 평가 (크롤링 접근성, 구조화 데이터, 기계가독성, 팩트 밀도, 브랜드 메시지, AI 인프라, 콘텐츠 네비게이션)
+- **GEO Score (2-Level 체계)**:
+  - **Level 1 — GEO Score**: LLM Probe 기반 최종 성과 (Citation Rate 25%, Citation Accuracy 20%, Info Recognition 20%, Coverage 15%, Rank Position 10%, Readiness Score 10%). API Key 필요
+  - **Level 2 — GEO Readiness Score**: 정적 분석 기반 사이트 준비도 7차원 평가 (크롤링 접근성, 구조화 데이터, 기계가독성, 팩트 밀도, 브랜드 메시지, AI 인프라, 콘텐츠 네비게이션). API Key 불필요
 - **읽기 전용 원칙**: Target Web Page를 직접 수정하지 않음. 로컬 클론에서 최적화 후 Before-After 리포트 제공
 - **Synthetic Probes**: LLM에 실제 질의하여 Target 인용/정확도를 검증하는 8종 프로브
 
@@ -13,6 +15,8 @@
 - **Node.js** 20 이상
 - **npm** 8 이상
 - (선택) LLM API Key — OpenAI, Azure OpenAI, Anthropic, Google AI 중 하나
+  - `analyze` 명령: LLM 불필요 (Level 2 정적 분석만 수행)
+  - `run` 명령: `--no-llm` 플래그로 rule-based 실행 가능. LLM 사용 시 API Key 필수
 
 ## 설치
 
@@ -193,9 +197,9 @@ curl -X PUT http://localhost:3000/api/settings/llm-providers/microsoft \
 ## 파이프라인 흐름
 
 ```
-ANALYZING → CLONING → STRATEGIZING → OPTIMIZING → VALIDATING → REPORTING → COMPLETED
-                           ↑                          │
-                           └── 목표 미달 시 루프백 ────┘
+INIT → ANALYZING → CLONING → STRATEGIZING → OPTIMIZING → VALIDATING → REPORTING → COMPLETED
+                                  ↑                          │
+                                  └── 목표 미달 시 루프백 ────┘
 ```
 
 1. **ANALYZING**: Target URL 크롤링 + 사이트 분류 + GEO 7차원 채점
@@ -284,7 +288,7 @@ npx vitest run packages/core/src/agents/analysis/analysis-agent.test.ts
 | Claude Sonnet | ~$1.90 | ~$3.60 | ~$0.024 |
 | Claude Opus | ~$8.70 | ~$16.40 | ~$0.110 |
 
-> 위 비용은 추정치이며 실제 토큰 사용량에 따라 달라집니다. 멀티 페이지 분석(최대 20페이지)이 활성화되면 Probe 호출 수가 페이지 수에 비례하여 증가할 수 있습니다.
+> 위 비용은 추정치이며 실제 토큰 사용량에 따라 달라집니다. 멀티 페이지 분석(최대 30페이지)이 활성화되면 Probe 호출 수가 페이지 수에 비례하여 증가할 수 있습니다.
 
 ## 라이선스
 
