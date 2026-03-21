@@ -568,9 +568,7 @@ describe("Pipeline Runner — resultFullFn regression", () => {
 		expect(typeof withSysInstr[0].system_instruction_summary).toBe("string");
 
 		// At least one entry should have request_params (agents send temperature/max_tokens)
-		const withParams = full.llm_call_log.filter(
-			(e) => e.request_params !== undefined,
-		);
+		const withParams = full.llm_call_log.filter((e) => e.request_params !== undefined);
 		expect(withParams.length).toBeGreaterThan(0);
 		const params = withParams[0].request_params as Record<string, unknown>;
 		expect(typeof params.temperature).toBe("number");
