@@ -68,12 +68,24 @@ async function waitForPipeline(
 	throw new Error(`Pipeline did not complete within ${timeoutMs}ms`);
 }
 
+/** Check if pipeline failure is due to missing LLM API key */
+function isApiKeyError(pipeline: Record<string, unknown>): boolean {
+	const msg = String(pipeline.error_message ?? "").toLowerCase();
+	return (
+		msg.includes("api key") ||
+		msg.includes("api_key") ||
+		msg.includes("no llm") ||
+		msg.includes("설정되지") ||
+		msg.includes("not configured")
+	);
+}
+
 // ── Pipeline Execution ──────────────────────────────────────
 
 describe("Pipeline execution (rule-based mode)", () => {
 	let targetId: string;
 	let pipelineId: string;
-	let pipelineFinalStage: string;
+	let pipelineResult: Record<string, unknown>;
 
 	it("creates a target pointing to fixture server", async () => {
 		targetId = await createTarget(fixture.baseUrl, "E2E Fixture Target");
@@ -90,36 +102,41 @@ describe("Pipeline execution (rule-based mode)", () => {
 		pipelineId = data.pipeline_id as string;
 	});
 
-	it("pipeline reaches terminal state", async () => {
-		const pipeline = await waitForPipeline(targetId);
-		pipelineFinalStage = pipeline.stage as string;
-		// Log pipeline state for CI debugging
-		console.log(
-			"[E2E DEBUG] pipeline final state:",
-			JSON.stringify({
-				stage: pipeline.stage,
-				error_message: pipeline.error_message,
-				pipeline_id: pipeline.pipeline_id,
-				completed_at: pipeline.completed_at,
-			}),
-		);
-		// Pipeline may COMPLETE or FAIL (e.g. if clone/optimization has issues).
-		// Both are valid terminal states for smoke testing.
-		expect(["COMPLETED", "FAILED", "PARTIAL_FAILURE"]).toContain(pipelineFinalStage);
+	it("pipeline reaches terminal state", async (testCtx) => {
+		pipelineResult = await waitForPipeline(targetId);
+		const stage = pipelineResult.stage as string;
+		expect(["COMPLETED", "FAILED", "PARTIAL_FAILURE"]).toContain(stage);
+
+		if (stage === "FAILED" && isApiKeyError(pipelineResult)) {
+			console.warn(
+				`[E2E] Pipeline FAILED due to missing LLM API Key — skipping execution tests. Error: ${pipelineResult.error_message}`,
+			);
+			testCtx.skip();
+			return;
+		}
+
+		if (stage === "FAILED") {
+			// Non-API-key failure is a real bug — fail the test
+			throw new Error(`Pipeline FAILED with unexpected error: ${pipelineResult.error_message}`);
+		}
 	});
 
-	it("pipeline/latest shows final state", async () => {
+	it("pipeline/latest shows final state", async (testCtx) => {
+		if (pipelineResult?.stage === "FAILED" && isApiKeyError(pipelineResult)) {
+			console.warn("[E2E] Skipped — no LLM API Key");
+			testCtx.skip();
+			return;
+		}
 		const res = await api(`/api/targets/${targetId}/pipeline/latest`);
 		expect(res.status).toBe(200);
 		const data = await jsonBody(res);
 		expect(data.pipeline_id).toBe(pipelineId);
 	});
 
-	it("stages list has recorded executions", async (ctx) => {
-		// If pipeline FAILED early, stage_executions may be empty — skip in that case
-		if (pipelineFinalStage === "FAILED") {
-			console.log("[E2E DEBUG] pipeline FAILED — skipping stages check");
-			ctx.skip();
+	it("stages list has recorded executions", async (testCtx) => {
+		if (pipelineResult?.stage === "FAILED" && isApiKeyError(pipelineResult)) {
+			console.warn("[E2E] Skipped — no LLM API Key");
+			testCtx.skip();
 			return;
 		}
 
@@ -132,18 +149,6 @@ describe("Pipeline execution (rule-based mode)", () => {
 			if (stages.length > 0) break;
 			await new Promise((r) => setTimeout(r, 500));
 		}
-
-		// Log for CI debugging
-		console.log(
-			`[E2E DEBUG] stages count: ${stages.length}, pipeline: ${pipelineId}, finalStage: ${pipelineFinalStage}`,
-		);
-		if (stages.length === 0) {
-			// Fetch pipeline record for more context
-			const pRes = await api(`/api/targets/${targetId}/pipeline/${pipelineId}`);
-			const pData = await pRes.json();
-			console.log("[E2E DEBUG] pipeline record:", JSON.stringify(pData));
-		}
-
 		expect(stages.length).toBeGreaterThanOrEqual(1);
 
 		// Verify at least ANALYZING stage was recorded
@@ -161,7 +166,7 @@ describe("Double execution prevention", () => {
 		targetId = await createTarget(`${fixture.baseUrl}/products/widget`, "Double Exec Test");
 	});
 
-	it("rejects second pipeline start while first is running → 409", async (ctx) => {
+	it("rejects second pipeline start while first is running → 409", async (testCtx) => {
 		// Start first pipeline
 		const first = await api(`/api/targets/${targetId}/pipeline?execute=true`, {
 			method: "POST",
@@ -176,7 +181,7 @@ describe("Double execution prevention", () => {
 		if (second.status === 201) {
 			// First pipeline already completed before second request — timing-dependent, skip
 			await waitForPipeline(targetId);
-			ctx.skip();
+			testCtx.skip();
 			return;
 		}
 		expect(second.status).toBe(409);
