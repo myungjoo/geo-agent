@@ -1,7 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
-import { resolveModel, type LLMAnalysisResult } from "./llm-analysis-agent.js";
-import { createAnalysisToolState, createAnalysisToolHandlers, type AnalysisToolDeps } from "./tools.js";
+import { describe, expect, it, vi } from "vitest";
 import type { CrawlData } from "../shared/types.js";
+import { type LLMAnalysisResult, resolveModel } from "./llm-analysis-agent.js";
+import {
+	type AnalysisToolDeps,
+	createAnalysisToolHandlers,
+	createAnalysisToolState,
+} from "./tools.js";
 
 const mockCrawlData: CrawlData = {
 	html: "<html><head><title>Test</title></head><body><h1>Hello</h1></body></html>",
@@ -91,22 +95,59 @@ describe("LLM Analysis Agent", () => {
 			const mockResult: LLMAnalysisResult = {
 				output: {} as any,
 				richReport: {
-					target: { url: "https://example.com", title: "Test", site_type: "generic", site_type_confidence: 0.8, analyzed_at: new Date().toISOString() },
+					target: {
+						url: "https://example.com",
+						title: "Test",
+						site_type: "generic",
+						site_type_confidence: 0.8,
+						analyzed_at: new Date().toISOString(),
+					},
 					overall_score: 65,
 					grade: "Needs Improvement",
-					overview: { summary_cards: [], dimensions: [], llm_accessibility: [], strengths: [], weaknesses: [], opportunities: [] },
-					crawlability: { bot_policies: [], blocked_paths: [], allowed_paths: [], llms_txt: { exists: false, urls_checked: [], content_preview: null }, robots_txt_ai_section: null },
+					overview: {
+						summary_cards: [],
+						dimensions: [],
+						llm_accessibility: [],
+						strengths: [],
+						weaknesses: [],
+						opportunities: [],
+					},
+					crawlability: {
+						bot_policies: [],
+						blocked_paths: [],
+						allowed_paths: [],
+						llms_txt: { exists: false, urls_checked: [], content_preview: null },
+						robots_txt_ai_section: null,
+					},
 					structured_data: { page_quality: [], schema_analysis: [], schema_counts: {} },
 					products: { category_scores: [], product_lists: [], spec_recognition: [] },
 					brand: { dimensions: [], claims: [] },
 					pages: { pages: [] },
-					recommendations: { high_priority: [], medium_priority: [], low_priority: [], competitive_comparison: null },
-					evidence: { sections: [], schema_implementation_matrix: [], js_dependency_details: [], claim_verifications: [] },
+					recommendations: {
+						high_priority: [],
+						medium_priority: [],
+						low_priority: [],
+						competitive_comparison: null,
+					},
+					evidence: {
+						sections: [],
+						schema_implementation_matrix: [],
+						js_dependency_details: [],
+						claim_verifications: [],
+					},
 					probes: null,
 					roadmap: { consumer_scenarios: [], vulnerability_scores: [], opportunity_matrix: [] },
 				},
 				llmAssessment: "Good",
-				agentLoopResult: { finalText: "{}", messages: [], iterations: 5, totalUsage: { input: 100, output: 200, totalTokens: 300 }, totalCost: 0.01, completed: true, toolCallLog: [] },
+				agentLoopResult: {
+					finalText: "{}",
+					messages: [],
+					iterations: 5,
+					totalUsage: { input: 100, output: 200, totalTokens: 300 },
+					totalCost: 0.01,
+					completed: true,
+					toolCallLog: [],
+				},
 				toolCallLog: [],
 			};
 

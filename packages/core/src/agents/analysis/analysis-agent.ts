@@ -8,21 +8,21 @@
  * Synthetic Probes (LLM 필요)는 별도 단계에서 보강.
  */
 import { v4 as uuidv4 } from "uuid";
+import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
 import type { AnalysisReport } from "../../models/analysis-report.js";
 import type { GeoScore } from "../../models/geo-score.js";
-import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
-import { buildPageContext, safeLLMCall, parseJsonResponse } from "../shared/llm-helpers.js";
+import { buildPageContext, parseJsonResponse, safeLLMCall } from "../shared/llm-helpers.js";
 import {
-	ContentQualityAssessmentSchema,
 	type ContentQualityAssessment,
+	ContentQualityAssessmentSchema,
 } from "../shared/llm-response-schemas.js";
-import { type GeoEvaluationData, extractGeoEvaluationData } from "./geo-eval-extractor.js";
 import type {
 	CrawlData,
 	MultiPageAnalysisResult,
 	MultiPageCrawlResult,
 	PageScoreResult,
 } from "../shared/types.js";
+import { type GeoEvaluationData, extractGeoEvaluationData } from "./geo-eval-extractor.js";
 
 // ── Analysis Agent Input/Output ─────────────────────────────
 
@@ -150,14 +150,12 @@ async function computeContentAnalysis(
 				readability = level;
 			} else {
 				// Invalid LLM response — fall back to heuristic
-				const avgWordLen =
-					words.reduce((sum, w) => sum + w.length, 0) / Math.max(wordCount, 1);
+				const avgWordLen = words.reduce((sum, w) => sum + w.length, 0) / Math.max(wordCount, 1);
 				readability = avgWordLen > 7 ? "technical" : avgWordLen > 5 ? "general" : "simplified";
 			}
 		} catch {
 			// LLM call failed — fall back to heuristic
-			const avgWordLen =
-				words.reduce((sum, w) => sum + w.length, 0) / Math.max(wordCount, 1);
+			const avgWordLen = words.reduce((sum, w) => sum + w.length, 0) / Math.max(wordCount, 1);
 			readability = avgWordLen > 7 ? "technical" : avgWordLen > 5 ? "general" : "simplified";
 		}
 	} else {
@@ -401,7 +399,12 @@ export async function runAnalysis(
 			filename: p.filename,
 			crawl_data: p.crawl_data,
 		})) ?? [];
-	const evalData = await extractGeoEvaluationData(crawlData, subPages, geoScores.dimensions, deps.chatLLM);
+	const evalData = await extractGeoEvaluationData(
+		crawlData,
+		subPages,
+		geoScores.dimensions,
+		deps.chatLLM,
+	);
 
 	// 7. LLM content quality assessment (4-D: LLM required, no fallback)
 	let llmAssessment: ContentQualityAssessment | null = null;

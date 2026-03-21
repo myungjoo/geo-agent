@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CrawlData } from "../shared/types.js";
 import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
+import type { CrawlData } from "../shared/types.js";
 import {
 	type BotPolicyEntry,
 	analyzeJsDependency,
@@ -19,13 +19,21 @@ import {
 
 const MOCK_FINDINGS_RESPONSE = {
 	strengths: [
-		{ title: "AI 봇 크롤링 허용", description: "주요 AI 봇이 사이트에 접근 가능합니다.", icon: "✅" },
+		{
+			title: "AI 봇 크롤링 허용",
+			description: "주요 AI 봇이 사이트에 접근 가능합니다.",
+			icon: "✅",
+		},
 	],
 	weaknesses: [
 		{ title: "llms.txt 미존재", description: "llms.txt가 없어 LLM 안내가 불가합니다.", icon: "❌" },
 	],
 	opportunities: [
-		{ title: "스키마 확장", description: "Product 스키마를 추가하면 GEO 점수가 향상됩니다.", icon: "🚀" },
+		{
+			title: "스키마 확장",
+			description: "Product 스키마를 추가하면 GEO 점수가 향상됩니다.",
+			icon: "🚀",
+		},
 	],
 };
 
@@ -38,7 +46,8 @@ const MOCK_SCHEMA_QUALITY_RESPONSE: Record<string, string> = {
 const MOCK_JS_IMPACT_RESPONSE = {
 	blocks_access: false,
 	severity: "low",
-	reasoning: "Static HTML contains meaningful text content; JS enhances but does not gate key information.",
+	reasoning:
+		"Static HTML contains meaningful text content; JS enhances but does not gate key information.",
 };
 
 const MOCK_JS_IMPACT_HIGH_RESPONSE = {
@@ -81,7 +90,11 @@ function createMockChatLLM(
 			};
 		}
 		// Detect findings-related prompts
-		if (promptText.includes("strengths") && promptText.includes("weaknesses") && promptText.includes("opportunities")) {
+		if (
+			promptText.includes("strengths") &&
+			promptText.includes("weaknesses") &&
+			promptText.includes("opportunities")
+		) {
 			return {
 				content: JSON.stringify(MOCK_FINDINGS_RESPONSE),
 				model: "mock-model",
@@ -147,21 +160,21 @@ describe("parseRobotsTxt", () => {
 	});
 
 	it("detects allowed bots", () => {
-		const robots = `User-agent: GPTBot\nAllow: /\n`;
+		const robots = "User-agent: GPTBot\nAllow: /\n";
 		const result = parseRobotsTxt(robots);
 		const gptBot = result.find((b) => b.bot_name === "GPTBot");
 		expect(gptBot?.status).toBe("allowed");
 	});
 
 	it("detects blocked bots", () => {
-		const robots = `User-agent: ClaudeBot\nDisallow: /\n`;
+		const robots = "User-agent: ClaudeBot\nDisallow: /\n";
 		const result = parseRobotsTxt(robots);
 		const claude = result.find((b) => b.bot_name === "ClaudeBot");
 		expect(claude?.status).toBe("blocked");
 	});
 
 	it("detects partial access", () => {
-		const robots = `User-agent: GPTBot\nDisallow: /search/\nDisallow: /private/\n`;
+		const robots = "User-agent: GPTBot\nDisallow: /search/\nDisallow: /private/\n";
 		const result = parseRobotsTxt(robots);
 		const gptBot = result.find((b) => b.bot_name === "GPTBot");
 		expect(gptBot?.status).toBe("partial");
@@ -205,9 +218,7 @@ describe("extractSchemaCoverage", () => {
 				url: "https://example.com",
 				filename: "index.html",
 				crawl_data: makeCrawlData({
-					json_ld: [
-						{ "@type": "Organization", name: "Test Corp", url: "https://example.com" },
-					],
+					json_ld: [{ "@type": "Organization", name: "Test Corp", url: "https://example.com" }],
 				}),
 			},
 		];
@@ -289,10 +300,7 @@ describe("extractMarketingClaims", () => {
 				verifiability: "unverifiable",
 			},
 		]);
-		const result = await extractMarketingClaims(
-			[{ url: "https://example.com", html }],
-			mockLLM,
-		);
+		const result = await extractMarketingClaims([{ url: "https://example.com", html }], mockLLM);
 		expect(result.length).toBeGreaterThanOrEqual(1);
 		expect(result[0].verifiability).toBe("unverifiable");
 	});
@@ -300,10 +308,7 @@ describe("extractMarketingClaims", () => {
 	it("returns empty for clean content", async () => {
 		const html = "<html><body>This product weighs 180g and has a 6.1 inch display.</body></html>";
 		const mockLLM = createMockChatLLM([]);
-		const result = await extractMarketingClaims(
-			[{ url: "https://example.com", html }],
-			mockLLM,
-		);
+		const result = await extractMarketingClaims([{ url: "https://example.com", html }], mockLLM);
 		expect(result.length).toBe(0);
 	});
 
@@ -312,10 +317,7 @@ describe("extractMarketingClaims", () => {
 		const failingLLM = async (_req: LLMRequest): Promise<never> => {
 			throw new Error("LLM unavailable");
 		};
-		const result = await extractMarketingClaims(
-			[{ url: "https://example.com", html }],
-			failingLLM,
-		);
+		const result = await extractMarketingClaims([{ url: "https://example.com", html }], failingLLM);
 		expect(result.length).toBe(0);
 	});
 });
@@ -505,7 +507,8 @@ describe("generateFindingsLLM", () => {
 
 describe("analyzeJsDependency", () => {
 	it("returns mechanical metrics without chatLLM", async () => {
-		const html = '<html><head><script src="app.js"></script></head><body><h1>Hello World</h1><p>Some content here.</p></body></html>';
+		const html =
+			'<html><head><script src="app.js"></script></head><body><h1>Hello World</h1><p>Some content here.</p></body></html>';
 		const result = await analyzeJsDependency(html);
 		expect(result.script_count).toBe(1);
 		expect(result.external_scripts).toBe(1);
@@ -515,7 +518,8 @@ describe("analyzeJsDependency", () => {
 	});
 
 	it("includes LLM access impact when chatLLM provided", async () => {
-		const html = '<html><head><script src="app.js"></script></head><body><h1>Hello World</h1><p>Visible content.</p></body></html>';
+		const html =
+			'<html><head><script src="app.js"></script></head><body><h1>Hello World</h1><p>Visible content.</p></body></html>';
 		const mockLLM = createMockChatLLM();
 		const result = await analyzeJsDependency(html, mockLLM);
 		expect(result.llm_access_impact).toBeDefined();
@@ -525,7 +529,8 @@ describe("analyzeJsDependency", () => {
 	});
 
 	it("reports high severity for JS-heavy pages", async () => {
-		const html = '<html><head><script src="bundle.js"></script><script src="vendor.js"></script></head><body><div id="root"></div></body></html>';
+		const html =
+			'<html><head><script src="bundle.js"></script><script src="vendor.js"></script></head><body><div id="root"></div></body></html>';
 		const mockLLM = createMockChatLLM([], MOCK_JS_IMPACT_HIGH_RESPONSE);
 		const result = await analyzeJsDependency(html, mockLLM);
 		expect(result.llm_access_impact).toBeDefined();
@@ -534,7 +539,7 @@ describe("analyzeJsDependency", () => {
 	});
 
 	it("leaves llm_access_impact undefined when LLM fails", async () => {
-		const html = '<html><body><h1>Content</h1></body></html>';
+		const html = "<html><body><h1>Content</h1></body></html>";
 		const failingLLM = async (_req: LLMRequest): Promise<never> => {
 			throw new Error("LLM unavailable");
 		};
@@ -544,7 +549,7 @@ describe("analyzeJsDependency", () => {
 	});
 
 	it("leaves llm_access_impact undefined when LLM returns malformed JSON", async () => {
-		const html = '<html><body><h1>Content</h1></body></html>';
+		const html = "<html><body><h1>Content</h1></body></html>";
 		const badLLM = async (_req: LLMRequest): Promise<LLMResponse> => ({
 			content: "not valid json",
 			model: "mock-model",
@@ -558,10 +563,10 @@ describe("analyzeJsDependency", () => {
 	});
 
 	it("leaves llm_access_impact undefined when LLM returns invalid severity", async () => {
-		const html = '<html><body><h1>Content</h1></body></html>';
+		const html = "<html><body><h1>Content</h1></body></html>";
 		const badSeverityLLM = createMockChatLLM([], {
 			blocks_access: true,
-			severity: "critical",  // invalid severity
+			severity: "critical", // invalid severity
 			reasoning: "Something wrong",
 		});
 		const result = await analyzeJsDependency(html, badSeverityLLM);
@@ -569,7 +574,8 @@ describe("analyzeJsDependency", () => {
 	});
 
 	it("detects frameworks from script tags (heuristic fallback, no LLM)", async () => {
-		const html = '<html><head><script src="https://cdn.example.com/react.production.min.js"></script></head><body><h1>Hello</h1></body></html>';
+		const html =
+			'<html><head><script src="https://cdn.example.com/react.production.min.js"></script></head><body><h1>Hello</h1></body></html>';
 		const result = await analyzeJsDependency(html);
 		expect(result.frameworks_detected).toContain("React/Next.js");
 	});
@@ -581,20 +587,23 @@ describe("analyzeJsDependency", () => {
 	});
 
 	it("does NOT false-positive on body text mentioning framework names (no LLM)", async () => {
-		const html = '<html><body><p>React is great for building UIs. Angular is also popular. We love jQuery.</p></body></html>';
+		const html =
+			"<html><body><p>React is great for building UIs. Angular is also popular. We love jQuery.</p></body></html>";
 		const result = await analyzeJsDependency(html);
 		expect(result.frameworks_detected).toEqual([]);
 	});
 
 	it("uses LLM for framework detection when chatLLM provided", async () => {
-		const html = '<html><head><script src="/static/js/main.chunk.js"></script></head><body><div id="root"></div></body></html>';
+		const html =
+			'<html><head><script src="/static/js/main.chunk.js"></script></head><body><div id="root"></div></body></html>';
 		const mockLLM = createMockChatLLM([], undefined, { frameworks: ["React/Next.js"] });
 		const result = await analyzeJsDependency(html, mockLLM);
 		expect(result.frameworks_detected).toContain("React/Next.js");
 	});
 
 	it("falls back to heuristic when LLM framework detection fails", async () => {
-		const html = '<html><head><script src="https://cdn.example.com/jquery.min.js"></script></head><body><h1>Hello</h1></body></html>';
+		const html =
+			'<html><head><script src="https://cdn.example.com/jquery.min.js"></script></head><body><h1>Hello</h1></body></html>';
 		const failingLLM = async (req: LLMRequest): Promise<LLMResponse> => {
 			const promptText = req.prompt ?? "";
 			// Fail on framework prompts, succeed on JS impact
@@ -624,7 +633,7 @@ describe("analyzePathAccess", () => {
 	});
 
 	it("extracts paths from AI bot blocks", () => {
-		const robots = `User-agent: GPTBot\nDisallow: /search/\nAllow: /products/\n`;
+		const robots = "User-agent: GPTBot\nDisallow: /search/\nAllow: /products/\n";
 		const result = analyzePathAccess(robots);
 		expect(result).toContainEqual({ path: "/search/", status: "blocked" });
 		expect(result).toContainEqual({ path: "/products/", status: "allowed" });

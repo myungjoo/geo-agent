@@ -23,44 +23,48 @@ const defaultContext: ProbeContext = {
  * 3. Accuracy judgment (json_mode: true, system_instruction contains "accuracy evaluation")
  */
 function mockChatLLM(content: string, cited = true, accuracy = 0.7) {
-	return vi.fn().mockImplementation(async (req: { prompt: string; system_instruction?: string; json_mode?: boolean }) => {
-		// Distinguish citation vs accuracy by system_instruction content
-		if (req.json_mode === true) {
-			const sysInst = req.system_instruction || "";
-			const prompt = req.prompt || "";
+	return vi
+		.fn()
+		.mockImplementation(
+			async (req: { prompt: string; system_instruction?: string; json_mode?: boolean }) => {
+				// Distinguish citation vs accuracy by system_instruction content
+				if (req.json_mode === true) {
+					const sysInst = req.system_instruction || "";
+					const prompt = req.prompt || "";
 
-			if (sysInst.includes("accuracy evaluation") || prompt.includes("accuracy")) {
+					if (sysInst.includes("accuracy evaluation") || prompt.includes("accuracy")) {
+						return {
+							content: JSON.stringify({ accuracy, reasoning: "mock accuracy judgment" }),
+							model: "gpt-4o",
+							provider: "openai",
+							usage: { prompt_tokens: 30, completion_tokens: 50, total_tokens: 80 },
+							latency_ms: 200,
+							cost_usd: 0.0005,
+						};
+					}
+
+					// Default json_mode call = citation judgment
+					return {
+						content: JSON.stringify({ cited, reasoning: "mock citation judgment" }),
+						model: "gpt-4o",
+						provider: "openai",
+						usage: { prompt_tokens: 30, completion_tokens: 50, total_tokens: 80 },
+						latency_ms: 200,
+						cost_usd: 0.0005,
+					};
+				}
+
+				// Non-json_mode = probe query
 				return {
-					content: JSON.stringify({ accuracy, reasoning: "mock accuracy judgment" }),
+					content,
 					model: "gpt-4o",
 					provider: "openai",
-					usage: { prompt_tokens: 30, completion_tokens: 50, total_tokens: 80 },
-					latency_ms: 200,
-					cost_usd: 0.0005,
+					usage: { prompt_tokens: 50, completion_tokens: 100, total_tokens: 150 },
+					latency_ms: 500,
+					cost_usd: 0.001,
 				};
-			}
-
-			// Default json_mode call = citation judgment
-			return {
-				content: JSON.stringify({ cited, reasoning: "mock citation judgment" }),
-				model: "gpt-4o",
-				provider: "openai",
-				usage: { prompt_tokens: 30, completion_tokens: 50, total_tokens: 80 },
-				latency_ms: 200,
-				cost_usd: 0.0005,
-			};
-		}
-
-		// Non-json_mode = probe query
-		return {
-			content,
-			model: "gpt-4o",
-			provider: "openai",
-			usage: { prompt_tokens: 50, completion_tokens: 100, total_tokens: 150 },
-			latency_ms: 500,
-			cost_usd: 0.001,
-		};
-	});
+			},
+		);
 }
 
 describe("Synthetic Probes", () => {
@@ -228,43 +232,47 @@ describe("Synthetic Probes", () => {
 
 		it("continues after individual probe failure", async () => {
 			let callCount = 0;
-			const chat = vi.fn().mockImplementation(async (req: { prompt: string; system_instruction?: string; json_mode?: boolean }) => {
-				callCount++;
-				// First call is the probe query for P-01 — fails
-				if (callCount === 1) throw new Error("First call fails");
-				// Calls 2-4 are for P-02: probe query, citation judgment, accuracy judgment
+			const chat = vi
+				.fn()
+				.mockImplementation(
+					async (req: { prompt: string; system_instruction?: string; json_mode?: boolean }) => {
+						callCount++;
+						// First call is the probe query for P-01 — fails
+						if (callCount === 1) throw new Error("First call fails");
+						// Calls 2-4 are for P-02: probe query, citation judgment, accuracy judgment
 
-				if (req.json_mode === true) {
-					const sysInst = req.system_instruction || "";
-					if (sysInst.includes("accuracy evaluation")) {
+						if (req.json_mode === true) {
+							const sysInst = req.system_instruction || "";
+							if (sysInst.includes("accuracy evaluation")) {
+								return {
+									content: JSON.stringify({ accuracy: 0.7, reasoning: "mock" }),
+									model: "gpt-4o",
+									provider: "openai",
+									usage: { prompt_tokens: 30, completion_tokens: 50, total_tokens: 80 },
+									latency_ms: 200,
+									cost_usd: 0.0005,
+								};
+							}
+							return {
+								content: JSON.stringify({ cited: true, reasoning: "mock" }),
+								model: "gpt-4o",
+								provider: "openai",
+								usage: { prompt_tokens: 30, completion_tokens: 50, total_tokens: 80 },
+								latency_ms: 200,
+								cost_usd: 0.0005,
+							};
+						}
+
 						return {
-							content: JSON.stringify({ accuracy: 0.7, reasoning: "mock" }),
+							content: "Samsung response",
 							model: "gpt-4o",
 							provider: "openai",
-							usage: { prompt_tokens: 30, completion_tokens: 50, total_tokens: 80 },
-							latency_ms: 200,
-							cost_usd: 0.0005,
+							usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+							latency_ms: 100,
+							cost_usd: 0.001,
 						};
-					}
-					return {
-						content: JSON.stringify({ cited: true, reasoning: "mock" }),
-						model: "gpt-4o",
-						provider: "openai",
-						usage: { prompt_tokens: 30, completion_tokens: 50, total_tokens: 80 },
-						latency_ms: 200,
-						cost_usd: 0.0005,
-					};
-				}
-
-				return {
-					content: "Samsung response",
-					model: "gpt-4o",
-					provider: "openai",
-					usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
-					latency_ms: 100,
-					cost_usd: 0.001,
-				};
-			});
+					},
+				);
 
 			const result = await runProbes(
 				defaultContext,

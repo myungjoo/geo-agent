@@ -34,11 +34,11 @@ vi.mock("@mariozechner/pi-ai", () => {
 });
 
 import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
-import { type PipelineConfig, type PipelineDeps, runPipeline } from "./pipeline-runner.js";
-import type { CrawlData } from "../shared/types.js";
 import { runAnalysis } from "../analysis/analysis-agent.js";
 import type { LLMAnalysisResult } from "../analysis/llm-analysis-agent.js";
 import type { RichAnalysisReport } from "../analysis/rich-analysis-schema.js";
+import type { CrawlData } from "../shared/types.js";
+import { type PipelineConfig, type PipelineDeps, runPipeline } from "./pipeline-runner.js";
 
 let tmpDirs: string[] = [];
 
@@ -103,17 +103,46 @@ function makeScoreTarget() {
 
 function makeMockRichReport(score: number): RichAnalysisReport {
 	return {
-		target: { url: "https://example.com", title: "Test", site_type: "manufacturer", site_type_confidence: 0.7, analyzed_at: new Date().toISOString() },
+		target: {
+			url: "https://example.com",
+			title: "Test",
+			site_type: "manufacturer",
+			site_type_confidence: 0.7,
+			analyzed_at: new Date().toISOString(),
+		},
 		overall_score: score,
 		grade: score >= 75 ? "Good" : "Needs Improvement",
-		overview: { summary_cards: [], dimensions: [], llm_accessibility: [], strengths: [], weaknesses: [], opportunities: [] },
-		crawlability: { bot_policies: [], blocked_paths: [], allowed_paths: [], llms_txt: { exists: false, urls_checked: [], content_preview: null }, robots_txt_ai_section: null },
+		overview: {
+			summary_cards: [],
+			dimensions: [],
+			llm_accessibility: [],
+			strengths: [],
+			weaknesses: [],
+			opportunities: [],
+		},
+		crawlability: {
+			bot_policies: [],
+			blocked_paths: [],
+			allowed_paths: [],
+			llms_txt: { exists: false, urls_checked: [], content_preview: null },
+			robots_txt_ai_section: null,
+		},
 		structured_data: { page_quality: [], schema_analysis: [], schema_counts: {} },
 		products: { category_scores: [], product_lists: [], spec_recognition: [] },
 		brand: { dimensions: [], claims: [] },
 		pages: { pages: [] },
-		recommendations: { high_priority: [], medium_priority: [], low_priority: [], competitive_comparison: null },
-		evidence: { sections: [], schema_implementation_matrix: [], js_dependency_details: [], claim_verifications: [] },
+		recommendations: {
+			high_priority: [],
+			medium_priority: [],
+			low_priority: [],
+			competitive_comparison: null,
+		},
+		evidence: {
+			sections: [],
+			schema_implementation_matrix: [],
+			js_dependency_details: [],
+			claim_verifications: [],
+		},
 		probes: null,
 		roadmap: { consumer_scenarios: [], vulnerability_scores: [], opportunity_matrix: [] },
 	};
@@ -146,7 +175,15 @@ function makeDeps(): PipelineDeps {
 			output,
 			richReport: makeMockRichReport(output.geo_scores.overall_score),
 			llmAssessment: "Mock LLM assessment",
-			agentLoopResult: { finalText: "{}", messages: [], iterations: 1, totalUsage: { input: 0, output: 0, totalTokens: 0 }, totalCost: 0, completed: true, toolCallLog: [] },
+			agentLoopResult: {
+				finalText: "{}",
+				messages: [],
+				iterations: 1,
+				totalUsage: { input: 0, output: 0, totalTokens: 0 },
+				totalCost: 0,
+				completed: true,
+				toolCallLog: [],
+			},
 			toolCallLog: [],
 		} satisfies LLMAnalysisResult;
 	});
@@ -254,21 +291,53 @@ function mockChatLLM(): (req: LLMRequest) => Promise<LLMResponse> {
 			if (prompt.includes("brand recognition") || prompt.includes("LLM consumption quality")) {
 				// ContentQualityAssessmentSchema
 				content = JSON.stringify({
-					brand_recognition: { score: 60, identified_brand: "TestBrand", identified_products: ["Product A"], reasoning: "Test" },
-					content_quality: { score: 65, clarity: 70, completeness: 60, factual_density: 55, reasoning: "Test" },
-					information_gaps: [{ category: "pricing", description: "Missing price info", importance: "medium" }],
+					brand_recognition: {
+						score: 60,
+						identified_brand: "TestBrand",
+						identified_products: ["Product A"],
+						reasoning: "Test",
+					},
+					content_quality: {
+						score: 65,
+						clarity: 70,
+						completeness: 60,
+						factual_density: 55,
+						reasoning: "Test",
+					},
+					information_gaps: [
+						{ category: "pricing", description: "Missing price info", importance: "medium" },
+					],
 					llm_consumption_issues: [{ issue: "Low structured data", recommendation: "Add JSON-LD" }],
 					overall_assessment: "Page needs improvement for LLM consumption",
 				});
-			} else if (prompt.includes("optimization plan") || systemPrompt.includes("strategy") || prompt.includes("strategy") || systemPrompt.includes("GEO optimization expert")) {
+			} else if (
+				prompt.includes("optimization plan") ||
+				systemPrompt.includes("strategy") ||
+				prompt.includes("strategy") ||
+				systemPrompt.includes("GEO optimization expert")
+			) {
 				// StrategyLLMResponseSchema
 				content = JSON.stringify({
-					strategy_rationale: "Improve structured data and meta tags for better LLM discoverability",
-					tasks: [{ change_type: "SCHEMA_MARKUP", title: "Add JSON-LD", description: "Add structured data", target_element: null, priority: "high", expected_impact: "15% score improvement", specific_data: {} }],
+					strategy_rationale:
+						"Improve structured data and meta tags for better LLM discoverability",
+					tasks: [
+						{
+							change_type: "SCHEMA_MARKUP",
+							title: "Add JSON-LD",
+							description: "Add structured data",
+							target_element: null,
+							priority: "high",
+							expected_impact: "15% score improvement",
+							specific_data: {},
+						},
+					],
 					estimated_delta: 10,
 					confidence: 0.7,
 				});
-			} else if (prompt.includes("optimization results") || systemPrompt.includes("validation expert")) {
+			} else if (
+				prompt.includes("optimization results") ||
+				systemPrompt.includes("validation expert")
+			) {
 				// ValidationVerdictSchema
 				content = JSON.stringify({
 					improved_aspects: ["structured data", "meta tags"],
@@ -288,8 +357,19 @@ function mockChatLLM(): (req: LLMRequest) => Promise<LLMResponse> {
 					remaining_issues: [],
 					llm_friendliness_verdict: "better",
 					specific_recommendations: [],
-					brand_recognition: { score: 50, identified_brand: "Test", identified_products: [], reasoning: "Test" },
-					content_quality: { score: 50, clarity: 50, completeness: 50, factual_density: 50, reasoning: "Test" },
+					brand_recognition: {
+						score: 50,
+						identified_brand: "Test",
+						identified_products: [],
+						reasoning: "Test",
+					},
+					content_quality: {
+						score: 50,
+						clarity: 50,
+						completeness: 50,
+						factual_density: 50,
+						reasoning: "Test",
+					},
 					information_gaps: [],
 					llm_consumption_issues: [],
 					overall_assessment: "Test assessment",

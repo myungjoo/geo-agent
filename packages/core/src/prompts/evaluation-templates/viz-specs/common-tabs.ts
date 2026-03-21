@@ -139,8 +139,7 @@ export const COMMON_TABS: TabSpec[] = [
 		required_elements: [
 			{
 				type: "evidence_section",
-				description:
-					"Phase 1-3 수집 원문 코드 스니펫. 최소 포함 섹션은 reference spec에서 정의.",
+				description: "Phase 1-3 수집 원문 코드 스니펫. 최소 포함 섹션은 reference spec에서 정의.",
 			},
 		],
 	},

@@ -7,19 +7,19 @@
  * 3. piAiAgentLoop() — multi-turn tool-calling agent loop
  */
 import {
+	type Api,
 	type AssistantMessage,
 	type Context,
 	type Model,
-	type Api,
+	type TextContent,
 	type Tool,
 	type ToolCall,
 	type ToolResultMessage,
-	type TextContent,
 	type UserMessage,
-	complete,
-	getModel,
-	getEnvApiKey,
 	calculateCost,
+	complete,
+	getEnvApiKey,
+	getModel,
 	validateToolCall,
 } from "@mariozechner/pi-ai";
 import type { TSchema } from "@mariozechner/pi-ai";
@@ -48,8 +48,9 @@ export function piAiModelFromProvider(provider: LLMProviderSettings): Model<Api>
 	}
 
 	// Perplexity uses OpenAI-compatible API with custom baseUrl
-	const effectiveBaseUrl = provider.api_base_url
-		?? (provider.provider_id === "perplexity" ? "https://api.perplexity.ai" : undefined);
+	const effectiveBaseUrl =
+		provider.api_base_url ??
+		(provider.provider_id === "perplexity" ? "https://api.perplexity.ai" : undefined);
 
 	try {
 		const model = getModel(piProvider as any, provider.default_model as any);
@@ -65,7 +66,11 @@ export function piAiModelFromProvider(provider: LLMProviderSettings): Model<Api>
 			api = "anthropic-messages";
 		} else if (modelId.includes("codex")) {
 			api = "openai-codex-responses";
-		} else if (modelId.startsWith("gpt-5") || modelId.startsWith("o3") || modelId.startsWith("o4")) {
+		} else if (
+			modelId.startsWith("gpt-5") ||
+			modelId.startsWith("o3") ||
+			modelId.startsWith("o4")
+		) {
 			api = "openai-responses";
 		} else {
 			api = "openai-completions";
@@ -130,7 +135,11 @@ export async function piAiComplete(
 				if (api === "openai-completions" || api === "mistral-conversations") {
 					// OpenAI chat/completions format
 					p.response_format = { type: "json_object" };
-				} else if (api === "openai-responses" || api === "openai-codex-responses" || api === "azure-openai-responses") {
+				} else if (
+					api === "openai-responses" ||
+					api === "openai-codex-responses" ||
+					api === "azure-openai-responses"
+				) {
 					// OpenAI Responses API format
 					p.text = { format: { type: "json_object" } };
 				} else if (api === "google-generative-ai" || api === "google-vertex") {
@@ -175,9 +184,7 @@ export async function piAiComplete(
 
 // ── Tool-calling Agent Loop ─────────────────────────────────
 
-export interface ToolHandler<TParams = Record<string, unknown>> {
-	(params: TParams): Promise<string>;
-}
+export type ToolHandler<TParams = Record<string, unknown>> = (params: TParams) => Promise<string>;
 
 export interface AgentLoopOptions {
 	/** pi-ai Model to use */
@@ -248,7 +255,7 @@ export async function piAiAgentLoop(options: AgentLoopOptions): Promise<AgentLoo
 		{ role: "user", content: userMessage, timestamp: Date.now() },
 	];
 
-	let totalUsage = { input: 0, output: 0, totalTokens: 0 };
+	const totalUsage = { input: 0, output: 0, totalTokens: 0 };
 	let totalCost = 0;
 	let iterations = 0;
 	let finalText = "";
@@ -279,9 +286,7 @@ export async function piAiAgentLoop(options: AgentLoopOptions): Promise<AgentLoo
 		totalCost += calculateCost(model, response.usage).total;
 
 		// Extract tool calls
-		const toolCalls = response.content.filter(
-			(c): c is ToolCall => c.type === "toolCall",
-		);
+		const toolCalls = response.content.filter((c): c is ToolCall => c.type === "toolCall");
 
 		// If no tool calls, we're done
 		if (toolCalls.length === 0 || response.stopReason === "stop") {
@@ -289,7 +294,15 @@ export async function piAiAgentLoop(options: AgentLoopOptions): Promise<AgentLoo
 				.filter((c): c is TextContent => c.type === "text")
 				.map((c) => c.text)
 				.join("");
-			return { finalText, messages, iterations, totalUsage, totalCost, completed: true, toolCallLog };
+			return {
+				finalText,
+				messages,
+				iterations,
+				totalUsage,
+				totalCost,
+				completed: true,
+				toolCallLog,
+			};
 		}
 
 		// Execute tool calls

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { parseSkillMd, loadBuiltinSkill } from "./skill-loader.js";
+import { describe, expect, it } from "vitest";
+import { loadBuiltinSkill, parseSkillMd } from "./skill-loader.js";
 
 describe("skill-loader", () => {
 	describe("parseSkillMd", () => {

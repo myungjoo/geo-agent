@@ -12,7 +12,7 @@ import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
 import type { AnalysisReport } from "../../models/analysis-report.js";
 import type { ChangeType } from "../../models/change-type.js";
 import type { OptimizationPlan, OptimizationTask } from "../../models/optimization-plan.js";
-import { safeLLMCall, parseJsonResponse } from "../shared/llm-helpers.js";
+import { parseJsonResponse, safeLLMCall } from "../shared/llm-helpers.js";
 import { StrategyLLMResponseSchema } from "../shared/llm-response-schemas.js";
 
 // ── Strategy Input/Output ───────────────────────────────────

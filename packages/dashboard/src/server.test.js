@@ -11,30 +11,28 @@ fs.mkdirSync(path.join(testDir, "prompts"), { recursive: true });
 // createDatabase() now auto-creates tables, no manual setup needed
 const { startServer } = await import("./server.js");
 afterAll(() => {
-    try {
-        fs.rmSync(testDir, { recursive: true, force: true });
-    }
-    catch {
-        // ignore cleanup errors on Windows
-    }
+	try {
+		fs.rmSync(testDir, { recursive: true, force: true });
+	} catch {
+		// ignore cleanup errors on Windows
+	}
 });
 describe("BUG #3 [FIXED]: EADDRINUSE handling", () => {
-    it("startServer() rejects with EADDRINUSE when port is occupied", async () => {
-        // Occupy a port first
-        const blocker = net.createServer();
-        const port = await new Promise((resolve) => {
-            blocker.listen(0, () => {
-                const addr = blocker.address();
-                resolve(addr.port);
-            });
-        });
-        try {
-            // Try to start the server on the same port — should reject, not crash
-            await expect(startServer(port)).rejects.toThrow();
-        }
-        finally {
-            blocker.close();
-        }
-    });
+	it("startServer() rejects with EADDRINUSE when port is occupied", async () => {
+		// Occupy a port first
+		const blocker = net.createServer();
+		const port = await new Promise((resolve) => {
+			blocker.listen(0, () => {
+				const addr = blocker.address();
+				resolve(addr.port);
+			});
+		});
+		try {
+			// Try to start the server on the same port — should reject, not crash
+			await expect(startServer(port)).rejects.toThrow();
+		} finally {
+			blocker.close();
+		}
+	});
 });
 //# sourceMappingURL=server.test.js.map

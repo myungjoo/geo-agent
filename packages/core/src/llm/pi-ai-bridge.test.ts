@@ -1,11 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
-import {
-	piAiModelFromProvider,
-	piAiAgentLoop,
-	type AgentLoopResult,
-} from "./pi-ai-bridge.js";
+import { type Tool, Type } from "@mariozechner/pi-ai";
+import { describe, expect, it, vi } from "vitest";
+import { type AgentLoopResult, piAiAgentLoop, piAiModelFromProvider } from "./pi-ai-bridge.js";
 import type { LLMProviderSettings } from "./provider-config.js";
-import { Type, type Tool } from "@mariozechner/pi-ai";
 
 describe("pi-ai-bridge", () => {
 	describe("piAiModelFromProvider", () => {

@@ -1,3 +1,4 @@
+import type { Api, Model } from "@mariozechner/pi-ai";
 /**
  * LLM-Driven Analysis Agent
  *
@@ -8,20 +9,23 @@
  * No fallback. If LLM fails, the pipeline fails.
  */
 import { v4 as uuidv4 } from "uuid";
-import type { Model, Api } from "@mariozechner/pi-ai";
-import { piAiAgentLoop, piAiModelFromProvider, type AgentLoopResult } from "../../llm/pi-ai-bridge.js";
+import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
+import {
+	type AgentLoopResult,
+	piAiAgentLoop,
+	piAiModelFromProvider,
+} from "../../llm/pi-ai-bridge.js";
 import { ProviderConfigManager } from "../../llm/provider-config.js";
 import { loadBuiltinSkill } from "../../skills/skill-loader.js";
-import {
-	ANALYSIS_TOOLS,
-	createAnalysisToolHandlers,
-	createAnalysisToolState,
-	type AnalysisToolDeps,
-	type AnalysisToolState,
-} from "./tools.js";
 import type { AnalysisOutput } from "./analysis-agent.js";
 import type { RichAnalysisReport } from "./rich-analysis-schema.js";
-import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
+import {
+	ANALYSIS_TOOLS,
+	type AnalysisToolDeps,
+	type AnalysisToolState,
+	createAnalysisToolHandlers,
+	createAnalysisToolState,
+} from "./tools.js";
 
 // ── Types ───────────────────────────────────────────────────
 
@@ -54,7 +58,9 @@ export function resolveModel(workspaceDir: string): { model: Model<Api>; apiKey:
 	const configManager = new ProviderConfigManager(workspaceDir);
 	const enabled = configManager.getEnabled().filter((p) => p.api_key);
 	if (enabled.length === 0) {
-		throw new Error("No LLM provider with API key configured. Set one in Dashboard > LLM Providers.");
+		throw new Error(
+			"No LLM provider with API key configured. Set one in Dashboard > LLM Providers.",
+		);
 	}
 	const provider = enabled[0];
 	const model = piAiModelFromProvider(provider);
@@ -96,7 +102,10 @@ export async function runLLMAnalysis(
 
 	// Ensure critical tools were called — if LLM skipped them, call them now
 	if (!state.homepageCrawl) {
-		await toolHandlers.crawl_page({ url: input.target_url, timeout_ms: input.crawl_timeout ?? 15000 });
+		await toolHandlers.crawl_page({
+			url: input.target_url,
+			timeout_ms: input.crawl_timeout ?? 15000,
+		});
 	}
 	if (!state.classification) {
 		await toolHandlers.classify_site({});
@@ -140,10 +149,7 @@ export async function runLLMAnalysis(
 
 // ── Build Output from Tool State ────────────────────────────
 
-function buildOutputFromState(
-	state: AnalysisToolState,
-	input: LLMAnalysisInput,
-): AnalysisOutput {
+function buildOutputFromState(state: AnalysisToolState, input: LLMAnalysisInput): AnalysisOutput {
 	const crawlData = state.homepageCrawl!;
 	const scores = state.pageScores.get("homepage");
 	const classification = state.classification;
@@ -169,17 +175,33 @@ function buildOutputFromState(
 
 		const weights = [2, ...mp.pages.map(() => 1)];
 		const totalWeight = weights.reduce((a, b) => a + b, 0);
-		const allScores = [homepageScores.overall_score, ...pageScores.map((p) => p.scores.overall_score)];
-		const aggregateScore = Math.round(
-			(allScores.reduce((sum, s, i) => sum + s * weights[i], 0) / totalWeight) * 10,
-		) / 10;
+		const allScores = [
+			homepageScores.overall_score,
+			...pageScores.map((p) => p.scores.overall_score),
+		];
+		const aggregateScore =
+			Math.round((allScores.reduce((sum, s, i) => sum + s * weights[i], 0) / totalWeight) * 10) /
+			10;
 
 		multiPage = {
 			homepage_scores: { url: crawlData.url, filename: "index.html", scores: homepageScores },
 			page_scores: pageScores,
 			aggregate_score: aggregateScore,
-			aggregate_grade: aggregateScore >= 90 ? "Excellent" : aggregateScore >= 75 ? "Good" : aggregateScore >= 55 ? "Needs Improvement" : aggregateScore >= 35 ? "Poor" : "Critical",
-			per_dimension_averages: dimensions.map((d) => ({ id: d.id, label: d.label, avg_score: d.score })),
+			aggregate_grade:
+				aggregateScore >= 90
+					? "Excellent"
+					: aggregateScore >= 75
+						? "Good"
+						: aggregateScore >= 55
+							? "Needs Improvement"
+							: aggregateScore >= 35
+								? "Poor"
+								: "Critical",
+			per_dimension_averages: dimensions.map((d) => ({
+				id: d.id,
+				label: d.label,
+				avg_score: d.score,
+			})),
 		};
 
 		allPages = mp.pages.map((p) => ({ filename: p.path, crawl_data: p.crawl_data }));
@@ -194,19 +216,49 @@ function buildOutputFromState(
 			machine_readability: {
 				grade: overallScore >= 75 ? "A" : overallScore >= 55 ? "B" : overallScore >= 35 ? "C" : "F",
 				js_dependency_ratio: 0,
-				structure_quality: { semantic_tag_ratio: 0, div_nesting_depth: 0, text_to_markup_ratio: 0, heading_hierarchy_valid: false },
-				crawler_access: [{ user_agent: "GEO-Agent/1.0", http_status: crawlData.status_code, blocked_by_robots_txt: false, content_accessible: crawlData.status_code === 200 }],
+				structure_quality: {
+					semantic_tag_ratio: 0,
+					div_nesting_depth: 0,
+					text_to_markup_ratio: 0,
+					heading_hierarchy_valid: false,
+				},
+				crawler_access: [
+					{
+						user_agent: "GEO-Agent/1.0",
+						http_status: crawlData.status_code,
+						blocked_by_robots_txt: false,
+						content_accessible: crawlData.status_code === 200,
+					},
+				],
 			},
-			content_analysis: { word_count: 0, content_density: 0, readability_level: "general", key_topics_found: [], topic_alignment: 0 },
+			content_analysis: {
+				word_count: 0,
+				content_density: 0,
+				readability_level: "general",
+				key_topics_found: [],
+				topic_alignment: 0,
+			},
 			structured_data: {
 				json_ld_present: crawlData.json_ld.length > 0,
-				json_ld_types: crawlData.json_ld.map((ld) => String((ld as Record<string, unknown>)["@type"] ?? "")).filter(Boolean),
+				json_ld_types: crawlData.json_ld
+					.map((ld) => String((ld as Record<string, unknown>)["@type"] ?? ""))
+					.filter(Boolean),
 				schema_completeness: Math.min(crawlData.json_ld.length / 5, 1),
 				og_tags_present: Object.keys(crawlData.meta_tags).some((k) => k.startsWith("og:")),
 				meta_description: crawlData.meta_tags.description ?? null,
 			},
 			extracted_info_items: [],
-			current_geo_score: { total: overallScore, citation_rate: 0, citation_accuracy: 0, info_recognition_score: 0, coverage: 0, rank_position: 0, structured_score: 0, measured_at: new Date().toISOString(), llm_breakdown: {} },
+			current_geo_score: {
+				total: overallScore,
+				citation_rate: 0,
+				citation_accuracy: 0,
+				info_recognition_score: 0,
+				coverage: 0,
+				rank_position: 0,
+				structured_score: 0,
+				measured_at: new Date().toISOString(),
+				llm_breakdown: {},
+			},
 			competitor_gaps: [],
 			llm_status: [],
 		},
@@ -220,7 +272,13 @@ function buildOutputFromState(
 			llms_txt: { exists: false, content_preview: null },
 			schema_coverage: [],
 			marketing_claims: [],
-			js_dependency: { script_count: 0, external_scripts: 0, inline_scripts: 0, frameworks_detected: [], estimated_js_dependency: 0 },
+			js_dependency: {
+				script_count: 0,
+				external_scripts: 0,
+				inline_scripts: 0,
+				frameworks_detected: [],
+				estimated_js_dependency: 0,
+			},
 			product_info: [],
 			blocked_paths: [],
 			path_access: [],

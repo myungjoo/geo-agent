@@ -35,10 +35,8 @@ describe("safeLLMCall", () => {
 
 	it("returns parsed result when chatLLM succeeds", async () => {
 		const chatLLM = vi.fn().mockResolvedValue(makeLLMResponse("hello world"));
-		const result = await safeLLMCall(
-			chatLLM,
-			{ prompt: "test", json_mode: false },
-			(c) => c.toUpperCase(),
+		const result = await safeLLMCall(chatLLM, { prompt: "test", json_mode: false }, (c) =>
+			c.toUpperCase(),
 		);
 		expect(result.result).toBe("HELLO WORLD");
 		expect(result.llm_used).toBe(true);
@@ -58,11 +56,7 @@ describe("safeLLMCall", () => {
 			.fn()
 			.mockRejectedValueOnce(new Error("transient"))
 			.mockResolvedValueOnce(makeLLMResponse("ok"));
-		const result = await safeLLMCall(
-			chatLLM,
-			{ prompt: "x", json_mode: false },
-			(c) => c,
-		);
+		const result = await safeLLMCall(chatLLM, { prompt: "x", json_mode: false }, (c) => c);
 		expect(result.result).toBe("ok");
 		expect(result.llm_used).toBe(true);
 		expect(chatLLM).toHaveBeenCalledTimes(2);
@@ -70,9 +64,9 @@ describe("safeLLMCall", () => {
 
 	it("throws immediately on auth error without retry", async () => {
 		const chatLLM = vi.fn().mockRejectedValue(new Error("401 Unauthorized"));
-		await expect(
-			safeLLMCall(chatLLM, { prompt: "x", json_mode: false }, (c) => c),
-		).rejects.toThrow("401 Unauthorized");
+		await expect(safeLLMCall(chatLLM, { prompt: "x", json_mode: false }, (c) => c)).rejects.toThrow(
+			"401 Unauthorized",
+		);
 		expect(chatLLM).toHaveBeenCalledTimes(1); // no retry for auth errors
 	});
 

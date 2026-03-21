@@ -1,11 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { CrawlData } from "../shared/types.js";
 import {
 	ANALYSIS_TOOLS,
+	type AnalysisToolDeps,
 	createAnalysisToolHandlers,
 	createAnalysisToolState,
-	type AnalysisToolDeps,
 } from "./tools.js";
-import type { CrawlData } from "../shared/types.js";
 
 // ── Mock Data ──────────────────────────────────────────────
 

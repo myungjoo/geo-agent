@@ -1,3 +1,6 @@
+import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
+import { parseJsonResponse, safeLLMCall, truncateHtml } from "../shared/llm-helpers.js";
+import { type ValidationVerdict, ValidationVerdictSchema } from "../shared/llm-response-schemas.js";
 /**
  * Validation Agent
  *
@@ -5,9 +8,6 @@
  * Before-After 비교 결과를 생성하고, 추가 사이클 필요 여부 결정.
  */
 import type { CrawlData, PageScoreResult } from "../shared/types.js";
-import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
-import { safeLLMCall, truncateHtml, parseJsonResponse } from "../shared/llm-helpers.js";
-import { ValidationVerdictSchema, type ValidationVerdict } from "../shared/llm-response-schemas.js";
 
 // ── Types ───────────────────────────────────────────────────
 

@@ -215,7 +215,7 @@ program
 				}
 			}
 		} catch {
-			console.log("ℹ️  No server found on port " + port + ".");
+			console.log(`ℹ️  No server found on port ${port}.`);
 		}
 	});
 

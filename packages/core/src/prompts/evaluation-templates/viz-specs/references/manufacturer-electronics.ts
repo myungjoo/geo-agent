@@ -26,14 +26,12 @@ export const MANUFACTURER_ELECTRONICS_EVIDENCE: EvidenceSection[] = [
 	{
 		id: "nonstandard_objects",
 		title: "비표준 추적 객체 vs 표준 스키마",
-		description:
-			"digitalData/dataLayer 등 커스텀 객체와 Schema.org Product 스키마의 대비",
+		description: "digitalData/dataLayer 등 커스텀 객체와 Schema.org Product 스키마의 대비",
 	},
 	{
 		id: "js_dependency",
 		title: "JavaScript 의존성 — LLM 크롤러 vs 브라우저",
-		description:
-			"데이터 항목별 (스펙, 가격, 색상 등) 정적HTML 포함 여부 + LLM 접근 가능성 테이블",
+		description: "데이터 항목별 (스펙, 가격, 색상 등) 정적HTML 포함 여부 + LLM 접근 가능성 테이블",
 	},
 	{
 		id: "claim_verifiability",
@@ -75,22 +73,8 @@ export const MANUFACTURER_ELECTRONICS_REF: ReferenceSpec = {
 			"가격 (현재가 + 정가)",
 			"평점/리뷰수",
 		],
-		appliance: [
-			"모델명",
-			"용량 (cu.ft. 등)",
-			"치수",
-			"AI 기능",
-			"가격",
-			"평점/리뷰수",
-		],
-		laptop: [
-			"모델명",
-			"프로세서",
-			"RAM/저장용량",
-			"디스플레이 크기/해상도",
-			"배터리 수명",
-			"가격",
-		],
+		appliance: ["모델명", "용량 (cu.ft. 등)", "치수", "AI 기능", "가격", "평점/리뷰수"],
+		laptop: ["모델명", "프로세서", "RAM/저장용량", "디스플레이 크기/해상도", "배터리 수명", "가격"],
 		tablet: [
 			"모델명",
 			"디스플레이 크기/해상도",

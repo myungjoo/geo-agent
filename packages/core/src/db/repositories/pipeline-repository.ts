@@ -149,9 +149,7 @@ export class PipelineRepository {
 	async deleteById(pipelineId: string): Promise<boolean> {
 		const existing = await this.findById(pipelineId);
 		if (!existing) return false;
-		await this.db
-			.delete(pipelineRuns)
-			.where(eq(pipelineRuns.pipeline_id, pipelineId));
+		await this.db.delete(pipelineRuns).where(eq(pipelineRuns.pipeline_id, pipelineId));
 		return true;
 	}
 

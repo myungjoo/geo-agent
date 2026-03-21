@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 /**
  * Regression test: all LLM calls with json_mode: true must include
  * the word "json" (case-insensitive) in the prompt text.
@@ -5,9 +7,7 @@
  * OpenAI Responses API (v1/responses) requires this when using
  * text.format.type = "json_object". Without it, the API returns 400.
  */
-import { describe, it, expect } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
+import { describe, expect, it } from "vitest";
 
 function findJsonModeCalls(dir: string): Array<{ file: string; line: number; prompt: string }> {
 	const results: Array<{ file: string; line: number; prompt: string }> = [];
@@ -19,7 +19,12 @@ function findJsonModeCalls(dir: string): Array<{ file: string; line: number; pro
 			results.push(...findJsonModeCalls(fullPath));
 			continue;
 		}
-		if (!entry.name.endsWith(".ts") || entry.name.includes(".test.") || entry.name.includes(".d.ts")) continue;
+		if (
+			!entry.name.endsWith(".ts") ||
+			entry.name.includes(".test.") ||
+			entry.name.includes(".d.ts")
+		)
+			continue;
 
 		const content = fs.readFileSync(fullPath, "utf-8");
 		const lines = content.split("\n");
@@ -37,9 +42,12 @@ function findJsonModeCalls(dir: string): Array<{ file: string; line: number; pro
 				if (varMatch) {
 					const varName = varMatch[1];
 					// Search the whole file for the variable assignment
-					const varPattern = new RegExp(`(?:const|let|var)\\s+${varName}\\b[\\s\\S]*?(?=\\n\\s*(?:const|let|var|\\}|$))`, "m");
+					const varPattern = new RegExp(
+						`(?:const|let|var)\\s+${varName}\\b[\\s\\S]*?(?=\\n\\s*(?:const|let|var|\\}|$))`,
+						"m",
+					);
 					const varContent = content.match(varPattern);
-					if (varContent) fullPromptText += "\n" + varContent[0];
+					if (varContent) fullPromptText += `\n${varContent[0]}`;
 				}
 
 				results.push({ file: fullPath, line: i + 1, prompt: fullPromptText });

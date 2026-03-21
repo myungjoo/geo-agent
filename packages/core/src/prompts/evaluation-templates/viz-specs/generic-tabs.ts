@@ -71,8 +71,4 @@ export const GENERIC_TAB_EXTENSIONS: Record<string, VizElement[]> = {
 	],
 };
 
-export const GENERIC_SIMULATION_LINES = [
-	"overall",
-	"information_seeker",
-	"service_evaluator",
-];
+export const GENERIC_SIMULATION_LINES = ["overall", "information_seeker", "service_evaluator"];

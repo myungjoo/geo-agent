@@ -82,8 +82,4 @@ export const RESEARCH_TAB_EXTENSIONS: Record<string, VizElement[]> = {
 	],
 };
 
-export const RESEARCH_SIMULATION_LINES = [
-	"overall",
-	"discovery_researcher",
-	"citation_accuracy",
-];
+export const RESEARCH_SIMULATION_LINES = ["overall", "discovery_researcher", "citation_accuracy"];

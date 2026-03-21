@@ -7,7 +7,12 @@ import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
  * - LLM 강화 수정 (선택): 콘텐츠 개선, 설명 보강 등
  */
 import type { OptimizationPlan, OptimizationTask } from "../../models/optimization-plan.js";
-import { safeLLMCall, extractVisibleText, extractTitle, escapeHtml } from "../shared/llm-helpers.js";
+import {
+	escapeHtml,
+	extractTitle,
+	extractVisibleText,
+	safeLLMCall,
+} from "../shared/llm-helpers.js";
 
 // ── Types ───────────────────────────────────────────────────
 
@@ -368,27 +373,27 @@ async function optimizeFaqAddition(
 			);
 
 			if (result.length > 0) {
-					// FAQ HTML section
-					const faqHtml = `<section class="faq" itemscope itemtype="https://schema.org/FAQPage">\n<h2>자주 묻는 질문</h2>\n${result.map((f) => `<div itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">\n<h3 itemprop="name">${escapeHtml(f.question)}</h3>\n<div itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer"><p itemprop="text">${escapeHtml(f.answer)}</p></div>\n</div>`).join("\n")}\n</section>`;
+				// FAQ HTML section
+				const faqHtml = `<section class="faq" itemscope itemtype="https://schema.org/FAQPage">\n<h2>자주 묻는 질문</h2>\n${result.map((f) => `<div itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">\n<h3 itemprop="name">${escapeHtml(f.question)}</h3>\n<div itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer"><p itemprop="text">${escapeHtml(f.answer)}</p></div>\n</div>`).join("\n")}\n</section>`;
 
-					// FAQ JSON-LD
-					const faqJsonLd = {
-						"@context": "https://schema.org",
-						"@type": "FAQPage",
-						mainEntity: result.map((f) => ({
-							"@type": "Question",
-							name: f.question,
-							acceptedAnswer: { "@type": "Answer", text: f.answer },
-						})),
-					};
+				// FAQ JSON-LD
+				const faqJsonLd = {
+					"@context": "https://schema.org",
+					"@type": "FAQPage",
+					mainEntity: result.map((f) => ({
+						"@type": "Question",
+						name: f.question,
+						acceptedAnswer: { "@type": "Answer", text: f.answer },
+					})),
+				};
 
-					html = html.replace(
-						"</body>",
-						`${faqHtml}\n<script type="application/ld+json">${JSON.stringify(faqJsonLd)}</script>\n</body>`,
-					);
-					await input.writeFile(htmlFile, html);
-					modified.push(htmlFile);
-				}
+				html = html.replace(
+					"</body>",
+					`${faqHtml}\n<script type="application/ld+json">${JSON.stringify(faqJsonLd)}</script>\n</body>`,
+				);
+				await input.writeFile(htmlFile, html);
+				modified.push(htmlFile);
+			}
 		}
 		return { success: modified.length > 0, files_modified: modified };
 	} catch (err) {

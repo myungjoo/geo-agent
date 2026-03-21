@@ -6,22 +6,30 @@
  */
 import type { SiteType } from "../index.js";
 import { COMMON_TABS } from "./common-tabs.js";
-import { GENERIC_EXTRA_TABS, GENERIC_SIMULATION_LINES, GENERIC_TAB_EXTENSIONS } from "./generic-tabs.js";
+import {
+	GENERIC_EXTRA_TABS,
+	GENERIC_SIMULATION_LINES,
+	GENERIC_TAB_EXTENSIONS,
+} from "./generic-tabs.js";
 import {
 	MANUFACTURER_EXTRA_TABS,
 	MANUFACTURER_SIMULATION_LINES,
 	MANUFACTURER_TAB_EXTENSIONS,
 } from "./manufacturer-tabs.js";
 import { MANUFACTURER_ELECTRONICS_REF } from "./references/manufacturer-electronics.js";
-import { RESEARCH_EXTRA_TABS, RESEARCH_SIMULATION_LINES, RESEARCH_TAB_EXTENSIONS } from "./research-tabs.js";
 import {
-	SUBTYPE_SIGNALS,
+	RESEARCH_EXTRA_TABS,
+	RESEARCH_SIMULATION_LINES,
+	RESEARCH_TAB_EXTENSIONS,
+} from "./research-tabs.js";
+import {
 	type ReferenceSpec,
+	SUBTYPE_SIGNALS,
 	type SiteSubtype,
 	type SubtypeSignal,
 	type TabSpec,
-	type VizElement,
 	type VisualizationSpec,
+	type VizElement,
 } from "./viz-spec-schema.js";
 
 // ── Reference Registry ──────────────────────────────────────
@@ -30,9 +38,7 @@ import {
  * 등록된 참조 스펙 목록.
  * 새 참조를 추가하려면 이 배열에 import + 추가.
  */
-const REFERENCE_REGISTRY: ReferenceSpec[] = [
-	MANUFACTURER_ELECTRONICS_REF,
-];
+const REFERENCE_REGISTRY: ReferenceSpec[] = [MANUFACTURER_ELECTRONICS_REF];
 
 // ── Site Type → Extra Tabs / Extensions 매핑 ────────────────
 
@@ -137,13 +143,8 @@ export function classifySubtype(
 /**
  * site_type + subtype에 해당하는 참조 스펙을 찾는다.
  */
-export function findReference(
-	siteType: SiteType,
-	subtype: SiteSubtype,
-): ReferenceSpec | undefined {
-	return REFERENCE_REGISTRY.find(
-		(r) => r.site_type === siteType && r.subtype === subtype,
-	);
+export function findReference(siteType: SiteType, subtype: SiteSubtype): ReferenceSpec | undefined {
+	return REFERENCE_REGISTRY.find((r) => r.site_type === siteType && r.subtype === subtype);
 }
 
 /**
@@ -162,12 +163,12 @@ const TAB_ORDER = [
 	"overview",
 	"crawlability",
 	"structure",
-	"products",       // manufacturer only
-	"publications",   // research only
-	"content",        // generic only
-	"brand",          // manufacturer
-	"authority",      // research
-	"trust",          // generic
+	"products", // manufacturer only
+	"publications", // research only
+	"content", // generic only
+	"brand", // manufacturer
+	"authority", // research
+	"trust", // generic
 	"pages",
 	"recommendations",
 	"evidence",
@@ -187,10 +188,7 @@ function sortTabs(tabs: TabSpec[]): TabSpec[] {
 /**
  * 기존 탭에 확장 요소를 추가한다.
  */
-function applyTabExtensions(
-	tabs: TabSpec[],
-	extensions: Record<string, VizElement[]>,
-): TabSpec[] {
+function applyTabExtensions(tabs: TabSpec[], extensions: Record<string, VizElement[]>): TabSpec[] {
 	return tabs.map((tab) => {
 		const ext = extensions[tab.id];
 		if (!ext || ext.length === 0) return tab;
@@ -310,9 +308,7 @@ export function validateQualityBar(spec: VisualizationSpec): {
 
 	if (qb.min_probe_detail) {
 		const probeTab = spec.tabs.find((t) => t.id === "probes");
-		const hasDetail = probeTab?.required_elements.some(
-			(el) => el.type === "probe_detail_cards",
-		);
+		const hasDetail = probeTab?.required_elements.some((el) => el.type === "probe_detail_cards");
 		if (!hasDetail) {
 			failures.push("Probe 상세 카드 없음 (min_probe_detail 위반)");
 		}
@@ -335,18 +331,14 @@ export function validateQualityBar(spec: VisualizationSpec): {
 		);
 		const lineCount = simChart?.lines?.length ?? 0;
 		if (lineCount < qb.score_simulation_lines) {
-			failures.push(
-				`시뮬레이션 라인 부족: ${lineCount} < ${qb.score_simulation_lines}`,
-			);
+			failures.push(`시뮬레이션 라인 부족: ${lineCount} < ${qb.score_simulation_lines}`);
 		}
 	}
 
 	if (qb.min_evidence_sections) {
 		const evidenceCount = spec.reference?.evidence_sections?.length ?? 0;
 		if (evidenceCount < qb.min_evidence_sections) {
-			failures.push(
-				`실증 섹션 부족: ${evidenceCount} < ${qb.min_evidence_sections}`,
-			);
+			failures.push(`실증 섹션 부족: ${evidenceCount} < ${qb.min_evidence_sections}`);
 		}
 	}
 

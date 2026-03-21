@@ -1,3 +1,4 @@
+import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
 /**
  * GEO Evaluation Data Extractor
  *
@@ -13,7 +14,6 @@
  * - 제품/가격/스펙 정보 추출
  */
 import type { CrawlData, PageScoreResult } from "../shared/types.js";
-import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
 
 // ── AI Bot Policy ──────────────────────────────────────────
 
@@ -148,7 +148,9 @@ function collectJsonLdSnippets(
 					const it = item as Record<string, unknown>;
 					if (String(it["@type"] ?? "").toLowerCase() === schemaType.toLowerCase()) {
 						const raw = JSON.stringify(item);
-						snippets.push(raw.length > maxSnippetLength ? `${raw.slice(0, maxSnippetLength)}...` : raw);
+						snippets.push(
+							raw.length > maxSnippetLength ? `${raw.slice(0, maxSnippetLength)}...` : raw,
+						);
 					}
 				}
 			}
@@ -731,7 +733,8 @@ Return ONLY a JSON object:
 		try {
 			const response = await chatLLM({
 				prompt,
-				system_instruction: "You are a web accessibility and crawlability expert. Return only valid JSON.",
+				system_instruction:
+					"You are a web accessibility and crawlability expert. Return only valid JSON.",
 				temperature: 0.1,
 				json_mode: false,
 			});
@@ -796,23 +799,23 @@ function buildFindingsSummary(
 			`- Partial: ${partial.map((b) => `${b.bot_name} (blocked: ${b.disallowed_paths.join(", ")})`).join("; ")}`,
 		);
 	if (blocked.length > 0) lines.push(`- Blocked: ${blocked.map((b) => b.bot_name).join(", ")}`);
-	if (notSpec.length > 0) lines.push(`- Not specified: ${notSpec.map((b) => b.bot_name).join(", ")}`);
+	if (notSpec.length > 0)
+		lines.push(`- Not specified: ${notSpec.map((b) => b.bot_name).join(", ")}`);
 
 	// llms.txt
-	lines.push(`\n## llms.txt`);
+	lines.push("\n## llms.txt");
 	lines.push(`- Exists: ${llmsTxt.exists}`);
 
 	// Schema coverage
 	const present = schemaCoverage.filter((s) => s.present);
 	const missing = schemaCoverage.filter((s) => !s.present);
-	lines.push(`\n## Schema Coverage`);
+	lines.push("\n## Schema Coverage");
 	if (present.length > 0)
 		lines.push(`- Present: ${present.map((s) => `${s.schema_type} (${s.quality})`).join(", ")}`);
-	if (missing.length > 0)
-		lines.push(`- Missing: ${missing.map((s) => s.schema_type).join(", ")}`);
+	if (missing.length > 0) lines.push(`- Missing: ${missing.map((s) => s.schema_type).join(", ")}`);
 
 	// JS dependency
-	lines.push(`\n## JS Dependency`);
+	lines.push("\n## JS Dependency");
 	lines.push(
 		`- Script count: ${jsDependency.script_count}, Estimated JS dependency: ${Math.round(jsDependency.estimated_js_dependency * 100)}%`,
 	);
@@ -823,7 +826,7 @@ function buildFindingsSummary(
 	const pagesWithProduct = productInfo.filter(
 		(p) => p.info.product_name || p.info.specs_in_schema.length > 0,
 	);
-	lines.push(`\n## Product Info`);
+	lines.push("\n## Product Info");
 	lines.push(`- Pages with product data: ${pagesWithProduct.length}/${productInfo.length}`);
 	for (const p of pagesWithProduct.slice(0, 3)) {
 		lines.push(
@@ -834,15 +837,13 @@ function buildFindingsSummary(
 	// Marketing claims
 	if (marketingClaims.length > 0) {
 		const unverifiable = marketingClaims.filter((c) => c.verifiability === "unverifiable").length;
-		lines.push(`\n## Marketing Claims`);
-		lines.push(
-			`- Total: ${marketingClaims.length}, Unverifiable: ${unverifiable}`,
-		);
+		lines.push("\n## Marketing Claims");
+		lines.push(`- Total: ${marketingClaims.length}, Unverifiable: ${unverifiable}`);
 	}
 
 	// Dimensions
 	if (dimensions && dimensions.length > 0) {
-		lines.push(`\n## GEO Dimension Scores`);
+		lines.push("\n## GEO Dimension Scores");
 		for (const d of dimensions) {
 			lines.push(`- ${d.id} ${d.label}: ${d.score.toFixed(0)}/100`);
 		}
@@ -929,7 +930,14 @@ Return ONLY a JSON object with this structure:
 				result[key].push({
 					title: String(f.title).slice(0, 60),
 					description: String(f.description).slice(0, 300),
-					icon: typeof f.icon === "string" ? f.icon : key === "strengths" ? "✅" : key === "weaknesses" ? "❌" : "🚀",
+					icon:
+						typeof f.icon === "string"
+							? f.icon
+							: key === "strengths"
+								? "✅"
+								: key === "weaknesses"
+									? "❌"
+									: "🚀",
 				});
 			}
 		}

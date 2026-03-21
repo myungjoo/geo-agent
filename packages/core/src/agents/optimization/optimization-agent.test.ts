@@ -75,9 +75,7 @@ function makeSmartChatLLM() {
 		if (prompt.includes("faq") || prompt.includes("questions and answers")) {
 			return makeLLMResponse(
 				JSON.stringify({
-					faqs: [
-						{ question: "What is this page about?", answer: "This is a test page." },
-					],
+					faqs: [{ question: "What is this page about?", answer: "This is a test page." }],
 				}),
 			);
 		}
@@ -360,18 +358,14 @@ describe("Optimization Agent", () => {
 		});
 
 		it("SCHEMA_MARKUP fails without chatLLM", async () => {
-			const input = makeInput([
-				makeTask({ change_type: "SCHEMA_MARKUP", title: "JSON-LD 추가" }),
-			]);
+			const input = makeInput([makeTask({ change_type: "SCHEMA_MARKUP", title: "JSON-LD 추가" })]);
 			const result = await runOptimization(input);
 			expect(result.failed_tasks).toHaveLength(1);
 			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
 		});
 
 		it("LLMS_TXT fails without chatLLM", async () => {
-			const input = makeInput([
-				makeTask({ change_type: "LLMS_TXT", title: "llms.txt 파일 생성" }),
-			]);
+			const input = makeInput([makeTask({ change_type: "LLMS_TXT", title: "llms.txt 파일 생성" })]);
 			const result = await runOptimization(input);
 			expect(result.failed_tasks).toHaveLength(1);
 			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
@@ -387,18 +381,14 @@ describe("Optimization Agent", () => {
 		});
 
 		it("CONTENT_DENSITY fails without chatLLM", async () => {
-			const input = makeInput([
-				makeTask({ change_type: "CONTENT_DENSITY", title: "콘텐츠 확충" }),
-			]);
+			const input = makeInput([makeTask({ change_type: "CONTENT_DENSITY", title: "콘텐츠 확충" })]);
 			const result = await runOptimization(input);
 			expect(result.failed_tasks).toHaveLength(1);
 			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");
 		});
 
 		it("FAQ_ADDITION fails without chatLLM", async () => {
-			const input = makeInput([
-				makeTask({ change_type: "FAQ_ADDITION", title: "FAQ 추가" }),
-			]);
+			const input = makeInput([makeTask({ change_type: "FAQ_ADDITION", title: "FAQ 추가" })]);
 			const result = await runOptimization(input);
 			expect(result.failed_tasks).toHaveLength(1);
 			expect(result.failed_tasks[0].error).toContain("LLM provider is not configured");

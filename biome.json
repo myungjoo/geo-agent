@@ -1,7 +1,18 @@
 {
 	"$schema": "https://biomejs.dev/schemas/1.9.0/schema.json",
 	"files": {
-		"ignore": ["dist/**", "node_modules/**", "*.tsbuildinfo", "drizzle/**", ".claude/**"]
+		"ignore": [
+			"dist/**",
+			"node_modules/**",
+			"*.tsbuildinfo",
+			"drizzle/**",
+			".claude/**",
+			"**/*.d.ts",
+			"**/*.d.ts.map",
+			"**/*.js.map",
+			"vitest.config.js",
+			"packages/core/drizzle.config.js"
+		]
 	},
 	"organizeImports": {
 		"enabled": true
@@ -24,6 +35,20 @@
 	"overrides": [
 		{
 			"include": ["**/*.test.ts"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noExplicitAny": "off"
+					}
+				}
+			}
+		},
+		{
+			"include": [
+				"**/agents/analysis/tools.ts",
+				"**/agents/pipeline/pipeline-runner.ts",
+				"**/llm/pi-ai-bridge.ts"
+			],
 			"linter": {
 				"rules": {
 					"suspicious": {

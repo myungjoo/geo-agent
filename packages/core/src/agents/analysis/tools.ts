@@ -4,35 +4,48 @@
  * Each tool uses TypeBox schemas for parameter validation (pi-ai format).
  * Tool handlers are factory functions that capture dependencies via closure.
  */
-import { Type, type Tool } from "@mariozechner/pi-ai";
+import { type Tool, Type } from "@mariozechner/pi-ai";
+import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
 import type { ToolHandler } from "../../llm/pi-ai-bridge.js";
 import type { CrawlData, MultiPageCrawlResult } from "../shared/types.js";
-import { extractGeoEvaluationData, type GeoEvaluationData } from "./geo-eval-extractor.js";
-import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
+import { type GeoEvaluationData, extractGeoEvaluationData } from "./geo-eval-extractor.js";
 
 // ── Tool Parameter Schemas (TypeBox) ────────────────────────
 
 const CrawlPageParams = Type.Object({
 	url: Type.String({ description: "The URL of the page to crawl" }),
-	timeout_ms: Type.Optional(Type.Number({ description: "Crawl timeout in milliseconds (default: 15000)" })),
+	timeout_ms: Type.Optional(
+		Type.Number({ description: "Crawl timeout in milliseconds (default: 15000)" }),
+	),
 });
 
 const CrawlMultiplePagesParams = Type.Object({
 	url: Type.String({ description: "The base URL to start multi-page crawl from" }),
-	max_pages: Type.Optional(Type.Number({ description: "Maximum number of pages to crawl (default: 20)" })),
-	timeout_ms: Type.Optional(Type.Number({ description: "Per-page timeout in milliseconds (default: 15000)" })),
+	max_pages: Type.Optional(
+		Type.Number({ description: "Maximum number of pages to crawl (default: 20)" }),
+	),
+	timeout_ms: Type.Optional(
+		Type.Number({ description: "Per-page timeout in milliseconds (default: 15000)" }),
+	),
 });
 
 const ScoreGeoParams = Type.Object({
-	crawl_data_key: Type.String({ description: "Key identifying which crawl data to score: 'homepage' or a page URL from multi-page crawl" }),
+	crawl_data_key: Type.String({
+		description:
+			"Key identifying which crawl data to score: 'homepage' or a page URL from multi-page crawl",
+	}),
 });
 
 const ClassifySiteParams = Type.Object({
-	crawl_data_key: Type.Optional(Type.String({ description: "Key identifying which crawl data to use (default: 'homepage')" })),
+	crawl_data_key: Type.Optional(
+		Type.String({ description: "Key identifying which crawl data to use (default: 'homepage')" }),
+	),
 });
 
 const ExtractEvalDataParams = Type.Object({
-	crawl_data_key: Type.Optional(Type.String({ description: "Key identifying which crawl data to use (default: 'homepage')" })),
+	crawl_data_key: Type.Optional(
+		Type.String({ description: "Key identifying which crawl data to use (default: 'homepage')" }),
+	),
 });
 
 const RunProbesParams = Type.Object({
@@ -43,15 +56,21 @@ const RunProbesParams = Type.Object({
 });
 
 const AnalyzeBrandParams = Type.Object({
-	crawl_data_key: Type.Optional(Type.String({ description: "Key identifying which crawl data to use (default: 'homepage')" })),
+	crawl_data_key: Type.Optional(
+		Type.String({ description: "Key identifying which crawl data to use (default: 'homepage')" }),
+	),
 });
 
 const AnalyzeProductParams = Type.Object({
-	crawl_data_key: Type.Optional(Type.String({ description: "Key identifying which crawl data to use (default: 'homepage')" })),
+	crawl_data_key: Type.Optional(
+		Type.String({ description: "Key identifying which crawl data to use (default: 'homepage')" }),
+	),
 });
 
 const CollectEvidenceParams = Type.Object({
-	crawl_data_key: Type.Optional(Type.String({ description: "Key identifying which crawl data to use (default: 'homepage')" })),
+	crawl_data_key: Type.Optional(
+		Type.String({ description: "Key identifying which crawl data to use (default: 'homepage')" }),
+	),
 });
 
 // ── Tool Definitions ────────────────────────────────────────
@@ -59,47 +78,56 @@ const CollectEvidenceParams = Type.Object({
 export const ANALYSIS_TOOLS: Tool[] = [
 	{
 		name: "crawl_page",
-		description: "Crawl a single web page. Returns HTML, robots.txt, llms.txt, sitemap.xml, JSON-LD, meta tags, links, and response metadata.",
+		description:
+			"Crawl a single web page. Returns HTML, robots.txt, llms.txt, sitemap.xml, JSON-LD, meta tags, links, and response metadata.",
 		parameters: CrawlPageParams,
 	},
 	{
 		name: "crawl_multiple_pages",
-		description: "Discover and crawl multiple pages from a site (up to max_pages). Follows internal links with priority to product/category pages. Returns homepage + sub-pages data.",
+		description:
+			"Discover and crawl multiple pages from a site (up to max_pages). Follows internal links with priority to product/category pages. Returns homepage + sub-pages data.",
 		parameters: CrawlMultiplePagesParams,
 	},
 	{
 		name: "score_geo",
-		description: "Score crawl data across 7 GEO dimensions (S1-S7): LLM Crawlability, Structured Data, Content Machine-Readability, Fact Density, Brand Message, AI Infrastructure, Content Navigation. Returns overall score (0-100), grade, and per-dimension breakdowns.",
+		description:
+			"Score crawl data across 7 GEO dimensions (S1-S7): LLM Crawlability, Structured Data, Content Machine-Readability, Fact Density, Brand Message, AI Infrastructure, Content Navigation. Returns overall score (0-100), grade, and per-dimension breakdowns.",
 		parameters: ScoreGeoParams,
 	},
 	{
 		name: "classify_site",
-		description: "Classify the site type (manufacturer, research, or generic) based on HTML content and URL patterns. Returns site_type, confidence score, and matched classification signals.",
+		description:
+			"Classify the site type (manufacturer, research, or generic) based on HTML content and URL patterns. Returns site_type, confidence score, and matched classification signals.",
 		parameters: ClassifySiteParams,
 	},
 	{
 		name: "extract_evaluation_data",
-		description: "Extract detailed GEO evaluation data: AI bot policies (robots.txt analysis), schema coverage matrix (12 types), marketing claims with verifiability, JS dependency ratio, product information, and automated improvement recommendations.",
+		description:
+			"Extract detailed GEO evaluation data: AI bot policies (robots.txt analysis), schema coverage matrix (12 types), marketing claims with verifiability, JS dependency ratio, product information, and automated improvement recommendations.",
 		parameters: ExtractEvalDataParams,
 	},
 	{
 		name: "run_synthetic_probes",
-		description: "Run 8 synthetic probe queries (P-01 to P-08) against the LLM to test citation rate and accuracy. Probes cover: product specs, pricing, comparisons, brand positioning, recommendations, facts, latest info, and problem solving.",
+		description:
+			"Run 8 synthetic probe queries (P-01 to P-08) against the LLM to test citation rate and accuracy. Probes cover: product specs, pricing, comparisons, brand positioning, recommendations, facts, latest info, and problem solving.",
 		parameters: RunProbesParams,
 	},
 	{
 		name: "analyze_brand_message",
-		description: "Analyze brand messaging from crawled pages. Extracts marketing claims with their location, sentiment (positive/neutral/negative), and verifiability (verifiable/claim_no_source/unverifiable/emotional). Also scores brand perception dimensions: innovation, AI leadership, premium positioning, sustainability, factual verifiability, competitive differentiation.",
+		description:
+			"Analyze brand messaging from crawled pages. Extracts marketing claims with their location, sentiment (positive/neutral/negative), and verifiability (verifiable/claim_no_source/unverifiable/emotional). Also scores brand perception dimensions: innovation, AI leadership, premium positioning, sustainability, factual verifiability, competitive differentiation.",
 		parameters: AnalyzeBrandParams,
 	},
 	{
 		name: "analyze_product_recognition",
-		description: "Analyze product information recognition across categories. For each product category found, scores how well product data (name, price, specs, ratings, reviews) is machine-readable in static HTML vs JavaScript-only. Returns per-category scores, product lists with recognition status, and per-product spec recognition breakdown.",
+		description:
+			"Analyze product information recognition across categories. For each product category found, scores how well product data (name, price, specs, ratings, reviews) is machine-readable in static HTML vs JavaScript-only. Returns per-category scores, product lists with recognition status, and per-product spec recognition breakdown.",
 		parameters: AnalyzeProductParams,
 	},
 	{
 		name: "collect_evidence",
-		description: "Collect raw evidence for the evaluation report. Returns: JSON-LD code snippets, robots.txt AI bot sections, schema implementation matrix (which schemas exist on which pages), JavaScript dependency details (which data items are in static HTML vs JS-only), and marketing claim verification evidence.",
+		description:
+			"Collect raw evidence for the evaluation report. Returns: JSON-LD code snippets, robots.txt AI bot sections, schema implementation matrix (which schemas exist on which pages), JavaScript dependency details (which data items are in static HTML vs JS-only), and marketing claim verification evidence.",
 		parameters: CollectEvidenceParams,
 	},
 ];
@@ -119,7 +147,10 @@ export interface AnalysisToolDeps {
 			details: string[];
 		}>;
 	};
-	classifySite: (html: string, url: string) => {
+	classifySite: (
+		html: string,
+		url: string,
+	) => {
 		site_type: string;
 		confidence: number;
 		matched_signals: string[];
@@ -199,7 +230,9 @@ export function createAnalysisToolHandlers(
 				has_llms_txt: !!data.llms_txt,
 				has_sitemap: !!data.sitemap_xml,
 				json_ld_count: data.json_ld.length,
-				json_ld_types: data.json_ld.map((ld) => (ld as Record<string, unknown>)["@type"]).filter(Boolean),
+				json_ld_types: data.json_ld
+					.map((ld) => (ld as Record<string, unknown>)["@type"])
+					.filter(Boolean),
 				meta_tags: data.meta_tags,
 				canonical_url: data.canonical_url,
 				links_count: data.links.length,
@@ -273,13 +306,19 @@ export function createAnalysisToolHandlers(
 			}
 
 			const dimensions = state.pageScores.get("homepage")?.dimensions ?? [];
-			const subPages = state.multiPageResult?.pages.map((p) => ({
-				url: p.url,
-				filename: p.path,
-				crawl_data: p.crawl_data,
-			})) ?? [];
+			const subPages =
+				state.multiPageResult?.pages.map((p) => ({
+					url: p.url,
+					filename: p.path,
+					crawl_data: p.crawl_data,
+				})) ?? [];
 
-			const evalData = await extractGeoEvaluationData(crawlData, subPages, dimensions, deps.chatLLM);
+			const evalData = await extractGeoEvaluationData(
+				crawlData,
+				subPages,
+				dimensions,
+				deps.chatLLM,
+			);
 			state.evalData = evalData;
 			return JSON.stringify(evalData);
 		},
@@ -290,7 +329,10 @@ export function createAnalysisToolHandlers(
 				return JSON.stringify({ error: "No crawl data found. Call crawl_page first." });
 			}
 
-			const allPages = [crawlData, ...(state.multiPageResult?.pages.map((p) => p.crawl_data) ?? [])];
+			const allPages = [
+				crawlData,
+				...(state.multiPageResult?.pages.map((p) => p.crawl_data) ?? []),
+			];
 			const claims: Array<{
 				message: string;
 				location: string;
@@ -309,7 +351,11 @@ export function createAnalysisToolHandlers(
 			];
 
 			for (const page of allPages) {
-				const textContent = page.html.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+				const textContent = page.html
+					.replace(/<script[\s\S]*?<\/script>/gi, "")
+					.replace(/<style[\s\S]*?<\/style>/gi, "")
+					.replace(/<[^>]+>/g, " ")
+					.replace(/\s+/g, " ");
 				for (const pattern of claimPatterns) {
 					pattern.lastIndex = 0;
 					let match = pattern.exec(textContent);
@@ -334,12 +380,61 @@ export function createAnalysisToolHandlers(
 			// Brand perception dimensions
 			const html = crawlData.html.toLowerCase();
 			const dimensions = [
-				{ label: "Innovation/Leadership Image", score: assessDimension(allPages, ["innovation", "innovative", "leading", "pioneer", "first"]) },
-				{ label: "AI/Tech Leadership", score: assessDimension(allPages, ["ai", "artificial intelligence", "machine learning", "smart", "intelligent"]) },
-				{ label: "Premium Brand Positioning", score: assessDimension(allPages, ["premium", "luxury", "flagship", "pro", "ultra"]) },
-				{ label: "Sustainability/ESG", score: assessDimension(allPages, ["sustainable", "eco", "recycle", "carbon", "green", "environment"]) },
-				{ label: "Factual Claim Verifiability", score: claims.length > 0 ? Math.round((claims.filter((c) => c.verifiability === "verifiable").length / claims.length) * 100) : 0 },
-				{ label: "Competitive Differentiation", score: assessDimension(allPages, ["only", "exclusive", "unique", "patented", "proprietary"]) },
+				{
+					label: "Innovation/Leadership Image",
+					score: assessDimension(allPages, [
+						"innovation",
+						"innovative",
+						"leading",
+						"pioneer",
+						"first",
+					]),
+				},
+				{
+					label: "AI/Tech Leadership",
+					score: assessDimension(allPages, [
+						"ai",
+						"artificial intelligence",
+						"machine learning",
+						"smart",
+						"intelligent",
+					]),
+				},
+				{
+					label: "Premium Brand Positioning",
+					score: assessDimension(allPages, ["premium", "luxury", "flagship", "pro", "ultra"]),
+				},
+				{
+					label: "Sustainability/ESG",
+					score: assessDimension(allPages, [
+						"sustainable",
+						"eco",
+						"recycle",
+						"carbon",
+						"green",
+						"environment",
+					]),
+				},
+				{
+					label: "Factual Claim Verifiability",
+					score:
+						claims.length > 0
+							? Math.round(
+									(claims.filter((c) => c.verifiability === "verifiable").length / claims.length) *
+										100,
+								)
+							: 0,
+				},
+				{
+					label: "Competitive Differentiation",
+					score: assessDimension(allPages, [
+						"only",
+						"exclusive",
+						"unique",
+						"patented",
+						"proprietary",
+					]),
+				},
 			];
 
 			return JSON.stringify({ dimensions, claims: claims.slice(0, 20) });
@@ -353,7 +448,8 @@ export function createAnalysisToolHandlers(
 
 			const allPages = [
 				{ url: crawlData.url, crawl_data: crawlData },
-				...(state.multiPageResult?.pages.map((p) => ({ url: p.url, crawl_data: p.crawl_data })) ?? []),
+				...(state.multiPageResult?.pages.map((p) => ({ url: p.url, crawl_data: p.crawl_data })) ??
+					[]),
 			];
 
 			// Categorize pages and extract product data
@@ -370,7 +466,8 @@ export function createAnalysisToolHandlers(
 				let category = "Other";
 				if (/phone|smartphone|galaxy\s*s|galaxy\s*z/i.test(url)) category = "Smartphones";
 				else if (/tv|television|qled|oled|neo/i.test(url)) category = "TV";
-				else if (/refrigerator|washer|dryer|appliance|bespoke/i.test(url)) category = "Home Appliances";
+				else if (/refrigerator|washer|dryer|appliance|bespoke/i.test(url))
+					category = "Home Appliances";
 				else if (/laptop|tablet|book|pc|computer/i.test(url)) category = "PC/Tablets";
 				else if (/watch|buds|wearable/i.test(url)) category = "Wearables";
 
@@ -392,7 +489,10 @@ export function createAnalysisToolHandlers(
 					if (page.crawl_data.meta_tags.description) score += 1;
 				}
 				const maxPerPage = 10;
-				return { category: name, score: Math.min(Math.round((score / (total * maxPerPage)) * 100), 100) };
+				return {
+					category: name,
+					score: Math.min(Math.round((score / (total * maxPerPage)) * 100), 100),
+				};
 			});
 
 			// Extract product lists from pages with Product schema
@@ -416,7 +516,10 @@ export function createAnalysisToolHandlers(
 						if (/tv|television/i.test(url)) cat = "TV";
 						else if (/phone|smartphone/i.test(url)) cat = "Smartphones";
 						let list = productLists.find((l) => l.category === cat);
-						if (!list) { list = { category: cat, products: [] }; productLists.push(list); }
+						if (!list) {
+							list = { category: cat, products: [] };
+							productLists.push(list);
+						}
 						list.products.push(product);
 					}
 				}
@@ -425,7 +528,12 @@ export function createAnalysisToolHandlers(
 			// Spec recognition for key products (check what's in static HTML vs JS)
 			const specRecognition: Array<{ product_name: string; specs: any[] }> = [];
 			for (const page of allPages) {
-				if (page.crawl_data.json_ld.some((ld) => (ld as Record<string, unknown>)["@type"] === "Product")) continue;
+				if (
+					page.crawl_data.json_ld.some(
+						(ld) => (ld as Record<string, unknown>)["@type"] === "Product",
+					)
+				)
+					continue;
 				// Pages WITHOUT Product schema but likely product pages
 				const title = page.crawl_data.title;
 				if (!title || !/galaxy|phone|tv|laptop/i.test(title)) continue;
@@ -466,7 +574,8 @@ export function createAnalysisToolHandlers(
 
 			const allPages = [
 				{ url: crawlData.url, crawl_data: crawlData },
-				...(state.multiPageResult?.pages.map((p) => ({ url: p.url, crawl_data: p.crawl_data })) ?? []),
+				...(state.multiPageResult?.pages.map((p) => ({ url: p.url, crawl_data: p.crawl_data })) ??
+					[]),
 			];
 
 			// Evidence sections
@@ -478,7 +587,7 @@ export function createAnalysisToolHandlers(
 				title: "llms.txt status",
 				content: crawlData.llms_txt
 					? `llms.txt found:\n${crawlData.llms_txt.slice(0, 500)}`
-					: `llms.txt not found (HTTP 404 or missing)`,
+					: "llms.txt not found (HTTP 404 or missing)",
 			});
 
 			// 2. robots.txt AI bot section
@@ -487,7 +596,11 @@ export function createAnalysisToolHandlers(
 				const aiSection: string[] = [];
 				let inAiBlock = false;
 				for (const line of lines) {
-					if (/user-agent:\s*(GPTBot|ClaudeBot|Google-Extended|PerplexityBot|OAI|ChatGPT|Applebot|Meta-External)/i.test(line)) {
+					if (
+						/user-agent:\s*(GPTBot|ClaudeBot|Google-Extended|PerplexityBot|OAI|ChatGPT|Applebot|Meta-External)/i.test(
+							line,
+						)
+					) {
 						inAiBlock = true;
 					}
 					if (inAiBlock) {
@@ -496,16 +609,34 @@ export function createAnalysisToolHandlers(
 					}
 				}
 				if (aiSection.length > 0) {
-					sections.push({ id: "E-2", title: "robots.txt AI bot rules", content: aiSection.join("\n") });
+					sections.push({
+						id: "E-2",
+						title: "robots.txt AI bot rules",
+						content: aiSection.join("\n"),
+					});
 				}
 			}
 
 			// Schema implementation matrix
-			const schemaTypes = ["ItemList", "Product", "Offer", "AggregateRating", "BreadcrumbList", "FAQPage", "SpeakableSpecification"];
+			const schemaTypes = [
+				"ItemList",
+				"Product",
+				"Offer",
+				"AggregateRating",
+				"BreadcrumbList",
+				"FAQPage",
+				"SpeakableSpecification",
+			];
 			const schemaMatrix = allPages.map((page) => {
-				const types = page.crawl_data.json_ld.map((ld) => String((ld as Record<string, unknown>)["@type"] ?? ""));
-				const hasOffer = page.crawl_data.json_ld.some((ld) => !!(ld as Record<string, unknown>).offers);
-				const hasRating = page.crawl_data.json_ld.some((ld) => !!(ld as Record<string, unknown>).aggregateRating);
+				const types = page.crawl_data.json_ld.map((ld) =>
+					String((ld as Record<string, unknown>)["@type"] ?? ""),
+				);
+				const hasOffer = page.crawl_data.json_ld.some(
+					(ld) => !!(ld as Record<string, unknown>).offers,
+				);
+				const hasRating = page.crawl_data.json_ld.some(
+					(ld) => !!(ld as Record<string, unknown>).aggregateRating,
+				);
 				const implemented = schemaTypes.filter((t) => {
 					if (t === "Offer") return hasOffer;
 					if (t === "AggregateRating") return hasRating;
@@ -525,12 +656,20 @@ export function createAnalysisToolHandlers(
 			});
 
 			// JS dependency analysis
-			const jsDeps: Array<{ data_item: string; in_static_html: boolean; llm_accessible: string; geo_impact: string }> = [];
+			const jsDeps: Array<{
+				data_item: string;
+				in_static_html: boolean;
+				llm_accessible: string;
+				geo_impact: string;
+			}> = [];
 			for (const page of allPages.slice(0, 5)) {
 				const html = page.crawl_data.html;
 				const scriptBlocks = (html.match(/<script[\s\S]*?<\/script>/gi) || []).length;
 				const totalSize = html.length;
-				const scriptSize = (html.match(/<script[\s\S]*?<\/script>/gi) || []).reduce((s, b) => s + b.length, 0);
+				const scriptSize = (html.match(/<script[\s\S]*?<\/script>/gi) || []).reduce(
+					(s, b) => s + b.length,
+					0,
+				);
 				const jsRatio = scriptSize / Math.max(totalSize, 1);
 
 				if (jsRatio > 0.3) {

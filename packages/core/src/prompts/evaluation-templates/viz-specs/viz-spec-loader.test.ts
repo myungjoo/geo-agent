@@ -17,8 +17,8 @@ import {
 	SUBTYPE_SIGNALS,
 	SiteSubtypeSchema,
 	TabSpecSchema,
-	VizElementTypeSchema,
 	VisualizationSpecSchema,
+	VizElementTypeSchema,
 } from "./viz-spec-schema.js";
 
 // ── Schema Validation ──────────────────────────────────────
@@ -74,9 +74,7 @@ describe("Common Tabs", () => {
 
 	it("overview tab has llm_accessibility_chart with derivation", () => {
 		const overview = COMMON_TABS.find((t) => t.id === "overview");
-		const llmChart = overview?.required_elements.find(
-			(e) => e.type === "llm_accessibility_chart",
-		);
+		const llmChart = overview?.required_elements.find((e) => e.type === "llm_accessibility_chart");
 		expect(llmChart).toBeDefined();
 		expect(llmChart?.derivation).toBeDefined();
 		expect(llmChart?.derivation).toContain("robots.txt");
@@ -84,9 +82,7 @@ describe("Common Tabs", () => {
 
 	it("probes tab has claim_validation_mapping", () => {
 		const probes = COMMON_TABS.find((t) => t.id === "probes");
-		const mapping = probes?.required_elements.find(
-			(e) => e.type === "claim_validation_mapping",
-		);
+		const mapping = probes?.required_elements.find((e) => e.type === "claim_validation_mapping");
 		expect(mapping).toBeDefined();
 		expect(mapping?.columns).toContain("report_claim");
 	});
@@ -103,26 +99,20 @@ describe("Manufacturer Tabs", () => {
 
 	it("products tab has category_score_cards with derivation", () => {
 		const products = MANUFACTURER_EXTRA_TABS.find((t) => t.id === "products");
-		const scoreCards = products?.required_elements.find(
-			(e) => e.type === "category_score_cards",
-		);
+		const scoreCards = products?.required_elements.find((e) => e.type === "category_score_cards");
 		expect(scoreCards?.derivation).toBeDefined();
 		expect(scoreCards?.derivation).toContain("Product Schema");
 	});
 
 	it("products tab has product_radar_chart with axes", () => {
 		const products = MANUFACTURER_EXTRA_TABS.find((t) => t.id === "products");
-		const radar = products?.required_elements.find(
-			(e) => e.type === "product_radar_chart",
-		);
+		const radar = products?.required_elements.find((e) => e.type === "product_radar_chart");
 		expect(radar?.axes?.length).toBeGreaterThanOrEqual(5);
 	});
 
 	it("brand tab has llm_response_pattern_cards", () => {
 		const brand = MANUFACTURER_EXTRA_TABS.find((t) => t.id === "brand");
-		const patterns = brand?.required_elements.find(
-			(e) => e.type === "llm_response_pattern_cards",
-		);
+		const patterns = brand?.required_elements.find((e) => e.type === "llm_response_pattern_cards");
 		expect(patterns?.categories).toEqual([
 			"positive_answerable",
 			"partial_answerable",
@@ -163,8 +153,7 @@ describe("Manufacturer Electronics Reference", () => {
 	});
 
 	it("has smartphone recognition items with ≥7 items", () => {
-		const smartphone =
-			MANUFACTURER_ELECTRONICS_REF.product_recognition_items?.smartphone;
+		const smartphone = MANUFACTURER_ELECTRONICS_REF.product_recognition_items?.smartphone;
 		expect(smartphone).toBeDefined();
 		expect(smartphone!.length).toBeGreaterThanOrEqual(7);
 		expect(smartphone).toContain("시작가격");
@@ -188,9 +177,7 @@ describe("Manufacturer Electronics Reference", () => {
 	});
 
 	it("has ≥7 evidence sections", () => {
-		expect(
-			MANUFACTURER_ELECTRONICS_REF.evidence_sections?.length,
-		).toBeGreaterThanOrEqual(7);
+		expect(MANUFACTURER_ELECTRONICS_REF.evidence_sections?.length).toBeGreaterThanOrEqual(7);
 	});
 
 	it("quality bar requires 10 tabs and 3 simulation lines", () => {
@@ -419,14 +406,8 @@ describe("loadVisualizationSpec", () => {
 		});
 
 		const roadmap = spec.tabs.find((t) => t.id === "roadmap");
-		const simChart = roadmap?.required_elements.find(
-			(e) => e.type === "score_simulation_chart",
-		);
-		expect(simChart?.lines).toEqual([
-			"overall",
-			"exploratory_consumer",
-			"comparative_consumer",
-		]);
+		const simChart = roadmap?.required_elements.find((e) => e.type === "score_simulation_chart");
+		expect(simChart?.lines).toEqual(["overall", "exploratory_consumer", "comparative_consumer"]);
 	});
 
 	it("passes VisualizationSpecSchema validation", () => {

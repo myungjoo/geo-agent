@@ -29,8 +29,7 @@ export const MANUFACTURER_EXTRA_TABS: TabSpec[] = [
 				type: "extracted_data_table",
 				condition: "category.catalog_schema에 Product+Offer가 있는 경우",
 				max_rows: 12,
-				description:
-					"구조화 데이터가 우수한 카탈로그 페이지에서 실제 추출된 제품 데이터 테이블",
+				description: "구조화 데이터가 우수한 카탈로그 페이지에서 실제 추출된 제품 데이터 테이블",
 			},
 			{
 				type: "product_recognition_bars",

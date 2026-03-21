@@ -3,7 +3,7 @@
  *
  * 파이프라인 스테이지별 실행 기록을 DB에 저장/조회
  */
-import { asc, eq, type SQL } from "drizzle-orm";
+import { type SQL, asc, eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import type { GeoDatabase } from "../connection.js";
 import { stageExecutions } from "../schema.js";
@@ -112,10 +112,7 @@ export class StageExecutionRepository {
 	 * 단건 조회 (result_full 포함).
 	 */
 	async findById(id: string): Promise<StageExecution | null> {
-		const rows = await this.db
-			.select()
-			.from(stageExecutions)
-			.where(eq(stageExecutions.id, id));
+		const rows = await this.db.select().from(stageExecutions).where(eq(stageExecutions.id, id));
 		return rows.length > 0 ? this.toModel(rows[0]) : null;
 	}
 
@@ -138,9 +135,7 @@ export class StageExecutionRepository {
 	async deleteByPipelineId(pipelineId: string): Promise<number> {
 		const existing = await this.findByPipelineId(pipelineId);
 		if (existing.length === 0) return 0;
-		await this.db
-			.delete(stageExecutions)
-			.where(eq(stageExecutions.pipeline_id, pipelineId));
+		await this.db.delete(stageExecutions).where(eq(stageExecutions.pipeline_id, pipelineId));
 		return existing.length;
 	}
 

@@ -39,11 +39,11 @@ export function parseSkillMd(content: string): SkillDefinition {
 	const frontmatter = parseSimpleYaml(frontmatterStr);
 
 	return {
-		name: frontmatter.name ?? "unnamed",
-		description: frontmatter.description ?? "",
-		version: frontmatter.version ?? "0.0.0",
-		tools: frontmatter.tools ?? [],
-		outputFormat: frontmatter.output_format ?? "text",
+		name: (frontmatter.name as string) ?? "unnamed",
+		description: (frontmatter.description as string) ?? "",
+		version: (frontmatter.version as string) ?? "0.0.0",
+		tools: (frontmatter.tools as string[]) ?? [],
+		outputFormat: (frontmatter.output_format as string) ?? "text",
 		systemPrompt: body.trim(),
 	};
 }
@@ -52,8 +52,8 @@ export function parseSkillMd(content: string): SkillDefinition {
  * Minimal YAML parser for frontmatter (handles strings, lists, numbers).
  * Not a full YAML parser — just enough for SKILL.md frontmatter.
  */
-function parseSimpleYaml(yaml: string): Record<string, any> {
-	const result: Record<string, any> = {};
+function parseSimpleYaml(yaml: string): Record<string, unknown> {
+	const result: Record<string, unknown> = {};
 	let currentKey: string | null = null;
 	let currentList: string[] | null = null;
 
@@ -86,7 +86,10 @@ function parseSimpleYaml(yaml: string): Record<string, any> {
 			// Inline list: [a, b, c]
 			const inlineList = value.match(/^\[(.*)\]$/);
 			if (inlineList) {
-				result[key] = inlineList[1].split(",").map((s) => s.trim()).filter(Boolean);
+				result[key] = inlineList[1]
+					.split(",")
+					.map((s) => s.trim())
+					.filter(Boolean);
 			} else {
 				result[key] = value;
 			}

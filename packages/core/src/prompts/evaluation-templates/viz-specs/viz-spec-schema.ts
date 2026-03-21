@@ -129,10 +129,7 @@ export const SUBTYPE_SIGNALS: SubtypeSignal[] = [
 	},
 	{
 		subtype: "university",
-		url_patterns: [
-			/\.(edu|ac\.)/i,
-			/\/(faculty|department|admissions|campus|alumni)\//i,
-		],
+		url_patterns: [/\.(edu|ac\.)/i, /\/(faculty|department|admissions|campus|alumni)\//i],
 		html_keywords: [
 			"professor",
 			"faculty",
@@ -147,10 +144,7 @@ export const SUBTYPE_SIGNALS: SubtypeSignal[] = [
 	},
 	{
 		subtype: "corporate_lab",
-		url_patterns: [
-			/\/(research|labs?|innovation|ai-research|publications?)\//i,
-			/research\./i,
-		],
+		url_patterns: [/\/(research|labs?|innovation|ai-research|publications?)\//i, /research\./i],
 		html_keywords: [
 			"research",
 			"publication",
@@ -165,14 +159,7 @@ export const SUBTYPE_SIGNALS: SubtypeSignal[] = [
 	{
 		subtype: "news",
 		url_patterns: [/\/(news|articles?|stories?|opinion|editorial)\//i],
-		html_keywords: [
-			"byline",
-			"dateline",
-			"reporter",
-			"journalist",
-			"breaking",
-			"headline",
-		],
+		html_keywords: ["byline", "dateline", "reporter", "journalist", "breaking", "headline"],
 		schema_types: ["NewsArticle", "Article", "ReportageNewsArticle"],
 	},
 	{
@@ -300,10 +287,7 @@ export type QualityBar = z.infer<typeof QualityBarSchema>;
 
 // ── Probe Customization ─────────────────────────────────────
 
-export const ProbeCustomizationSchema = z.record(
-	z.string(),
-	z.string(),
-);
+export const ProbeCustomizationSchema = z.record(z.string(), z.string());
 export type ProbeCustomization = z.infer<typeof ProbeCustomizationSchema>;
 
 // ── Reference Spec (참조 대시보드 기반 구체 요구사항) ─────────
@@ -315,10 +299,7 @@ export const ReferenceSpecSchema = z.object({
 	source_dashboard: z.string().optional(),
 
 	product_categories_minimum: z.number().optional(),
-	product_recognition_items: z.record(
-		z.string(),
-		z.array(z.string()),
-	).optional(),
+	product_recognition_items: z.record(z.string(), z.array(z.string())).optional(),
 	probe_customization: ProbeCustomizationSchema.optional(),
 	competitor_estimation: CompetitorEstimationSchema.optional(),
 	evidence_sections: z.array(EvidenceSectionSchema).optional(),

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { type AnalysisInput, type AnalysisOutput, runAnalysis } from "./analysis-agent.js";
 import type { CrawlData } from "../shared/types.js";
+import { type AnalysisInput, type AnalysisOutput, runAnalysis } from "./analysis-agent.js";
 
 // ── Mock CrawlData ──────────────────────────────────────────
 
@@ -56,8 +56,19 @@ function makeCrawlData(overrides: Partial<CrawlData> = {}): CrawlData {
 
 function mockChatLLM() {
 	const assessment = {
-		brand_recognition: { score: 75, identified_brand: "Test", identified_products: ["Product"], reasoning: "test" },
-		content_quality: { score: 80, clarity: 85, completeness: 70, factual_density: 75, reasoning: "test" },
+		brand_recognition: {
+			score: 75,
+			identified_brand: "Test",
+			identified_products: ["Product"],
+			reasoning: "test",
+		},
+		content_quality: {
+			score: 80,
+			clarity: 85,
+			completeness: 70,
+			factual_density: 75,
+			reasoning: "test",
+		},
 		information_gaps: [],
 		llm_consumption_issues: [],
 		overall_assessment: "Good quality page",
@@ -251,8 +262,19 @@ describe("Analysis Agent", () => {
 					return Promise.reject(new Error("LLM unavailable"));
 				}
 				const assessment = {
-					brand_recognition: { score: 75, identified_brand: "Test", identified_products: ["Product"], reasoning: "test" },
-					content_quality: { score: 80, clarity: 85, completeness: 70, factual_density: 75, reasoning: "test" },
+					brand_recognition: {
+						score: 75,
+						identified_brand: "Test",
+						identified_products: ["Product"],
+						reasoning: "test",
+					},
+					content_quality: {
+						score: 80,
+						clarity: 85,
+						completeness: 70,
+						factual_density: 75,
+						reasoning: "test",
+					},
 					information_gaps: [],
 					llm_consumption_issues: [],
 					overall_assessment: "Good quality page",

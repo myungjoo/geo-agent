@@ -183,8 +183,10 @@ Respond with JSON: { "cited": true/false, "reasoning": "brief explanation" }`,
 		return !!parsed.cited;
 	} catch {
 		// If JSON parse fails, fall back to checking for "true" in response
-		return judgeResponse.content.toLowerCase().includes('"cited": true') ||
-			judgeResponse.content.toLowerCase().includes('"cited":true');
+		return (
+			judgeResponse.content.toLowerCase().includes('"cited": true') ||
+			judgeResponse.content.toLowerCase().includes('"cited":true')
+		);
 	}
 }
 

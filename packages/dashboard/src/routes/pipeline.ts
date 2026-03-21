@@ -2,15 +2,15 @@ import {
 	type AppSettings,
 	type GeoDatabase,
 	GeoLLMClient,
-	PipelineRepository,
-	ProviderConfigManager,
-	StageExecutionRepository,
-	TargetRepository,
 	type PipelineConfig,
 	type PipelineDeps,
+	PipelineRepository,
+	ProviderConfigManager,
 	type StageCallbacks,
-	runPipeline,
+	StageExecutionRepository,
+	TargetRepository,
 	classifySite,
+	runPipeline,
 } from "@geo-agent/core";
 import { crawlMultiplePages, crawlTarget, scoreTarget } from "@geo-agent/skills";
 /**
@@ -163,7 +163,8 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 				);
 			} else {
 				// API Key 미설정 → 파이프라인 실행 거부
-				const errMsg = "LLM API Key가 설정되지 않았습니다. Dashboard > LLM Providers 탭에서 API Key를 입력하세요.";
+				const errMsg =
+					"LLM API Key가 설정되지 않았습니다. Dashboard > LLM Providers 탭에서 API Key를 입력하세요.";
 				console.error(`❌ ${errMsg}`);
 				await repo.setError(pipeline.pipeline_id, errMsg);
 				broadcastSSE("pipeline:failed", {
@@ -171,10 +172,7 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 					pipeline_id: pipeline.pipeline_id,
 					error: errMsg,
 				});
-				return c.json(
-					{ ...pipeline, error: errMsg },
-					201,
-				);
+				return c.json({ ...pipeline, error: errMsg }, 201);
 			}
 		} catch (err) {
 			// API key가 설정되어 있는데 초기화 실패 → 파이프라인 중단
@@ -231,7 +229,10 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 			runningPipelines.delete(targetId);
 		});
 
-		return c.json({ ...pipeline, llm_mode: llmMode, configured_providers: configuredProviders }, 201);
+		return c.json(
+			{ ...pipeline, llm_mode: llmMode, configured_providers: configuredProviders },
+			201,
+		);
 	}
 
 	// Default: just create DB record (no execution)
@@ -256,7 +257,17 @@ async function executePipelineAsync(
 
 		// LLM 인증 에러가 있으면 성공 여부와 관계없이 실패 처리
 		const hasAuthError = result.llm_errors.some((e) => {
-			const patterns = [/401/i, /403/i, /unauthorized/i, /forbidden/i, /invalid.*(?:key|token|subscription)/i, /access.*denied/i, /authentication/i, /invalid_api_key/i, /incorrect.*api.*key/i];
+			const patterns = [
+				/401/i,
+				/403/i,
+				/unauthorized/i,
+				/forbidden/i,
+				/invalid.*(?:key|token|subscription)/i,
+				/access.*denied/i,
+				/authentication/i,
+				/invalid_api_key/i,
+				/incorrect.*api.*key/i,
+			];
 			return patterns.some((p) => p.test(e));
 		});
 
@@ -452,7 +463,9 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 				if (Array.isArray(rf.llm_models_used)) {
 					for (const m of rf.llm_models_used) modelSet.add(m);
 				}
-			} catch { /* ignore */ }
+			} catch {
+				/* ignore */
+			}
 		}
 		llmModelsUsed = Array.from(modelSet);
 	}
@@ -499,7 +512,9 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/llm-log", async (c) => {
 				llm_models_used: reportData.llm_models_used ?? [],
 				total_calls: (reportData.llm_call_log ?? []).length,
 			});
-		} catch { /* fall through */ }
+		} catch {
+			/* fall through */
+		}
 	}
 
 	// Fallback: scan all stages for llm_call_log entries
@@ -515,7 +530,9 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/llm-log", async (c) => {
 					if (entry.provider && entry.model) modelSet.add(`${entry.provider}/${entry.model}`);
 				}
 			}
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 	}
 	return c.json({
 		llm_call_log: allLogs,
