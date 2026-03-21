@@ -8,7 +8,7 @@ import {
 	initWorkspace,
 	loadSettings,
 } from "@geo-agent/core";
-import { serve } from "@hono/node-server";
+import { type ServerType, serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { trimTrailingSlash } from "hono/trailing-slash";
@@ -114,7 +114,9 @@ export { app };
 /**
  * Starts the dashboard server.
  */
-export async function startServer(port?: number): Promise<{ settings: AppSettings }> {
+export async function startServer(
+	port?: number,
+): Promise<{ settings: AppSettings; server: ServerType }> {
 	const settings = loadSettings();
 	initWorkspace(settings);
 
@@ -134,7 +136,7 @@ export async function startServer(port?: number): Promise<{ settings: AppSetting
 
 		server.on("listening", () => {
 			console.log(`✅ GEO Agent Dashboard running on http://localhost:${serverPort}`);
-			resolve({ settings });
+			resolve({ settings, server });
 		});
 
 		server.on("error", (err: NodeJS.ErrnoException) => {
