@@ -93,6 +93,16 @@ describe("Pipeline execution (rule-based mode)", () => {
 	it("pipeline reaches terminal state", async () => {
 		const pipeline = await waitForPipeline(targetId);
 		pipelineFinalStage = pipeline.stage as string;
+		// Log pipeline state for CI debugging
+		console.log(
+			"[E2E DEBUG] pipeline final state:",
+			JSON.stringify({
+				stage: pipeline.stage,
+				error_message: pipeline.error_message,
+				pipeline_id: pipeline.pipeline_id,
+				completed_at: pipeline.completed_at,
+			}),
+		);
 		// Pipeline may COMPLETE or FAIL (e.g. if clone/optimization has issues).
 		// Both are valid terminal states for smoke testing.
 		expect(["COMPLETED", "FAILED", "PARTIAL_FAILURE"]).toContain(pipelineFinalStage);
@@ -108,6 +118,7 @@ describe("Pipeline execution (rule-based mode)", () => {
 	it("stages list has recorded executions", async (ctx) => {
 		// If pipeline FAILED early, stage_executions may be empty — skip in that case
 		if (pipelineFinalStage === "FAILED") {
+			console.log("[E2E DEBUG] pipeline FAILED — skipping stages check");
 			ctx.skip();
 			return;
 		}
@@ -121,6 +132,18 @@ describe("Pipeline execution (rule-based mode)", () => {
 			if (stages.length > 0) break;
 			await new Promise((r) => setTimeout(r, 500));
 		}
+
+		// Log for CI debugging
+		console.log(
+			`[E2E DEBUG] stages count: ${stages.length}, pipeline: ${pipelineId}, finalStage: ${pipelineFinalStage}`,
+		);
+		if (stages.length === 0) {
+			// Fetch pipeline record for more context
+			const pRes = await api(`/api/targets/${targetId}/pipeline/${pipelineId}`);
+			const pData = await pRes.json();
+			console.log("[E2E DEBUG] pipeline record:", JSON.stringify(pData));
+		}
+
 		expect(stages.length).toBeGreaterThanOrEqual(1);
 
 		// Verify at least ANALYZING stage was recorded
