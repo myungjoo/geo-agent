@@ -1769,7 +1769,20 @@ async function loadLLMCallLog() {
 			html += '<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(e.prompt_summary.slice(0, 80)) + '...</td>';
 			html += '</tr>';
 			html += '<tr class="llm-detail-row" style="display:none;"><td colspan="6">';
-			html += '<div style="background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;max-height:400px;overflow:auto;">';
+			html += '<div style="background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;max-height:500px;overflow:auto;">';
+			if (e.system_instruction_summary) {
+				html += '<div style="margin-bottom:8px;"><strong>🔧 System Instruction:</strong></div>';
+				html += '<pre style="white-space:pre-wrap;font-size:11px;color:#9ca3af;max-height:120px;overflow:auto;border-left:3px solid #6366f1;padding-left:8px;">' + esc(e.system_instruction_summary) + '</pre>';
+			}
+			if (e.request_params) {
+				var params = [];
+				if (e.request_params.temperature !== undefined) params.push('temp=' + e.request_params.temperature);
+				if (e.request_params.max_tokens !== undefined) params.push('max_tokens=' + e.request_params.max_tokens);
+				if (e.request_params.json_mode !== undefined) params.push('json_mode=' + e.request_params.json_mode);
+				if (params.length > 0) {
+					html += '<div style="margin-bottom:8px;font-size:11px;color:#9ca3af;">⚙️ <strong>Params:</strong> ' + esc(params.join(', ')) + '</div>';
+				}
+			}
 			html += '<div style="margin-bottom:8px;"><strong>📤 Prompt:</strong></div>';
 			html += '<pre style="white-space:pre-wrap;font-size:11px;color:var(--text-muted);max-height:200px;overflow:auto;">' + esc(e.prompt_summary) + '</pre>';
 			if (e.error) {

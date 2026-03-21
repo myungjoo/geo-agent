@@ -76,6 +76,14 @@ export interface LLMCallLogEntry {
 	tokens_out?: number;
 	duration_ms: number;
 	error?: string;
+	/** System instruction summary (max 500 chars) */
+	system_instruction_summary?: string;
+	/** Request parameters */
+	request_params?: {
+		temperature?: number;
+		max_tokens?: number;
+		json_mode?: boolean;
+	};
 }
 
 export interface PipelineResult {
@@ -166,6 +174,15 @@ export async function runPipeline(
 		const seq = ++llmCallSeq;
 		const startMs = Date.now();
 		const promptText = req.prompt ?? "";
+		const sysInstr = req.system_instruction ?? undefined;
+		const reqParams =
+			req.temperature !== undefined || req.max_tokens !== undefined || req.json_mode !== undefined
+				? {
+						temperature: req.temperature,
+						max_tokens: req.max_tokens,
+						json_mode: req.json_mode,
+					}
+				: undefined;
 		try {
 			const response = await deps.chatLLM(req);
 			llmModelsUsed.add(`${response.provider}/${response.model}`);
@@ -180,6 +197,8 @@ export async function runPipeline(
 				tokens_in: response.usage?.prompt_tokens,
 				tokens_out: response.usage?.completion_tokens,
 				duration_ms: Date.now() - startMs,
+				system_instruction_summary: sysInstr?.slice(0, 500),
+				request_params: reqParams,
 			});
 			return response;
 		} catch (err) {
@@ -195,6 +214,8 @@ export async function runPipeline(
 				response_summary: "",
 				duration_ms: Date.now() - startMs,
 				error: msg.slice(0, 500),
+				system_instruction_summary: sysInstr?.slice(0, 500),
+				request_params: reqParams,
 			});
 			// Auth errors (401, 403, invalid key) → stop pipeline immediately
 			if (isLLMAuthError(err)) {

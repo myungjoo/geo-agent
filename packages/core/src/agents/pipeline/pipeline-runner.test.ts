@@ -543,6 +543,39 @@ describe("Pipeline Runner — resultFullFn regression", () => {
 		expect(typeof entry.duration_ms).toBe("number");
 	});
 
+	it("llm_call_log entries capture system_instruction and request_params", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+		const { stageResults, callbacks } = makeStageTracker();
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			stageCallbacks: callbacks,
+		});
+
+		await runPipeline(config, deps);
+
+		const reporting = stageResults.find((s) => s.stage === "REPORTING");
+		const full = reporting?.resultFull as { llm_call_log: Record<string, unknown>[] };
+		expect(full.llm_call_log.length).toBeGreaterThan(0);
+
+		// At least one entry should have system_instruction_summary (agents send it)
+		const withSysInstr = full.llm_call_log.filter(
+			(e) => e.system_instruction_summary !== undefined,
+		);
+		expect(withSysInstr.length).toBeGreaterThan(0);
+		expect(typeof withSysInstr[0].system_instruction_summary).toBe("string");
+
+		// At least one entry should have request_params (agents send temperature/max_tokens)
+		const withParams = full.llm_call_log.filter(
+			(e) => e.request_params !== undefined,
+		);
+		expect(withParams.length).toBeGreaterThan(0);
+		const params = withParams[0].request_params as Record<string, unknown>;
+		expect(typeof params.temperature).toBe("number");
+	});
+
 	it("CLONING result_full is stored", async () => {
 		const deps = makeDeps();
 		const { stageResults, callbacks } = makeStageTracker();
