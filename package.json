@@ -7,7 +7,7 @@
 		"packages/*"
 	],
 	"scripts": {
-		"build": "npm run build --workspaces",
+		"build": "npm run build -w packages/core -w packages/skills -w packages/dashboard -w packages/cli",
 		"start": "node --import tsx packages/cli/src/index.ts start",
 		"dev": "npm run dev --workspace=packages/dashboard",
 		"analyze": "node --import tsx packages/cli/src/index.ts analyze",
