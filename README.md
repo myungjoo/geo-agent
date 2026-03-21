@@ -126,6 +126,7 @@ Dashboard 사용 흐름:
 Dashboard 탭 설명:
 - **Targets**: Target URL 추가/편집/삭제
 - **Pipelines**: 파이프라인 시작/중단/상태 확인
+- **Evaluation**: GEO 평가 결과 (종합 개요, 크롤링 접근성, 구조화 데이터, 제품 정보, 브랜드 메시지, 페이지별 분석, 개선 권고, 실증 데이터, Synthetic Probes, 실행 요약)
 - **Agent Prompts**: 에이전트 시스템 프롬프트 편집 (고급)
 - **LLM Providers**: LLM 프로바이더 설정 (API Key, 모델, 활성화/비활성화)
 
@@ -159,11 +160,20 @@ curl -X PUT http://localhost:3000/api/settings/llm-providers/microsoft \
 |--------|----------|------|
 | GET | `/health` | 서버 상태 |
 | GET | `/dashboard` | Web UI |
+| GET | `/api/version` | Git 버전 정보 |
+| POST | `/api/shutdown` | 서버 종료 |
+| GET | `/events` | SSE 실시간 파이프라인 이벤트 스트림 |
 | GET/POST | `/api/targets` | Target CRUD |
 | GET/PUT/DELETE | `/api/targets/:id` | Target 개별 관리 |
-| GET/POST | `/api/targets/:id/pipeline` | 파이프라인 목록/생성 |
+| GET/POST | `/api/targets/:id/pipeline` | 파이프라인 목록/생성 (`?execute=true`로 실행) |
 | GET | `/api/targets/:id/pipeline/latest` | 최신 파이프라인 |
+| GET | `/api/targets/:id/pipeline/:pid` | 특정 파이프라인 조회 |
+| DELETE | `/api/targets/:id/pipeline/:pid` | 파이프라인 삭제 |
 | PUT | `/api/targets/:id/pipeline/:pid/stage` | 스테이지 변경 |
+| GET | `/api/targets/:id/pipeline/:pid/stages` | 스테이지 실행 기록 |
+| GET | `/api/targets/:id/pipeline/:pid/stages/:sid` | 스테이지 상세 (result_full 포함) |
+| GET | `/api/targets/:id/pipeline/:pid/evaluation` | Evaluation 데이터 |
+| GET | `/api/targets/:id/pipeline/:pid/llm-log` | LLM 호출 로그 |
 | POST | `/api/targets/:id/cycle/stop` | 수동 중단 |
 | GET | `/api/targets/:id/cycle/status` | 사이클 상태 |
 | GET/PUT | `/api/settings/agents/prompts` | 에이전트 프롬프트 |
@@ -178,6 +188,7 @@ curl -X PUT http://localhost:3000/api/settings/llm-providers/microsoft \
 | Anthropic | `anthropic` | `sk-ant-...` | |
 | Google AI | `google` | `AIzaSy...` | |
 | Perplexity | `perplexity` | `pplx-...` | OpenAI 호환 |
+| Meta | `meta` | (varies) | Llama, Together/Replicate 경유 |
 
 ## 파이프라인 흐름
 
@@ -214,7 +225,7 @@ geo-agent/
 # 빌드
 npm run build
 
-# 테스트 (1182 tests)
+# 테스트
 npm test
 
 # Lint
@@ -236,7 +247,7 @@ npx vitest run packages/dashboard/
 npx vitest run packages/skills/
 
 # 특정 파일
-npx vitest run packages/core/src/agents/analysis-agent.test.ts
+npx vitest run packages/core/src/agents/analysis/analysis-agent.test.ts
 ```
 
 ## 라이선스
