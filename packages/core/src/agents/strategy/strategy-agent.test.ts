@@ -278,15 +278,15 @@ describe("Strategy Agent", () => {
 			expect(result.estimated_delta).toBe(20);
 		});
 
-		it("falls back to rule-based when LLM fails", async () => {
+		it("throws when LLM fails after retry", async () => {
 			const mockChat = vi.fn().mockRejectedValue(new Error("API error"));
 
-			const result = await runStrategy(
-				{ target_id: "t1", analysis_report: makeReport(), use_llm: true },
-				{ chatLLM: mockChat },
-			);
-
-			expect(result.plan.strategy_rationale).toContain("규칙 기반");
+			await expect(
+				runStrategy(
+					{ target_id: "t1", analysis_report: makeReport(), use_llm: true },
+					{ chatLLM: mockChat },
+				),
+			).rejects.toThrow("LLM call failed after retry: API error");
 		});
 
 		it("uses rule-based rationale when use_llm=false", async () => {

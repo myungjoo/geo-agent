@@ -1,16 +1,117 @@
 import { describe, expect, it } from "vitest";
 import type { CrawlData } from "../shared/types.js";
+import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
 import {
 	type BotPolicyEntry,
+	analyzeJsDependency,
 	analyzePathAccess,
 	extractGeoEvaluationData,
 	extractMarketingClaims,
 	extractProductInfo,
 	extractSchemaCoverage,
 	generateFindings,
+	generateFindingsLLM,
 	generateImprovements,
 	parseRobotsTxt,
 } from "./geo-eval-extractor.js";
+
+// ── Mock chatLLM ────────────────────────────────────────────
+
+const MOCK_FINDINGS_RESPONSE = {
+	strengths: [
+		{ title: "AI 봇 크롤링 허용", description: "주요 AI 봇이 사이트에 접근 가능합니다.", icon: "✅" },
+	],
+	weaknesses: [
+		{ title: "llms.txt 미존재", description: "llms.txt가 없어 LLM 안내가 불가합니다.", icon: "❌" },
+	],
+	opportunities: [
+		{ title: "스키마 확장", description: "Product 스키마를 추가하면 GEO 점수가 향상됩니다.", icon: "🚀" },
+	],
+};
+
+const MOCK_SCHEMA_QUALITY_RESPONSE: Record<string, string> = {
+	Organization: "good",
+	Product: "excellent",
+	WebPage: "partial",
+};
+
+const MOCK_JS_IMPACT_RESPONSE = {
+	blocks_access: false,
+	severity: "low",
+	reasoning: "Static HTML contains meaningful text content; JS enhances but does not gate key information.",
+};
+
+const MOCK_JS_IMPACT_HIGH_RESPONSE = {
+	blocks_access: true,
+	severity: "high",
+	reasoning: "Almost no text in static HTML; page relies entirely on JS rendering for content.",
+};
+
+const MOCK_FRAMEWORKS_RESPONSE = {
+	frameworks: ["React/Next.js"],
+};
+
+function createMockChatLLM(
+	claimsResponse: unknown[] = [],
+	jsImpactOverride?: unknown,
+	frameworksOverride?: unknown,
+): (req: LLMRequest) => Promise<LLMResponse> {
+	return async (req: LLMRequest): Promise<LLMResponse> => {
+		const promptText = req.prompt ?? "";
+		// Detect framework detection prompts
+		if (promptText.includes("JavaScript frameworks") && promptText.includes("Script evidence")) {
+			return {
+				content: JSON.stringify(frameworksOverride ?? MOCK_FRAMEWORKS_RESPONSE),
+				model: "mock-model",
+				provider: "mock",
+				usage: { prompt_tokens: 30, completion_tokens: 20, total_tokens: 50 },
+				latency_ms: 10,
+				cost_usd: 0,
+			};
+		}
+		// Detect JS impact prompts
+		if (promptText.includes("JavaScript dependency") && promptText.includes("blocks_access")) {
+			return {
+				content: JSON.stringify(jsImpactOverride ?? MOCK_JS_IMPACT_RESPONSE),
+				model: "mock-model",
+				provider: "mock",
+				usage: { prompt_tokens: 40, completion_tokens: 30, total_tokens: 70 },
+				latency_ms: 15,
+				cost_usd: 0,
+			};
+		}
+		// Detect findings-related prompts
+		if (promptText.includes("strengths") && promptText.includes("weaknesses") && promptText.includes("opportunities")) {
+			return {
+				content: JSON.stringify(MOCK_FINDINGS_RESPONSE),
+				model: "mock-model",
+				provider: "mock",
+				usage: { prompt_tokens: 50, completion_tokens: 50, total_tokens: 100 },
+				latency_ms: 20,
+				cost_usd: 0,
+			};
+		}
+		// Detect schema quality prompts
+		if (promptText.includes("schema.org") && promptText.includes("completeness of properties")) {
+			return {
+				content: JSON.stringify(MOCK_SCHEMA_QUALITY_RESPONSE),
+				model: "mock-model",
+				provider: "mock",
+				usage: { prompt_tokens: 30, completion_tokens: 20, total_tokens: 50 },
+				latency_ms: 15,
+				cost_usd: 0,
+			};
+		}
+		return {
+			content: JSON.stringify(claimsResponse),
+			model: "mock-model",
+			provider: "mock",
+			usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+			latency_ms: 10,
+			cost_usd: 0,
+		};
+	};
+}
 
 // ── Helper: minimal CrawlData ──────────────────────────
 
@@ -71,7 +172,7 @@ describe("parseRobotsTxt", () => {
 // ── extractSchemaCoverage ──────────────────────────────
 
 describe("extractSchemaCoverage", () => {
-	it("detects JSON-LD schema types", () => {
+	it("detects JSON-LD schema types (no LLM)", async () => {
 		const pages = [
 			{
 				url: "https://example.com",
@@ -81,20 +182,60 @@ describe("extractSchemaCoverage", () => {
 				}),
 			},
 		];
-		const result = extractSchemaCoverage(pages);
+		const result = await extractSchemaCoverage(pages);
 		const org = result.find((s) => s.schema_type === "Organization");
 		expect(org?.present).toBe(true);
 		expect(org?.pages).toContain("index.html");
 	});
 
-	it("reports missing schemas", () => {
+	it("reports missing schemas (no LLM)", async () => {
 		const pages = [
 			{ url: "https://example.com", filename: "index.html", crawl_data: makeCrawlData() },
 		];
-		const result = extractSchemaCoverage(pages);
+		const result = await extractSchemaCoverage(pages);
 		const product = result.find((s) => s.schema_type === "Product");
 		expect(product?.present).toBe(false);
 		expect(product?.quality).toBe("none");
+	});
+
+	it("uses LLM for quality judgment when chatLLM provided", async () => {
+		const mockLLM = createMockChatLLM();
+		const pages = [
+			{
+				url: "https://example.com",
+				filename: "index.html",
+				crawl_data: makeCrawlData({
+					json_ld: [
+						{ "@type": "Organization", name: "Test Corp", url: "https://example.com" },
+					],
+				}),
+			},
+		];
+		const result = await extractSchemaCoverage(pages, mockLLM);
+		const org = result.find((s) => s.schema_type === "Organization");
+		expect(org?.present).toBe(true);
+		// Mock returns "good" for Organization
+		expect(org?.quality).toBe("good");
+	});
+
+	it("falls back to heuristic when LLM call fails", async () => {
+		const failingLLM = async (_req: LLMRequest): Promise<never> => {
+			throw new Error("LLM unavailable");
+		};
+		const pages = [
+			{
+				url: "https://example.com",
+				filename: "index.html",
+				crawl_data: makeCrawlData({
+					json_ld: [{ "@type": "Organization", name: "Test Corp" }],
+				}),
+			},
+		];
+		const result = await extractSchemaCoverage(pages, failingLLM);
+		const org = result.find((s) => s.schema_type === "Organization");
+		expect(org?.present).toBe(true);
+		// With 1 page and 1 found: coverage = 1.0 >= 0.8 → "excellent"
+		expect(org?.quality).toBe("excellent");
 	});
 });
 
@@ -131,16 +272,50 @@ describe("extractProductInfo", () => {
 // ── extractMarketingClaims ──────────────────────────────
 
 describe("extractMarketingClaims", () => {
-	it("detects superlative claims", () => {
+	it("detects superlative claims via LLM", async () => {
 		const html =
 			"<html><body>We are the world's first to bring AI to every device. Award-winning design.</body></html>";
-		const result = extractMarketingClaims(html, "https://example.com");
+		const mockLLM = createMockChatLLM([
+			{
+				text: "world's first to bring AI to every device",
+				location: "https://example.com",
+				has_source: false,
+				verifiability: "unverifiable",
+			},
+			{
+				text: "Award-winning design",
+				location: "https://example.com",
+				has_source: false,
+				verifiability: "unverifiable",
+			},
+		]);
+		const result = await extractMarketingClaims(
+			[{ url: "https://example.com", html }],
+			mockLLM,
+		);
 		expect(result.length).toBeGreaterThanOrEqual(1);
+		expect(result[0].verifiability).toBe("unverifiable");
 	});
 
-	it("returns empty for clean content", () => {
+	it("returns empty for clean content", async () => {
 		const html = "<html><body>This product weighs 180g and has a 6.1 inch display.</body></html>";
-		const result = extractMarketingClaims(html, "https://example.com");
+		const mockLLM = createMockChatLLM([]);
+		const result = await extractMarketingClaims(
+			[{ url: "https://example.com", html }],
+			mockLLM,
+		);
+		expect(result.length).toBe(0);
+	});
+
+	it("handles LLM failure gracefully", async () => {
+		const html = "<html><body>Some content here</body></html>";
+		const failingLLM = async (_req: LLMRequest): Promise<never> => {
+			throw new Error("LLM unavailable");
+		};
+		const result = await extractMarketingClaims(
+			[{ url: "https://example.com", html }],
+			failingLLM,
+		);
 		expect(result.length).toBe(0);
 	});
 });
@@ -242,6 +417,204 @@ describe("generateFindings", () => {
 	});
 });
 
+// ── generateFindingsLLM ────────────────────────────────
+
+describe("generateFindingsLLM", () => {
+	const botPolicies: BotPolicyEntry[] = [
+		{ bot_name: "GPTBot", service: "ChatGPT", status: "allowed", disallowed_paths: [] },
+		{ bot_name: "ClaudeBot", service: "Claude", status: "not_specified", disallowed_paths: [] },
+	];
+	const mockLLM = createMockChatLLM();
+
+	it("generates findings via LLM call", async () => {
+		const result = await generateFindingsLLM(
+			botPolicies,
+			{ exists: false, content_preview: null },
+			[],
+			[],
+			{
+				script_count: 5,
+				external_scripts: 3,
+				inline_scripts: 2,
+				frameworks_detected: [],
+				estimated_js_dependency: 0.2,
+			},
+			[],
+			mockLLM,
+		);
+		expect(result.strengths.length).toBeGreaterThan(0);
+		expect(result.weaknesses.length).toBeGreaterThan(0);
+		expect(result.opportunities.length).toBeGreaterThan(0);
+		expect(result.strengths[0].title).toBe("AI 봇 크롤링 허용");
+	});
+
+	it("returns empty arrays on LLM failure", async () => {
+		const failingLLM = async (_req: LLMRequest): Promise<never> => {
+			throw new Error("LLM unavailable");
+		};
+		await expect(
+			generateFindingsLLM(
+				botPolicies,
+				{ exists: false, content_preview: null },
+				[],
+				[],
+				{
+					script_count: 5,
+					external_scripts: 3,
+					inline_scripts: 2,
+					frameworks_detected: [],
+					estimated_js_dependency: 0.2,
+				},
+				[],
+				failingLLM,
+			),
+		).rejects.toThrow("LLM unavailable");
+	});
+
+	it("handles malformed LLM response gracefully", async () => {
+		const badLLM = async (_req: LLMRequest): Promise<LLMResponse> => ({
+			content: "not valid json at all",
+			model: "mock-model",
+			provider: "mock",
+			usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+			latency_ms: 10,
+			cost_usd: 0,
+		});
+		const result = await generateFindingsLLM(
+			botPolicies,
+			{ exists: false, content_preview: null },
+			[],
+			[],
+			{
+				script_count: 5,
+				external_scripts: 3,
+				inline_scripts: 2,
+				frameworks_detected: [],
+				estimated_js_dependency: 0.2,
+			},
+			[],
+			badLLM,
+		);
+		expect(result.strengths).toEqual([]);
+		expect(result.weaknesses).toEqual([]);
+		expect(result.opportunities).toEqual([]);
+	});
+});
+
+// ── analyzeJsDependency ────────────────────────────────
+
+describe("analyzeJsDependency", () => {
+	it("returns mechanical metrics without chatLLM", async () => {
+		const html = '<html><head><script src="app.js"></script></head><body><h1>Hello World</h1><p>Some content here.</p></body></html>';
+		const result = await analyzeJsDependency(html);
+		expect(result.script_count).toBe(1);
+		expect(result.external_scripts).toBe(1);
+		expect(result.inline_scripts).toBe(0);
+		expect(result.estimated_js_dependency).toBeGreaterThanOrEqual(0);
+		expect(result.llm_access_impact).toBeUndefined();
+	});
+
+	it("includes LLM access impact when chatLLM provided", async () => {
+		const html = '<html><head><script src="app.js"></script></head><body><h1>Hello World</h1><p>Visible content.</p></body></html>';
+		const mockLLM = createMockChatLLM();
+		const result = await analyzeJsDependency(html, mockLLM);
+		expect(result.llm_access_impact).toBeDefined();
+		expect(result.llm_access_impact?.blocks_access).toBe(false);
+		expect(result.llm_access_impact?.severity).toBe("low");
+		expect(typeof result.llm_access_impact?.reasoning).toBe("string");
+	});
+
+	it("reports high severity for JS-heavy pages", async () => {
+		const html = '<html><head><script src="bundle.js"></script><script src="vendor.js"></script></head><body><div id="root"></div></body></html>';
+		const mockLLM = createMockChatLLM([], MOCK_JS_IMPACT_HIGH_RESPONSE);
+		const result = await analyzeJsDependency(html, mockLLM);
+		expect(result.llm_access_impact).toBeDefined();
+		expect(result.llm_access_impact?.blocks_access).toBe(true);
+		expect(result.llm_access_impact?.severity).toBe("high");
+	});
+
+	it("leaves llm_access_impact undefined when LLM fails", async () => {
+		const html = '<html><body><h1>Content</h1></body></html>';
+		const failingLLM = async (_req: LLMRequest): Promise<never> => {
+			throw new Error("LLM unavailable");
+		};
+		const result = await analyzeJsDependency(html, failingLLM);
+		expect(result.script_count).toBe(0);
+		expect(result.llm_access_impact).toBeUndefined();
+	});
+
+	it("leaves llm_access_impact undefined when LLM returns malformed JSON", async () => {
+		const html = '<html><body><h1>Content</h1></body></html>';
+		const badLLM = async (_req: LLMRequest): Promise<LLMResponse> => ({
+			content: "not valid json",
+			model: "mock-model",
+			provider: "mock",
+			usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+			latency_ms: 10,
+			cost_usd: 0,
+		});
+		const result = await analyzeJsDependency(html, badLLM);
+		expect(result.llm_access_impact).toBeUndefined();
+	});
+
+	it("leaves llm_access_impact undefined when LLM returns invalid severity", async () => {
+		const html = '<html><body><h1>Content</h1></body></html>';
+		const badSeverityLLM = createMockChatLLM([], {
+			blocks_access: true,
+			severity: "critical",  // invalid severity
+			reasoning: "Something wrong",
+		});
+		const result = await analyzeJsDependency(html, badSeverityLLM);
+		expect(result.llm_access_impact).toBeUndefined();
+	});
+
+	it("detects frameworks from script tags (heuristic fallback, no LLM)", async () => {
+		const html = '<html><head><script src="https://cdn.example.com/react.production.min.js"></script></head><body><h1>Hello</h1></body></html>';
+		const result = await analyzeJsDependency(html);
+		expect(result.frameworks_detected).toContain("React/Next.js");
+	});
+
+	it("detects frameworks from DOM markers (heuristic fallback, no LLM)", async () => {
+		const html = '<html><body><div id="__next">React SSR content</div></body></html>';
+		const result = await analyzeJsDependency(html);
+		expect(result.frameworks_detected).toContain("React/Next.js");
+	});
+
+	it("does NOT false-positive on body text mentioning framework names (no LLM)", async () => {
+		const html = '<html><body><p>React is great for building UIs. Angular is also popular. We love jQuery.</p></body></html>';
+		const result = await analyzeJsDependency(html);
+		expect(result.frameworks_detected).toEqual([]);
+	});
+
+	it("uses LLM for framework detection when chatLLM provided", async () => {
+		const html = '<html><head><script src="/static/js/main.chunk.js"></script></head><body><div id="root"></div></body></html>';
+		const mockLLM = createMockChatLLM([], undefined, { frameworks: ["React/Next.js"] });
+		const result = await analyzeJsDependency(html, mockLLM);
+		expect(result.frameworks_detected).toContain("React/Next.js");
+	});
+
+	it("falls back to heuristic when LLM framework detection fails", async () => {
+		const html = '<html><head><script src="https://cdn.example.com/jquery.min.js"></script></head><body><h1>Hello</h1></body></html>';
+		const failingLLM = async (req: LLMRequest): Promise<LLMResponse> => {
+			const promptText = req.prompt ?? "";
+			// Fail on framework prompts, succeed on JS impact
+			if (promptText.includes("JavaScript frameworks")) {
+				throw new Error("LLM unavailable");
+			}
+			return {
+				content: JSON.stringify(MOCK_JS_IMPACT_RESPONSE),
+				model: "mock-model",
+				provider: "mock",
+				usage: { prompt_tokens: 40, completion_tokens: 30, total_tokens: 70 },
+				latency_ms: 15,
+				cost_usd: 0,
+			};
+		};
+		const result = await analyzeJsDependency(html, failingLLM);
+		expect(result.frameworks_detected).toContain("jQuery");
+	});
+});
+
 // ── analyzePathAccess ──────────────────────────────────
 
 describe("analyzePathAccess", () => {
@@ -261,7 +634,9 @@ describe("analyzePathAccess", () => {
 // ── extractGeoEvaluationData (integration) ─────────────
 
 describe("extractGeoEvaluationData", () => {
-	it("produces complete evaluation data structure", () => {
+	const mockLLM = createMockChatLLM([]);
+
+	it("produces complete evaluation data structure", async () => {
 		const homepage = makeCrawlData({
 			robots_txt: "User-agent: GPTBot\nAllow: /\n",
 			json_ld: [{ "@type": "Organization", name: "Test Corp" }],
@@ -281,7 +656,7 @@ describe("extractGeoEvaluationData", () => {
 			{ id: "S1", label: "Crawlability", score: 62 },
 			{ id: "S2", label: "Structure", score: 30 },
 		];
-		const result = extractGeoEvaluationData(homepage, subPages, dimensions);
+		const result = await extractGeoEvaluationData(homepage, subPages, dimensions, mockLLM);
 
 		expect(result.bot_policies).toHaveLength(8);
 		expect(result.llms_txt.exists).toBe(false);
@@ -294,23 +669,61 @@ describe("extractGeoEvaluationData", () => {
 		expect(result.path_access).toBeDefined();
 	});
 
-	it("includes strengths/weaknesses/opportunities fields", () => {
+	it("includes LLM-generated strengths/weaknesses/opportunities when chatLLM provided", async () => {
 		const homepage = makeCrawlData();
-		const result = extractGeoEvaluationData(homepage, []);
+		const result = await extractGeoEvaluationData(homepage, [], undefined, mockLLM);
 		expect(Array.isArray(result.strengths)).toBe(true);
 		expect(Array.isArray(result.weaknesses)).toBe(true);
 		expect(Array.isArray(result.opportunities)).toBe(true);
+		// Should be LLM-generated (from mock)
+		expect(result.strengths[0]?.title).toBe("AI 봇 크롤링 허용");
+		expect(result.weaknesses[0]?.title).toBe("llms.txt 미존재");
+		expect(result.opportunities[0]?.title).toBe("스키마 확장");
+	});
+
+	it("works without chatLLM (rule-based findings fallback)", async () => {
+		const homepage = makeCrawlData();
+		const result = await extractGeoEvaluationData(homepage, []);
+		expect(result.marketing_claims).toEqual([]);
+		// Without chatLLM, should use rule-based findings
+		expect(Array.isArray(result.strengths)).toBe(true);
+		expect(Array.isArray(result.weaknesses)).toBe(true);
+		expect(Array.isArray(result.opportunities)).toBe(true);
+	});
+
+	it("falls back to rule-based findings when LLM fails", async () => {
+		const failingLLM = async (req: LLMRequest): Promise<LLMResponse> => {
+			// Allow marketing claims call to succeed (returns empty)
+			const promptText = req.prompt ?? "";
+			if (promptText.includes("marketing claim")) {
+				return {
+					content: "[]",
+					model: "mock-model",
+					provider: "mock",
+					usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+					latency_ms: 10,
+					cost_usd: 0,
+				};
+			}
+			// Fail on findings prompt
+			throw new Error("LLM unavailable");
+		};
+		const homepage = makeCrawlData();
+		const result = await extractGeoEvaluationData(homepage, [], undefined, failingLLM);
+		// Should still have findings from rule-based fallback
+		expect(Array.isArray(result.strengths)).toBe(true);
+		expect(Array.isArray(result.weaknesses)).toBe(true);
 	});
 });
 
 // ── generateImprovements ──────────────────────────────
 
 describe("generateImprovements", () => {
-	it("recommends llms.txt when missing", () => {
+	it("recommends llms.txt when missing", async () => {
 		const data = {
 			bot_policies: parseRobotsTxt(null),
 			llms_txt: { exists: false, content_preview: null },
-			schema_coverage: extractSchemaCoverage([]),
+			schema_coverage: await extractSchemaCoverage([]),
 			marketing_claims: [],
 			js_dependency: {
 				script_count: 2,

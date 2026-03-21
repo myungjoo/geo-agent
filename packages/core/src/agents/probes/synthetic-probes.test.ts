@@ -16,14 +16,50 @@ const defaultContext: ProbeContext = {
 	brand: "Samsung",
 };
 
-function mockChatLLM(content: string) {
-	return vi.fn().mockResolvedValue({
-		content,
-		model: "gpt-4o",
-		provider: "openai",
-		usage: { prompt_tokens: 50, completion_tokens: 100, total_tokens: 150 },
-		latency_ms: 500,
-		cost_usd: 0.001,
+/**
+ * Smart mock that handles three call types per successful probe:
+ * 1. Probe query (json_mode: false) — return content string
+ * 2. Citation judgment (json_mode: true, system_instruction contains "citation analysis")
+ * 3. Accuracy judgment (json_mode: true, system_instruction contains "accuracy evaluation")
+ */
+function mockChatLLM(content: string, cited = true, accuracy = 0.7) {
+	return vi.fn().mockImplementation(async (req: { prompt: string; system_instruction?: string; json_mode?: boolean }) => {
+		// Distinguish citation vs accuracy by system_instruction content
+		if (req.json_mode === true) {
+			const sysInst = req.system_instruction || "";
+			const prompt = req.prompt || "";
+
+			if (sysInst.includes("accuracy evaluation") || prompt.includes("accuracy")) {
+				return {
+					content: JSON.stringify({ accuracy, reasoning: "mock accuracy judgment" }),
+					model: "gpt-4o",
+					provider: "openai",
+					usage: { prompt_tokens: 30, completion_tokens: 50, total_tokens: 80 },
+					latency_ms: 200,
+					cost_usd: 0.0005,
+				};
+			}
+
+			// Default json_mode call = citation judgment
+			return {
+				content: JSON.stringify({ cited, reasoning: "mock citation judgment" }),
+				model: "gpt-4o",
+				provider: "openai",
+				usage: { prompt_tokens: 30, completion_tokens: 50, total_tokens: 80 },
+				latency_ms: 200,
+				cost_usd: 0.0005,
+			};
+		}
+
+		// Non-json_mode = probe query
+		return {
+			content,
+			model: "gpt-4o",
+			provider: "openai",
+			usage: { prompt_tokens: 50, completion_tokens: 100, total_tokens: 150 },
+			latency_ms: 500,
+			cost_usd: 0.001,
+		};
 	});
 }
 
@@ -71,7 +107,8 @@ describe("Synthetic Probes", () => {
 			const result = await runProbes(defaultContext, { chatLLM: chat }, { delayMs: 0 });
 
 			expect(result.probes).toHaveLength(8);
-			expect(chat).toHaveBeenCalledTimes(8);
+			// 8 probes × 3 calls each (probe query + citation judgment + accuracy judgment)
+			expect(chat).toHaveBeenCalledTimes(24);
 		});
 
 		it("runs selected probes only", async () => {
@@ -85,12 +122,14 @@ describe("Synthetic Probes", () => {
 			expect(result.probes).toHaveLength(2);
 			expect(result.probes[0].probe_id).toBe("P-01");
 			expect(result.probes[1].probe_id).toBe("P-04");
+			// 2 probes × 3 calls each
+			expect(chat).toHaveBeenCalledTimes(6);
 		});
 	});
 
 	describe("runProbes — citation detection", () => {
 		it("detects citation by domain name", async () => {
-			const chat = mockChatLLM("자세한 정보는 samsung.com에서 확인하세요.");
+			const chat = mockChatLLM("자세한 정보는 samsung.com에서 확인하세요.", true);
 			const result = await runProbes(
 				defaultContext,
 				{ chatLLM: chat },
@@ -100,7 +139,7 @@ describe("Synthetic Probes", () => {
 		});
 
 		it("detects citation by site name", async () => {
-			const chat = mockChatLLM("Samsung에서 출시한 제품입니다.");
+			const chat = mockChatLLM("Samsung에서 출시한 제품입니다.", true);
 			const result = await runProbes(
 				defaultContext,
 				{ chatLLM: chat },
@@ -110,7 +149,7 @@ describe("Synthetic Probes", () => {
 		});
 
 		it("detects citation by brand name", async () => {
-			const chat = mockChatLLM("삼성전자의 Samsung Galaxy 시리즈입니다.");
+			const chat = mockChatLLM("삼성전자의 Samsung Galaxy 시리즈입니다.", true);
 			const result = await runProbes(
 				defaultContext,
 				{ chatLLM: chat },
@@ -120,7 +159,7 @@ describe("Synthetic Probes", () => {
 		});
 
 		it("reports no citation when not mentioned", async () => {
-			const chat = mockChatLLM("최신 스마트폰은 다양한 기능을 제공합니다.");
+			const chat = mockChatLLM("최신 스마트폰은 다양한 기능을 제공합니다.", false);
 			const result = await runProbes(
 				defaultContext,
 				{ chatLLM: chat },
@@ -132,8 +171,11 @@ describe("Synthetic Probes", () => {
 
 	describe("runProbes — verdict determination", () => {
 		it("PASS when cited and high accuracy", async () => {
+			// cited=true, accuracy=0.8 → PASS (cited && accuracy >= 0.5)
 			const chat = mockChatLLM(
-				"Samsung Galaxy S25 Ultra는 삼성의 플래그십 스마트폰으로, 가전 분야에서도 유명합니다. samsung.com에서 Galaxy S25 Ultra의 상세 스펙을 확인할 수 있습니다. 스마트폰 시장에서 Galaxy 브랜드는 높은 인지도를 자랑합니다.",
+				"Samsung Galaxy S25 Ultra는 삼성의 플래그십 스마트폰입니다.",
+				true,
+				0.8,
 			);
 			const result = await runProbes(
 				defaultContext,
@@ -144,7 +186,8 @@ describe("Synthetic Probes", () => {
 		});
 
 		it("FAIL when not cited and low accuracy", async () => {
-			const chat = mockChatLLM("일반적인 정보입니다.");
+			// cited=false, accuracy=0.1 → FAIL (not cited && accuracy < 0.3)
+			const chat = mockChatLLM("일반적인 정보입니다.", false, 0.1);
 			const result = await runProbes(
 				defaultContext,
 				{ chatLLM: chat },
@@ -156,7 +199,7 @@ describe("Synthetic Probes", () => {
 
 	describe("runProbes — summary", () => {
 		it("computes correct summary stats", async () => {
-			const chat = mockChatLLM("Samsung Galaxy S25 Ultra 관련 정보입니다.");
+			const chat = mockChatLLM("Samsung Galaxy S25 Ultra 관련 정보입니다.", true);
 			const result = await runProbes(defaultContext, { chatLLM: chat }, { delayMs: 0 });
 
 			expect(result.summary.total).toBe(8);
@@ -179,13 +222,40 @@ describe("Synthetic Probes", () => {
 			expect(result.probes[0].verdict).toBe("FAIL");
 			expect(result.probes[0].response).toContain("API timeout");
 			expect(result.probes[0].accuracy).toBe(0);
+			// Only 1 call: probe query fails, citation/accuracy judgment never called
+			expect(chat).toHaveBeenCalledTimes(1);
 		});
 
 		it("continues after individual probe failure", async () => {
 			let callCount = 0;
-			const chat = vi.fn().mockImplementation(async () => {
+			const chat = vi.fn().mockImplementation(async (req: { prompt: string; system_instruction?: string; json_mode?: boolean }) => {
 				callCount++;
+				// First call is the probe query for P-01 — fails
 				if (callCount === 1) throw new Error("First call fails");
+				// Calls 2-4 are for P-02: probe query, citation judgment, accuracy judgment
+
+				if (req.json_mode === true) {
+					const sysInst = req.system_instruction || "";
+					if (sysInst.includes("accuracy evaluation")) {
+						return {
+							content: JSON.stringify({ accuracy: 0.7, reasoning: "mock" }),
+							model: "gpt-4o",
+							provider: "openai",
+							usage: { prompt_tokens: 30, completion_tokens: 50, total_tokens: 80 },
+							latency_ms: 200,
+							cost_usd: 0.0005,
+						};
+					}
+					return {
+						content: JSON.stringify({ cited: true, reasoning: "mock" }),
+						model: "gpt-4o",
+						provider: "openai",
+						usage: { prompt_tokens: 30, completion_tokens: 50, total_tokens: 80 },
+						latency_ms: 200,
+						cost_usd: 0.0005,
+					};
+				}
+
 				return {
 					content: "Samsung response",
 					model: "gpt-4o",
@@ -205,6 +275,8 @@ describe("Synthetic Probes", () => {
 			expect(result.probes).toHaveLength(2);
 			expect(result.probes[0].verdict).toBe("FAIL");
 			expect(result.probes[1].verdict).not.toBe("FAIL");
+			// 1 call for failed P-01 + 3 calls for successful P-02 = 4
+			expect(chat).toHaveBeenCalledTimes(4);
 		});
 	});
 
@@ -212,8 +284,10 @@ describe("Synthetic Probes", () => {
 		it("higher accuracy with more topic matches", async () => {
 			const chatWithTopics = mockChatLLM(
 				"Samsung Galaxy S25 Ultra 스마트폰은 가전 분야의 Galaxy 시리즈입니다.",
+				true,
+				0.8,
 			);
-			const chatNoTopics = mockChatLLM("일반적인 제품 정보입니다.");
+			const chatNoTopics = mockChatLLM("일반적인 제품 정보입니다.", false, 0.2);
 
 			const r1 = await runProbes(
 				defaultContext,
@@ -235,12 +309,12 @@ describe("Synthetic Probes", () => {
 
 			const r1 = await runProbes(
 				defaultContext,
-				{ chatLLM: mockChatLLM(longResponse) },
+				{ chatLLM: mockChatLLM(longResponse, true, 0.8) },
 				{ probeIds: ["P-01"], delayMs: 0 },
 			);
 			const r2 = await runProbes(
 				defaultContext,
-				{ chatLLM: mockChatLLM(shortResponse) },
+				{ chatLLM: mockChatLLM(shortResponse, true, 0.3) },
 				{ probeIds: ["P-01"], delayMs: 0 },
 			);
 

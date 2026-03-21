@@ -27,11 +27,10 @@ function makeLLMResponse(content: string): LLMResponse {
 // ── safeLLMCall ─────────────────────────────────────────────
 
 describe("safeLLMCall", () => {
-	it("returns fallback when chatLLM is undefined", async () => {
-		const result = await safeLLMCall(undefined, { prompt: "test", json_mode: false }, (c) => c, "fallback");
-		expect(result.result).toBe("fallback");
-		expect(result.llm_used).toBe(false);
-		expect(result.latency_ms).toBeUndefined();
+	it("throws when chatLLM is undefined (4-D: LLM required)", async () => {
+		await expect(
+			safeLLMCall(undefined, { prompt: "test", json_mode: false }, (c) => c),
+		).rejects.toThrow("LLM provider is not configured");
 	});
 
 	it("returns parsed result when chatLLM succeeds", async () => {
@@ -40,45 +39,51 @@ describe("safeLLMCall", () => {
 			chatLLM,
 			{ prompt: "test", json_mode: false },
 			(c) => c.toUpperCase(),
-			"fallback",
 		);
 		expect(result.result).toBe("HELLO WORLD");
 		expect(result.llm_used).toBe(true);
 		expect(result.latency_ms).toBe(200);
 	});
 
-	it("returns fallback when chatLLM throws", async () => {
+	it("retries once on transient error then throws", async () => {
 		const chatLLM = vi.fn().mockRejectedValue(new Error("API error"));
-		const result = await safeLLMCall(chatLLM, { prompt: "test", json_mode: false }, (c) => c, "fallback");
-		expect(result.result).toBe("fallback");
-		expect(result.llm_used).toBe(false);
+		await expect(
+			safeLLMCall(chatLLM, { prompt: "test", json_mode: false }, (c) => c),
+		).rejects.toThrow("LLM call failed after retry: API error");
+		expect(chatLLM).toHaveBeenCalledTimes(2); // 1 original + 1 retry
 	});
 
-	it("sets llm_used flag correctly based on success/failure", async () => {
-		const chatLLMOk = vi.fn().mockResolvedValue(makeLLMResponse("ok"));
-		const chatLLMFail = vi.fn().mockRejectedValue(new Error("fail"));
-
-		const ok = await safeLLMCall(chatLLMOk, { prompt: "x", json_mode: false }, (c) => c, "fb");
-		const fail = await safeLLMCall(chatLLMFail, { prompt: "x", json_mode: false }, (c) => c, "fb");
-		const undef = await safeLLMCall(undefined, { prompt: "x", json_mode: false }, (c) => c, "fb");
-
-		expect(ok.llm_used).toBe(true);
-		expect(fail.llm_used).toBe(false);
-		expect(undef.llm_used).toBe(false);
-	});
-
-	it("returns fallback when parser throws", async () => {
-		const chatLLM = vi.fn().mockResolvedValue(makeLLMResponse("not json"));
+	it("succeeds on retry after first transient failure", async () => {
+		const chatLLM = vi
+			.fn()
+			.mockRejectedValueOnce(new Error("transient"))
+			.mockResolvedValueOnce(makeLLMResponse("ok"));
 		const result = await safeLLMCall(
 			chatLLM,
-			{ prompt: "test", json_mode: false },
-			() => {
-				throw new Error("parse error");
-			},
-			"fallback",
+			{ prompt: "x", json_mode: false },
+			(c) => c,
 		);
-		expect(result.result).toBe("fallback");
-		expect(result.llm_used).toBe(false);
+		expect(result.result).toBe("ok");
+		expect(result.llm_used).toBe(true);
+		expect(chatLLM).toHaveBeenCalledTimes(2);
+	});
+
+	it("throws immediately on auth error without retry", async () => {
+		const chatLLM = vi.fn().mockRejectedValue(new Error("401 Unauthorized"));
+		await expect(
+			safeLLMCall(chatLLM, { prompt: "x", json_mode: false }, (c) => c),
+		).rejects.toThrow("401 Unauthorized");
+		expect(chatLLM).toHaveBeenCalledTimes(1); // no retry for auth errors
+	});
+
+	it("throws when parser throws after retry", async () => {
+		const chatLLM = vi.fn().mockResolvedValue(makeLLMResponse("not json"));
+		await expect(
+			safeLLMCall(chatLLM, { prompt: "test", json_mode: false }, () => {
+				throw new Error("parse error");
+			}),
+		).rejects.toThrow("LLM call failed after retry: parse error");
+		expect(chatLLM).toHaveBeenCalledTimes(2); // retried once
 	});
 });
 

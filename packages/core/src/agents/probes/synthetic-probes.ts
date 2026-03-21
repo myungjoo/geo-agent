@@ -142,50 +142,109 @@ const PROBE_DEFINITIONS: ProbeDefinition[] = [
 	},
 ];
 
-// ── Citation/Accuracy Analysis ───────────────────────────────
+// ── Citation/Accuracy Analysis (LLM-based, 4-D) ─────────────
 
-function checkCitation(
+/**
+ * LLM-based citation check: asks the LLM to judge whether the response
+ * cited or referenced the target site. Catches indirect citations,
+ * paraphrases, and URL variants that string matching would miss.
+ */
+async function checkCitation(
 	response: string,
 	siteUrl: string,
 	siteName: string,
 	brand: string,
-): boolean {
-	const lower = response.toLowerCase();
-	const urlDomain = new URL(siteUrl).hostname.replace("www.", "");
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>,
+): Promise<boolean> {
+	const judgeResponse = await chatLLM({
+		prompt: `Analyze this AI-generated response and determine if it cites, references, or mentions the target website.
 
-	return (
-		lower.includes(urlDomain) ||
-		lower.includes(siteName.toLowerCase()) ||
-		(brand.length > 1 && lower.includes(brand.toLowerCase()))
-	);
+Target website:
+- URL: ${siteUrl}
+- Site name: ${siteName}
+- Brand: ${brand}
+
+AI response to analyze:
+"""
+${response.slice(0, 1500)}
+"""
+
+Does the response cite, reference, or mention the target website (including indirect references, paraphrases, or URL variants)?
+Respond with JSON: { "cited": true/false, "reasoning": "brief explanation" }`,
+		system_instruction:
+			"You are a citation analysis expert. Determine if a given text references a specific website. Look for: direct URL mentions, domain references, brand/site name mentions, indirect references, and paraphrased content attribution. Be thorough but accurate. Respond with JSON only.",
+		json_mode: true,
+		temperature: 0.1,
+		max_tokens: 200,
+	});
+
+	try {
+		const parsed = JSON.parse(judgeResponse.content);
+		return !!parsed.cited;
+	} catch {
+		// If JSON parse fails, fall back to checking for "true" in response
+		return judgeResponse.content.toLowerCase().includes('"cited": true') ||
+			judgeResponse.content.toLowerCase().includes('"cited":true');
+	}
 }
 
-function estimateAccuracy(response: string, context: ProbeContext, cited: boolean): number {
-	let score = 0;
-	const lower = response.toLowerCase();
+/**
+ * LLM-based accuracy estimation: asks the LLM to judge how accurately
+ * the probe response reflects the target site's actual data.
+ * Provides ProbeContext (topics, products, prices) for comparison.
+ */
+async function estimateAccuracy(
+	response: string,
+	context: ProbeContext,
+	cited: boolean,
+	chatLLM: (req: LLMRequest) => Promise<LLMResponse>,
+): Promise<number> {
+	const contextInfo = [
+		context.topics.length > 0 ? `Topics: ${context.topics.join(", ")}` : null,
+		context.products.length > 0 ? `Products: ${context.products.join(", ")}` : null,
+		context.prices.length > 0 ? `Prices: ${context.prices.join(", ")}` : null,
+		`Brand: ${context.brand}`,
+		`Site: ${context.site_name} (${context.site_url})`,
+	]
+		.filter(Boolean)
+		.join("\n");
 
-	// 인용 여부
-	if (cited) score += 0.3;
+	const judgeResponse = await chatLLM({
+		prompt: `Evaluate the accuracy of this AI-generated response against the known facts about the target site.
 
-	// 관련 키워드 언급
-	const topicMatches = context.topics.filter((t) => lower.includes(t.toLowerCase())).length;
-	if (context.topics.length > 0) {
-		score += 0.3 * Math.min(topicMatches / context.topics.length, 1);
-	} else {
-		score += 0.15;
+Known facts about the target:
+${contextInfo}
+Was the target cited in the response: ${cited ? "Yes" : "No"}
+
+AI response to evaluate:
+"""
+${response.slice(0, 1500)}
+"""
+
+Rate the accuracy from 0.0 to 1.0 based on:
+- How well the response reflects the actual products, topics, and prices
+- Whether product names, specs, or brand information are correctly stated
+- Whether the response contains relevant and factual information about the target
+- Deduct for fabricated or incorrect information
+
+Respond with JSON: { "accuracy": 0.0-1.0, "reasoning": "brief explanation" }`,
+		system_instruction:
+			"You are an accuracy evaluation expert. Rate how accurately an AI response reflects known facts about a website. Be strict: fabricated details score low, verified facts score high. Respond with JSON only.",
+		json_mode: true,
+		temperature: 0.1,
+		max_tokens: 200,
+	});
+
+	try {
+		const parsed = JSON.parse(judgeResponse.content);
+		const accuracy = Number(parsed.accuracy);
+		if (Number.isFinite(accuracy)) {
+			return Math.min(Math.max(Math.round(accuracy * 100) / 100, 0), 1);
+		}
+	} catch {
+		// Fallback: try to extract number from response
 	}
-
-	// 제품명 언급
-	const productMatches = context.products.filter((p) => lower.includes(p.toLowerCase())).length;
-	if (context.products.length > 0) {
-		score += 0.2 * Math.min(productMatches / context.products.length, 1);
-	}
-
-	// 응답 길이 (너무 짧으면 감점)
-	if (response.length > 200) score += 0.1;
-	if (response.length > 500) score += 0.1;
-
-	return Math.min(Math.round(score * 100) / 100, 1);
+	return 0;
 }
 
 function determineVerdict(cited: boolean, accuracy: number): "PASS" | "PARTIAL" | "FAIL" {
@@ -228,13 +287,14 @@ export async function runProbes(
 				json_mode: false,
 			});
 
-			const cited = checkCitation(
+			const cited = await checkCitation(
 				llmResponse.content,
 				context.site_url,
 				context.site_name,
 				context.brand,
+				deps.chatLLM,
 			);
-			const accuracy = estimateAccuracy(llmResponse.content, context, cited);
+			const accuracy = await estimateAccuracy(llmResponse.content, context, cited, deps.chatLLM);
 			const verdict = determineVerdict(cited, accuracy);
 
 			results.push({

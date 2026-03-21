@@ -236,7 +236,7 @@ ${tasks.map((t) => `- [${t.priority}] ${t.title}: ${t.description}`).join("\n")}
 
 Generate a complete strategy as JSON. Include tasks that address the most impactful improvements. Use change_type values from: METADATA, SCHEMA_MARKUP, LLMS_TXT, SEMANTIC_STRUCTURE, CONTENT_DENSITY, FAQ_SECTION, INTERNAL_LINKING, IMAGE_ALT, CANONICAL, SITEMAP.`;
 
-		const { result: llmStrategy, llm_used } = await safeLLMCall(
+		const { result: llmStrategy } = await safeLLMCall(
 			deps.chatLLM,
 			{
 				prompt,
@@ -247,10 +247,9 @@ Generate a complete strategy as JSON. Include tasks that address the most impact
 				max_tokens: 3000,
 			},
 			(content) => parseJsonResponse(content, StrategyLLMResponseSchema),
-			null,
 		);
 
-		if (llm_used && llmStrategy) {
+		if (llmStrategy) {
 			strategyRationale = llmStrategy.strategy_rationale;
 			llmEstimatedDelta = llmStrategy.estimated_delta ?? 0;
 			llmConfidence = llmStrategy.confidence ?? 0.5;
