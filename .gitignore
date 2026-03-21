@@ -6,6 +6,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Test coverage
+coverage/
+
 # Environment
 .env
 .env.*
