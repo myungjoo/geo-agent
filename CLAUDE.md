@@ -1,5 +1,7 @@
 # GEO Agent System — 작업 기록 및 지침
 
+> **Claude Code 도구 규칙**: Read 도구 사용 시 limit을 명시하지 않을 경우 항상 `limit: 4000`을 지정하라.
+
 ## 프로젝트 개요
 
 **GEO (Generative Engine Optimization)** Agent System: LLM 서비스(ChatGPT, Claude, Gemini, Perplexity 등)가 Target Web Page의 데이터를 우선적으로, 정확하게 참조하도록 콘텐츠를 최적화하는 에이전트 시스템.
