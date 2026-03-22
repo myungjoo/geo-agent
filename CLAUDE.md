@@ -2,6 +2,37 @@
 
 > **Claude Code 도구 규칙**: Read 도구 사용 시 limit을 명시하지 않을 경우 항상 `limit: 4000`을 지정하라.
 
+## 빌드 산출물 및 .gitignore 규칙
+
+### 절대 생성/커밋하지 말 것
+
+아래 패턴의 파일은 TypeScript 빌드 산출물이다. 소스 코드와 같은 디렉토리(`src/`)에 있더라도 **절대 새로 생성하거나 `git add`하지 말 것**.
+
+| 패턴 | 설명 |
+|------|------|
+| `*.js` (src/ 내) | TypeScript 컴파일 결과. **소스는 반드시 `.ts`로만 작성** |
+| `*.js.map` | JavaScript source map |
+| `*.d.ts` (src/ 내) | TypeScript 선언 파일 (컴파일러가 생성) |
+| `*.d.ts.map` | 선언 파일 source map |
+| `*.tsbuildinfo` | TypeScript 증분 빌드 캐시 |
+| `dist/` | 빌드 출력 디렉토리 |
+| `coverage/` | 테스트 커버리지 리포트 |
+| `node_modules/` | 의존성 |
+| `run/` | 실행 테스트 환경 격리 디렉토리 |
+| `*.db`, `*.sqlite` | 런타임 데이터베이스 파일 |
+
+### 새 파일 작성 시 체크리스트
+
+1. **소스 코드는 `.ts` 확장자만 사용** — `.js` 파일을 `src/` 내에 직접 작성하지 않는다
+2. **`git add` 전 `git status`로 빌드 산출물 포함 여부 확인** — `.js`, `.d.ts`, `.map` 파일이 staging에 포함되면 제거
+3. **`git add`는 파일명을 명시** — `git add .`이나 `git add -A` 사용 금지
+4. **새 설정/데이터 파일 생성 시 `.gitignore` 패턴에 해당하는지 확인**
+
+### 허용되는 예외
+
+- `drizzle.config.ts` → 빌드 산출물인 `drizzle.config.js`가 존재하나, 이는 레거시 (향후 정리 예정)
+- `drizzle/` 디렉토리 — 마이그레이션 SQL 및 메타데이터 (소스로 취급)
+
 ## 프로젝트 개요
 
 **GEO (Generative Engine Optimization)** Agent System: LLM 서비스(ChatGPT, Claude, Gemini, Perplexity 등)가 Target Web Page의 데이터를 우선적으로, 정확하게 참조하도록 콘텐츠를 최적화하는 에이전트 시스템.
