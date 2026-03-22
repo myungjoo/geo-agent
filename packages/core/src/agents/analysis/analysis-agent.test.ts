@@ -290,10 +290,45 @@ describe("Analysis Agent", () => {
 			).rejects.toThrow("LLM unavailable");
 		});
 
-		it("report.current_geo_score has structured_score from S2", async () => {
+		it("report.current_geo_score has structured_score from overall_score (Level 2)", async () => {
 			const deps = makeDeps();
 			const result = await runAnalysis(defaultInput, deps);
-			expect(result.report.current_geo_score.structured_score).toBe(85);
+			expect(result.report.current_geo_score.structured_score).toBe(71); // overall_score = S1~S7 가중 합산
+		});
+
+		it("structured_score equals total (both from overall_score)", async () => {
+			const deps = makeDeps();
+			const result = await runAnalysis(defaultInput, deps);
+			expect(result.report.current_geo_score.structured_score).toBe(
+				result.report.current_geo_score.total,
+			);
+		});
+
+		it("structured_score is NOT S2 dimension score", async () => {
+			const deps = makeDeps();
+			const result = await runAnalysis(defaultInput, deps);
+			// S2 = 85, overall_score = 71 — structured_score should be overall, not S2
+			expect(result.report.current_geo_score.structured_score).not.toBe(85);
+		});
+
+		it("structured_score varies with different overall_score", async () => {
+			const deps = makeDeps();
+			deps.scoreTarget = vi.fn().mockReturnValue({
+				overall_score: 42,
+				grade: "Poor",
+				dimensions: [
+					{ id: "S1", label: "S1", score: 10, weight: 0.15, details: [] },
+					{ id: "S2", label: "S2", score: 90, weight: 0.25, details: [] },
+					{ id: "S3", label: "S3", score: 30, weight: 0.2, details: [] },
+					{ id: "S4", label: "S4", score: 50, weight: 0.1, details: [] },
+					{ id: "S5", label: "S5", score: 50, weight: 0.1, details: [] },
+					{ id: "S6", label: "S6", score: 20, weight: 0.1, details: [] },
+					{ id: "S7", label: "S7", score: 40, weight: 0.1, details: [] },
+				],
+			});
+			const result = await runAnalysis(defaultInput, deps);
+			expect(result.report.current_geo_score.structured_score).toBe(42);
+			expect(result.report.current_geo_score.total).toBe(42);
 		});
 
 		it("report.current_geo_score.total matches overall score", async () => {
@@ -307,7 +342,17 @@ describe("Analysis Agent", () => {
 			const result = await runAnalysis(defaultInput, deps);
 			expect(result.report.current_geo_score.citation_rate).toBe(0);
 			expect(result.report.current_geo_score.citation_accuracy).toBe(0);
+			expect(result.report.current_geo_score.coverage).toBe(0); // Probe 실행 후 반영
 			expect(result.report.current_geo_score.rank_position).toBe(0);
+		});
+
+		it("coverage is 0 regardless of S3 dimension score", async () => {
+			const deps = makeDeps();
+			// S3 = 70 in default mock, but coverage should still be 0
+			const result = await runAnalysis(defaultInput, deps);
+			expect(result.report.current_geo_score.coverage).toBe(0);
+			// Verify S3 exists in dimensions but doesn't leak into coverage
+			expect(result.geo_scores.dimensions.find((d) => d.id === "S3")?.score).toBe(70);
 		});
 	});
 
