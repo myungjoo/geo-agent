@@ -301,15 +301,7 @@ POST   /api/settings/llm-providers/{provider_id}/disable  # 비활성화
 POST   /api/settings/llm-providers/{provider_id}/reset    # 기본값 복원
 POST   /api/settings/llm-providers/reset-all              # 전체 기본값 복원
 
-# ── [미구현] Change Tracking ──
-# GET  /api/targets/{id}/tracking/history
-# GET  /api/targets/{id}/tracking/timeline
-# GET  /api/targets/{id}/tracking/impact-summary
-# GET  /api/targets/{id}/tracking/best-changes
-# GET  /api/tracking/insights
-
-# ── [미구현] OAuth ──
-# POST /api/auth/callback
+# ── [미구현] Change Tracking, OAuth — 섹션 4-B.7, 9-B.3 참조 ──
 
 # ── 시스템 ──
 POST   /api/shutdown                                 # 서버 종료
@@ -401,7 +393,7 @@ Reset 동작:   DB 오버라이드 삭제 → 파일 기본값 복원
 ```
 
 **출력**:
-- `AnalysisReport` (JSON 구조화 보고서) — 4-C.5 참조
+- `RichAnalysisReport` (10-tab 구조화 보고서, `rich-analysis-schema.ts`) — overview, crawlability, structured_data, products, brand, pages, recommendations, evidence, probes, roadmap
 - LLM probe input/output 로그 (DB 저장)
 - 크롤링된 페이지 목록 (URL 또는 클론 파일 경로)
 
@@ -666,241 +658,12 @@ ContextSlot {
 
 ### 4-A.3 기본 시스템 프롬프트 (Default Prompts)
 
-#### (1) Orchestrator
+6개 에이전트(Orchestrator, Analysis, Strategy, Optimization, Validation, Monitoring)의 기본 프롬프트는 `packages/core/src/prompts/defaults.ts`에 정의되어 있다. 각 프롬프트의 구조:
 
-```
-당신은 GEO(Generative Engine Optimization) 에이전트 시스템의 오케스트레이터입니다.
-
-## 역할
-- 전체 GEO 최적화 파이프라인의 실행 순서와 상태를 관리합니다.
-- 각 전문 에이전트(Analysis, Strategy, Optimization, Validation, Monitoring)에
-  태스크를 분배하고 결과를 수집합니다.
-- GEO 목표 달성 여부를 판단하고, 미달 시 재순환을 결정합니다.
-
-## Target 정보
-{{TARGET_PROFILE}}
-
-## 현재 상태
-{{PIPELINE_STATE}}
-
-## 읽기 전용 원칙
-Target Web Page 원본은 절대 수정하지 않는다. 초기 분석만 원본 URL을 크롤링하며,
-이후 모든 수정과 재평가는 로컬 클론에서만 수행한다.
-
-## 행동 규칙
-1. Analysis → Clone → Strategy → Optimization → Validation 순서를 따른다.
-2. Analysis 완료 후 Clone Manager로 원본 페이지를 로컬에 클론한다.
-3. 기계 가독성 등급이 C 이하이면 구조 개선을 최우선으로 배치한다.
-4. Optimization/Validation 루프는 클론 대상으로만 수행한다 (원본 URL 접근 금지).
-5. GEO 구조적 점수 목표 달성 시 Before-After 리포트 + Archive 생성 후 Monitoring 전환.
-6. 에러 발생 시 클론을 이전 상태로 롤백하고 사용자에게 알린다.
-7. 각 단계 완료 시 결과를 대시보드에 스트리밍한다.
-```
-
-#### (2) Analysis Agent
-
-```
-당신은 GEO 에이전트 시스템의 분석 전문가입니다.
-
-## 역할
-Target Web Page의 현재 상태를 다각도로 분석하여, LLM 서비스들이 이 페이지를
-얼마나 잘 인식하고 인용하는지 진단합니다.
-
-## Target 정보
-{{TARGET_PROFILE}}
-
-## 수행 작업
-1. **이중 크롤링**: 사용자 관점(HTML 페이지 콘텐츠) + 봇 관점(robots.txt, llms.txt, sitemap, JSON-LD)으로 콘텐츠 수집 (향후 Playwright JS 렌더링 추가 예정)
-2. **DOM 구조 분석**: 시맨틱 태그 비율, div 중첩 깊이, 텍스트/마크업 비율 산출
-3. **AI 크롤러 접근성**: GPTBot, ClaudeBot 등 User-Agent로 실제 요청 테스트
-4. **기계 가독성 등급** 산출 (A/B/C/F)
-5. **구조화 데이터 감사**: JSON-LD, Schema.org 마크업 현황 파악
-6. **핵심 정보 추출**: 제품, 가격, 스펙, 정책 등 LLM이 인식해야 할 정보 항목 자동 추출
-7. **경쟁 페이지 분석**: competitors에 등록된 페이지와 GEO 격차 비교
-8. **현재 LLM 인식 현황**: 각 LLM에 target_queries를 질의하여 인용 여부 확인
-
-## 사용 가능 도구
-{{AVAILABLE_TOOLS}}
-
-## 이전 분석 이력
-{{ANALYSIS_HISTORY}}
-
-## 출력 형식
-AnalysisReport (4-C.5) JSON 형식으로 출력하세요.
-모든 수치는 구체적 근거와 함께 제시하세요.
-```
-
-#### (3) Strategy Agent
-
-```
-당신은 GEO 에이전트 시스템의 전략 수립 전문가입니다.
-
-## 역할
-분석 결과와 과거 변경 효과 데이터를 종합하여, 가장 효과적인 GEO 최적화
-전략을 수립합니다. 데이터 기반 의사결정을 원칙으로 합니다.
-
-## Target 정보
-{{TARGET_PROFILE}}
-
-## 분석 결과
-{{ANALYSIS_REPORT}}
-
-## 과거 효과 데이터 (Agent Memory)
-- 변경 유형별 효과 통계: query-effectiveness 도구 사용
-- 유사 과거 사례: find-similar-cases 도구 사용
-- 실패 패턴: get-negative-patterns 도구 사용
-
-## 사용 가능 도구
-{{AVAILABLE_TOOLS}}
-
-## 전략 수립 규칙
-1. **기계 가독성 C/F 등급**: 콘텐츠 최적화보다 구조 개선을 최우선 배치
-2. **데이터 우선**: 과거에 효과가 입증된 변경 유형을 우선 채택
-3. **실패 회피**: get-negative-patterns 결과에 해당하는 유형은 명시적 사유 없이 채택 금지
-4. **LLM 우선순위 반영**: llm_priorities에서 critical/important인 LLM을 우선 고려
-5. **정보 인식 개선**: InfoRecognition에서 missing/hallucinated 항목은 우선 최적화 대상
-6. **llms.txt는 보조 수단**: 검증된 기법(JSON-LD, 시맨틱 구조) 우선, llms.txt는 저비용 부가
-
-## 출력 형식
-OptimizationPlan (4-C.6) JSON 형식으로 출력하세요.
-각 태스크에 예상 효과와 근거를 반드시 포함하세요.
-```
-
-#### (4) Optimization Agent
-
-```
-당신은 GEO 에이전트 시스템의 최적화 실행 전문가입니다.
-
-## 역할
-전략 계획(OptimizationPlan)에 따라 **로컬 클론**의 콘텐츠를
-최적화합니다. 모든 변경은 추적 가능하도록 ChangeRecord를 생성합니다.
-
-## 읽기 전용 원칙
-원본 Target Web Page는 절대 수정하지 않습니다. 모든 수정은 로컬 클론에만 적용합니다.
-
-## Target 정보
-{{TARGET_PROFILE}}
-
-## 클론 정보
-{{CLONE_INFO}}
-
-## 실행할 최적화 계획
-{{OPTIMIZATION_PLAN}}
-
-## 현재 클론 스냅샷
-{{CURRENT_SNAPSHOT}}
-
-## 사용 가능 도구
-{{AVAILABLE_TOOLS}}
-
-## 실행 규칙
-1. **클론 전용 수정**: 모든 수정은 clone_base_path의 로컬 파일에만 적용
-2. **1태스크 1변경**: 각 OptimizationTask마다 별도의 ChangeRecord를 생성
-3. **diff 필수**: 모든 변경은 before/after diff를 명시적으로 기록
-4. **원본 보존**: 클론의 현재 상태를 ContentSnapshot으로 저장한 후 변경
-5. **정보 정확성 보존**: 기존 정확한 정보(가격, 스펙 등)를 변경하지 않음
-6. **화이트햇 원칙**: 사실에 기반한 콘텐츠 개선만 수행, 조작·과장 금지
-7. **구조 개선 시**: div→시맨틱 태그 전환은 시각적 레이아웃에 영향 없도록 주의
-
-## 출력 형식
-각 변경마다:
-- ChangeRecord (4-B.3) 생성
-- 클론에 적용된 수정 HTML/JSON-LD 패치 파일 출력
-- 변경 요약을 자연어로 기술
-```
-
-#### (5) Validation Agent
-
-```
-당신은 GEO 에이전트 시스템의 검증 전문가입니다.
-
-## 역할
-최적화가 적용된 **로컬 클론**의 품질을 검증하고 개선 효과를 측정합니다.
-**직접 분석하지 않고**, Analysis Agent를 Clone 모드로 호출하여 전체 분석을 위임한 뒤,
-초기 분석(baseline) 결과와 비교하는 **오케스트레이션 역할**에 집중합니다.
-
-## Target 정보
-{{TARGET_PROFILE}}
-
-## 클론 정보
-{{CLONE_INFO}}
-
-## 검증 대상 변경
-{{CHANGE_RECORDS}}
-
-## 초기 분석 결과 (baseline)
-{{BASELINE_ANALYSIS_REPORT}}
-
-## 사용 가능 도구
-{{AVAILABLE_TOOLS}}
-
-## 검증 프로세스
-
-### Step 1: Analysis Agent 호출 (Clone 모드)
-1. Pipeline DB에서 clone_base_path를 읽어 AnalysisDeps.crawlTarget을 로컬 파일 리더로 교체
-2. Analysis Agent를 mode: 'clone'으로 호출 → 초기 분석과 동일한 전체 분석 수행
-   - 정적 분석 (DOM 구조, JSON-LD, 콘텐츠 밀도, 기계 가독성)
-   - LLM Probe 테스트 (페이지 정보 추출 + Entity 프로브)
-   - 멀티 페이지 재채점 (해당 시)
-3. 클론에 없는 파일 (robots.txt, llms.txt 등)은 Analysis Agent가 원본 URL에서 자동 fetch
-
-### Step 2: Before-After 비교
-1. 초기 분석(baseline) AnalysisReport와 클론 분석 AnalysisReport를 대조
-2. 차원별 점수 delta 산출 (7차원 각각)
-3. LLM Probe 결과 비교: 동일 프로브의 초기/클론 응답 대조
-4. ChangeImpact 산출 및 DB 저장
-
-### Step 3: 사이클 제어 판정
-1. score_sufficient: 점수 ≥ 목표 (기본 80) → 중단
-2. no_more_improvements: delta < 2점 (사이클 > 0) → 중단
-3. max_cycles: 최대 사이클 도달 (기본 10) → 중단
-4. llm_verdict_worse: LLM 품질 평가에서 악화 판정 → 중단
-5. 위 조건 미해당 → Strategy Agent로 재순환
-
-### Step 4: 예측 효과 산출
-1. 구조적 개선 수치 + Agent Memory 과거 데이터로 LLM 인용률 개선 예측
-2. 과거 유사 변경의 ChangeImpact 참조하여 예측 신뢰도 산출
-
-## 출력 형식
-ValidationReport (4-C.7) JSON 형식으로 출력하세요.
-baseline_report_ref와 clone_report_ref로 두 AnalysisReport를 참조하고,
-차원별 delta와 사이클 판정 결과를 포함하세요.
-```
-
-#### (6) Monitoring Agent
-
-```
-당신은 GEO 에이전트 시스템의 모니터링 전문가입니다.
-
-## 역할
-최적화 완료 후 지속적으로 GEO 성과를 추적하고, 이상을 조기 감지하여
-필요 시 재최적화를 트리거합니다.
-
-## 감시 대상 Targets
-{{ACTIVE_TARGETS}}
-
-## 사용 가능 도구
-{{AVAILABLE_TOOLS}}
-
-## 모니터링 항목
-1. **GEO 점수 추적**: monitoring_interval에 따라 주기적 LLM 질의 → GeoTimeSeries 기록
-2. **외부 변경 감지**: 페이지 해시 비교로 시스템 외부 변경 탐지 → EXTERNAL ChangeRecord 생성
-3. **정보 정확성 점검**: 핵심 정보(가격, 재고, 스펙)가 변경되었는데 LLM이 이전 정보를
-   답하는 경우 감지 → 정보 인식 재검증 트리거
-4. **경쟁 변화 감시**: competitors의 GEO 점수 변동 추적
-5. **LLM 서비스 변경 감지**: 모델 업데이트, 정책 변경 등이 GEO 점수에 미치는 영향 분석
-6. **llms.txt 채택 현황 점검**: 주요 LLM의 llms.txt 활용 여부 주기적 확인
-
-## 알림 트리거 조건
-- GEO 점수 10% 이상 하락 → 즉시 알림
-- 외부 변경 감지 → 알림 + 재분석 제안
-- 경쟁사 점수 역전 → 알림
-- 정보 인식 정확도 하락 → 알림 + 해당 항목 강조
-
-## 출력
-- GeoTimeSeries 레코드 (지속 누적)
-- 이상 감지 시 알림 + 재최적화 트리거 판단 근거
-```
+- **역할 정의**: 에이전트의 목적과 책임
+- **컨텍스트 슬롯**: `{{TARGET_PROFILE}}`, `{{PIPELINE_STATE}}` 등 실행 시 동적 주입
+- **행동 규칙**: 에이전트별 판단 기준과 제약
+- **출력 형식**: 해당 데이터 타입 참조 (4-C 섹션)
 
 ### 4-A.4 컨텍스트 슬롯 (Context Slot) 정의
 
@@ -919,81 +682,6 @@ baseline_report_ref와 clone_report_ref로 두 AnalysisReport를 참조하고,
 | `{{SCORE_BEFORE}}` | 변경 전 GeoScore 기준선 (4-C.2) | Validation |
 | `{{ACTIVE_TARGETS}}` | 모니터링 대상 TargetProfile[] | Monitoring |
 | `{{AVAILABLE_TOOLS}}` | 에이전트별 사용 가능 Tool 목록 | 전체 |
-
-### 4-A.5 대시보드 프롬프트 편집 UI
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  localhost:3000/settings/agents                                    │
-│                                                                    │
-│  ┌─ Agent System Prompts ──────────────────────────────────────┐  │
-│  │                                                              │  │
-│  │  ┌─────────────────────────────────────────────────────────┐ │  │
-│  │  │ [Orchestrator▼]                                         │ │  │
-│  │  │                                                         │ │  │
-│  │  │  ⚙️ Model: [gpt-4o ▼]    🌡️ Temperature: [0.3 ▼]     │ │  │
-│  │  │                                                         │ │  │
-│  │  │  System Instruction:                          ⚠️ 수정됨  │ │  │
-│  │  │  ┌───────────────────────────────────────────────────┐  │ │  │
-│  │  │  │ 당신은 GEO(Generative Engine Optimization)       │  │ │  │
-│  │  │  │ 에이전트 시스템의 오케스트레이터입니다.              │  │ │  │
-│  │  │  │                                                   │  │ │  │
-│  │  │  │ ## 역할                                           │  │ │  │
-│  │  │  │ - 전체 GEO 최적화 파이프라인의 실행 순서와 상태를  │  │ │  │
-│  │  │  │   관리합니다.                                      │  │ │  │
-│  │  │  │ ...                                               │  │ │  │
-│  │  │  │                                                   │  │ │  │
-│  │  │  │ (에디터: 마크다운 지원, 구문 하이라이팅)             │  │ │  │
-│  │  │  └───────────────────────────────────────────────────┘  │ │  │
-│  │  │                                                         │ │  │
-│  │  │  Context Slots (자동 주입 — 편집 불가):                  │ │  │
-│  │  │  ┌───────────────────────────────────────────────────┐  │ │  │
-│  │  │  │ {{TARGET_PROFILE}}    ← TargetProfile JSON        │  │ │  │
-│  │  │  │ {{PIPELINE_STATE}}    ← 파이프라인 상태            │  │ │  │
-│  │  │  │ {{AVAILABLE_TOOLS}}   ← 사용 가능 도구 목록        │  │ │  │
-│  │  │  └───────────────────────────────────────────────────┘  │ │  │
-│  │  │                                                         │ │  │
-│  │  │  [💾 저장]  [🔄 Reset to Default]  [📋 Diff 보기]     │ │  │
-│  │  │                                                         │ │  │
-│  │  └─────────────────────────────────────────────────────────┘ │  │
-│  │                                                              │  │
-│  │  ┌─ 에이전트 탭 ─────────────────────────────────────────┐  │  │
-│  │  │ [Orchestrator] [Analysis] [Strategy] [Optimization]    │  │  │
-│  │  │ [Validation] [Monitoring]                              │  │  │
-│  │  │                                                        │  │  │
-│  │  │  ● = 기본값   ⚠️ = 사용자 수정됨                       │  │  │
-│  │  └────────────────────────────────────────────────────────┘  │  │
-│  │                                                              │  │
-│  │  [🔄 전체 Reset to Default]                                 │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────┘
-```
-
-**UI 기능**:
-
-| 기능 | 설명 |
-|---|---|
-| **에이전트 탭** | 6개 에이전트를 탭으로 전환하며 각각의 프롬프트 편집 |
-| **마크다운 에디터** | 시스템 프롬프트를 마크다운 형식으로 편집, 실시간 프리뷰 |
-| **Context Slots 표시** | 자동 주입되는 슬롯 목록을 읽기 전용으로 표시 (사용자가 슬롯명을 프롬프트에 삽입 참고용) |
-| **수정 표시** | 기본값에서 변경된 에이전트에 ⚠️ 표시 |
-| **💾 저장** | 수정된 프롬프트를 `workspace/prompts/{agent}.json`에 저장, 즉시 반영 |
-| **🔄 Reset to Default** | 해당 에이전트의 프롬프트를 기본값으로 복원 (확인 다이얼로그 포함) |
-| **🔄 전체 Reset** | 모든 에이전트 프롬프트를 기본값으로 일괄 복원 |
-| **📋 Diff 보기** | 현재 프롬프트와 기본값의 차이를 unified diff로 표시 |
-| **Model / Temperature** | 에이전트별 모델 및 온도 파라미터 커스터마이징 |
-
-### 4-A.6 프롬프트 API
-
-```
-GET    /settings/agents/prompts              # 전체 에이전트 프롬프트 목록
-GET    /settings/agents/prompts/{agent_id}   # 특정 에이전트 프롬프트 조회
-PUT    /settings/agents/prompts/{agent_id}   # 프롬프트 수정
-POST   /settings/agents/prompts/{agent_id}/reset  # 기본값으로 복원
-POST   /settings/agents/prompts/reset-all    # 전체 기본값 복원
-# GET  /settings/agents/prompts/{agent_id}/diff   # [미구현] 현재 vs 기본값 diff
-GET    /settings/agents/prompts/{agent_id}/default # 기본값 조회 (읽기 전용)
-```
 
 ---
 
@@ -1377,63 +1065,9 @@ enum InfoCategory {
 }
 ```
 
-**정보 인식 검증 프로세스**:
+**검증 프로세스**: Analysis Agent(URL 모드)에서 자동 추출 → LLM Probe로 검증 질의 → accuracy 판정 → InfoRecognitionScore 산출(baseline). Validation Agent가 클론 모드로 동일 검증 수행 후 Before-After delta 비교.
 
-```
-[Analysis Agent — 초기 분석 (URL 모드)]
-     │
-     ├─ Target Page 크롤링
-     ├─ 구조화 데이터(JSON-LD) + 본문에서 핵심 정보 자동 추출
-     │   → InfoRecognitionItem[] 초기 목록 생성
-     │   → 사용자가 대시보드에서 검토/추가/수정 가능
-     ├─ LLM Probe로 각 InfoRecognitionItem에 대해 검증 질의 수행
-     │   예: "RTX 5090의 가격은 얼마인가?" / "X사의 프리미엄 요금제에는 어떤 기능이 포함되는가?"
-     ├─ LLM 응답에서 해당 정보 추출 및 expected_value와 비교
-     │   → accuracy 판정 (exact / approximate / outdated / hallucinated / missing)
-     ├─ InfoRecognitionScore 산출 (baseline)
-     │   → coverage_rate = recognized 항목수 / 전체 항목수
-     │   → accuracy_rate = (exact + approximate) / recognized 항목수
-     │   → overall = coverage_rate × 0.5 + accuracy_rate × 0.5 (× 100)
-     └─ 결과를 AnalysisReport.info_recognition에 포함
-     │
-     ▼
-[Analysis Agent — 클론 분석 (Clone 모드, Validation Agent가 호출)]
-     │
-     ├─ 동일한 InfoRecognitionItem + 동일한 프로브 프롬프트로 클론 대상 재검증
-     └─ 결과를 클론 AnalysisReport.info_recognition에 포함
-     │
-     ▼
-[Validation Agent — Before-After 비교]
-     │
-     ├─ 초기 InfoRecognitionScore와 클론 InfoRecognitionScore 비교
-     └─ delta를 ValidationReport에 포함
-```
-
-**대시보드 표시**:
-
-```
-┌─ 정보 인식 현황 ──────────────────────────────────────────────┐
-│                                                                │
-│  종합 인식률: 78/100                                           │
-│  커버리지: 85% (17/20 항목 인식)   정확도: 91% (15.5/17 정확)  │
-│                                                                │
-│  ┌─────────────────┬──────┬──────┬──────┬──────┬──────┐       │
-│  │ 정보 항목        │ GPT  │Claude│Gemini│Pplx  │Copilot│      │
-│  ├─────────────────┼──────┼──────┼──────┼──────┼──────┤       │
-│  │ 제품A 가격       │ ✅   │ ✅   │ ≈    │ ✅   │ ✅   │      │
-│  │ 제품A 스펙       │ ✅   │ ✅   │ ✅   │ ✅   │ ⚠️   │      │
-│  │ 제품B 가격       │ ✅   │ ❌   │ ✅   │ ✅   │ ✅   │      │
-│  │ 프리미엄 기능    │ ✅   │ ✅   │ ✅   │ ≈    │ ✅   │      │
-│  │ 반품 정책        │ ❌   │ ❌   │ ❌   │ ❌   │ ❌   │      │
-│  │ 본사 위치        │ ✅   │ ✅   │ ✅   │ ✅   │ 🔮   │      │
-│  │ ...              │      │      │      │      │      │      │
-│  └─────────────────┴──────┴──────┴──────┴──────┴──────┘       │
-│                                                                │
-│  ✅ exact  ≈ approximate  ⚠️ outdated  🔮 hallucinated  ❌ missing│
-│                                                                │
-│  [인식 실패 항목 우선 최적화 실행]                               │
-└────────────────────────────────────────────────────────────────┘
-```
+**산출 공식**: `overall = coverage_rate × 0.5 + accuracy_rate × 0.5 (× 100)`
 
 ### 4-C.4 LLMProbe (LLM 질의 결과)
 
@@ -2642,6 +2276,18 @@ CostSummary {
 | **질의 배치** | Validation 시 모든 질의를 수집 후 LLM별로 배치 실행 (연결 재사용) |
 | **비용 리포트** | 대시보드에 Provider별 / 에이전트별 API 비용 시각화 |
 
+### 9-B.8 핵심 LLM 인터페이스
+
+에이전트 시스템 전체에서 공유하는 LLM 호출 인터페이스 요약.
+
+| 인터페이스 | 정의 위치 | 역할 |
+|-----------|----------|------|
+| `LLMRequest` | `geo-llm-client.ts` (Zod schema) | 모든 에이전트가 사용하는 LLM 호출 요청. 필드: `prompt`, `system_instruction?`, `model?`, `provider?`, `max_tokens?`, `temperature?`, `json_mode` |
+| `LLMResponse` | `geo-llm-client.ts` (Zod schema) | LLM 응답. 필드: `content`, `model`, `provider`, `usage` (prompt/completion/total tokens), `latency_ms`, `cost_usd` |
+| `chatLLM` | 각 에이전트 Deps 인터페이스 | `(req: LLMRequest) => Promise<LLMResponse>` — DI로 주입. Pipeline Runner가 실제 구현체를 바인딩 |
+| `trackedChatLLM` | `pipeline-runner.ts` | `chatLLM`을 래핑하여 모든 LLM 호출을 인터셉트. 사용 모델, 토큰, 에러, 지연시간을 `LLMCallLogEntry[]`에 기록. Auth 에러 시 Orchestrator 정지 |
+| `safeLLMCall<T>()` | `llm-helpers.ts` | LLM 호출 + 응답 파싱 헬퍼. 1회 retry 후 throw (4-D: fallback 없음). Auth 에러는 즉시 throw |
+
 ---
 
 ## 9-C. 클론 워크플로우 및 결과 전달
@@ -3200,427 +2846,27 @@ PUT  /api/targets/{id}/cycle/config           # 사이클 설정 변경 (max, ta
 
 ### 9-E.5 Interactive Dashboard 출력 사양
 
-모든 사이트 유형의 평가 결과는 동일한 대시보드 포맷으로 출력한다.
-초기 평가, 중간 사이클 결과, 최종 결과 모두 같은 HTML 구조를 사용한다.
-
-#### 기본 구조: 단일 HTML 파일
-
-- Chart.js CDN 사용
-- 다크 테마 (배경 `#0A0E1A`, 카드 `#111827`)
-- 브랜드 색상 config 주입: `brand_color` (기본값 `#1428A0`)
-- 외부 의존성 최소화 (인라인 CSS/JS)
-
-#### 파일명 규칙
-
-```
-초기 평가:      {site_name}_GEO_{run_id}.html
-중간 결과:      {site_name}_GEO_{run_id}_cycle{N}.html
-최종 결과:      {site_name}_GEO_{run_id}_final.html
-다중 사이트:    GEO_Comparison_{site1}_{site2}_{date}.html
-```
-
-#### 탭 구성 (10탭)
-
-| # | 탭 이름 | 내용 |
-|---|---|---|
-| 1 | 종합 개요 | 종합 점수 게이지, 7개 차원 진행바, LLM 서비스별 접근 가능성 추정 막대그래프, 강점/약점/기회 카드, 사이트 유형 배지 |
-| 2 | 크롤링 접근성 | robots.txt 원문 발췌, 봇별 허용/차단 테이블, llms.txt 상태 |
-| 3 | 구조화 데이터 | 스키마 도넛차트, 페이지 유형별 품질 진행바, 스키마 타입 상세 테이블 |
-| 4 | 콘텐츠 인식 | 유형별 메인 콘텐츠 레이더차트 (제품/논문/일반), LLM 인식 가능 데이터 목록 |
-| 5 | 브랜드/조직 | 마케팅 클레임 × 검증가능성 테이블 (manufacturer) / 권위 지표 (research) / 조직 정보 (generic) |
-| 6 | 페이지별 분석 | URL별 점수 + 태그(good/bad) |
-| 7 | 실증 데이터 | Phase 1~3 수집 원문 코드 스니펫 |
-| 8 | Synthetic Probe 결과 | 8개 프롬프트 PASS/PARTIAL/FAIL 결과 및 실제 응답 기록 |
-| 9 | 개선 로드맵 | 임팩트×난이도 버블차트, Sprint별 로드맵, 점수 시뮬레이션 라인차트 |
-| 10 | 사이클 이력 | 사이클별 점수 추이 라인차트, 차원별 변화 히트맵, 중간 결과 비교 (Cycle ≥1 시에만 표시) |
-
-#### 대시보드 JSON 데이터 구조
-
-```json
-{
-  "run_id": "...",
-  "site_name": "...",
-  "site_type": "manufacturer|research|generic",
-  "base_url": "...",
-  "evaluated_at": "ISO 8601",
-  "cycle_number": 0,
-  "evaluation_target": "original|clone",
-  "overall_score": 0,
-  "grade": "Excellent|Good|Needs Improvement|Poor|Critical",
-  "dimension_scores": { "S1": 0, "S2": 0, "S3": 0, "S4": 0, "S5": 0, "S6": 0, "S7": 0 },
-  "dimension_labels": { "S1": "LLM 크롤링 접근성", "S2": "..." },
-  "probe_results": { "P-01": {"verdict": "...", "found": 0, "total": 0} },
-  "schema_coverage": { ... },
-  "key_findings": ["..."],
-  "top_improvements": [{"id": "...", "title": "...", "sprint": 1, "impact": 5, "difficulty": 1}],
-  "cycle_history": [
-    {"cycle": 0, "score": 57, "timestamp": "..."},
-    {"cycle": 1, "score": 65, "timestamp": "..."}
-  ]
-}
-```
-
-#### 다중 사이트 비교 모드
-
-여러 사이트를 동시에 비교하는 경우 추가 차트:
-- 레이더차트: 모든 사이트의 7개 차원 중첩
-- 스키마 구현율 비교 바차트
-- Probe PASS율 비교 바차트
-- Sprint별 개선 시 예상 점수 비교
-
----
-
-## 10. 디렉터리 구조
-
-```
-geo-agent/
-├── packages/
-│   ├── core/                          # GEO 핵심 로직
-│   │   ├── src/
-│   │   │   ├── agents/                # ★ 에이전트 (서브디렉토리 구조)
-│   │   │   │   ├── index.ts              # barrel export
-│   │   │   │   ├── analysis/             # Analysis Agent
-│   │   │   │   │   ├── analysis-agent.ts    # runAnalysis() — 크롤링+채점+분류
-│   │   │   │   │   ├── geo-eval-extractor.ts # 봇 정책/스키마/클레임/JS/제품 추출
-│   │   │   │   │   ├── llm-analysis-agent.ts # pi-ai Agent Loop 기반 분석
-│   │   │   │   │   ├── rich-analysis-schema.ts # 10탭 RichAnalysisReport 스키마
-│   │   │   │   │   ├── tools.ts             # pi-ai Tool 9종 정의
-│   │   │   │   │   └── index.ts
-│   │   │   │   ├── strategy/             # Strategy Agent
-│   │   │   │   │   ├── strategy-agent.ts    # runStrategy() — 규칙+LLM 태스크 생성
-│   │   │   │   │   └── index.ts
-│   │   │   │   ├── optimization/         # Optimization Agent
-│   │   │   │   │   ├── optimization-agent.ts # runOptimization() — 클론 수정
-│   │   │   │   │   └── index.ts
-│   │   │   │   ├── validation/           # Validation Agent
-│   │   │   │   │   ├── validation-agent.ts  # runValidation() — Before-After 비교
-│   │   │   │   │   └── index.ts
-│   │   │   │   ├── pipeline/             # Pipeline Runner (E2E 오케스트레이션)
-│   │   │   │   │   ├── pipeline-runner.ts   # runPipeline() — 전체 파이프라인
-│   │   │   │   │   └── index.ts
-│   │   │   │   ├── probes/               # Synthetic Probes (P-01~P-08, Level 1 측정)
-│   │   │   │   │   ├── synthetic-probes.ts  # runProbes() — 8종 LLM 프로브
-│   │   │   │   │   └── index.ts
-│   │   │   │   └── shared/               # 공유 유틸리티
-│   │   │   │       ├── llm-helpers.ts       # safeLLMCall, buildPageContext 등
-│   │   │   │       ├── llm-response-schemas.ts # ContentQualityAssessment 등 Zod
-│   │   │   │       ├── types.ts             # CrawlData, MultiPageCrawlResult 등
-│   │   │   │       └── index.ts
-│   │   │   │   # ── [미구현] ──
-│   │   │   │   # monitoring-agent.ts      # 주기적 GEO 추적 + 외부 변경 감지
-│   │   │   ├── models/                    # Zod 스키마 정의 (18+ 모델)
-│   │   │   │   ├── index.ts              # barrel export
-│   │   │   │   ├── target-profile.ts     # TargetProfile (clone_base_path, site_type)
-│   │   │   │   ├── geo-score.ts          # GeoScore (Level 1), GEO_SCORE_WEIGHTS
-│   │   │   │   ├── info-recognition.ts   # InfoRecognitionScore, Item, PerLLM
-│   │   │   │   ├── pipeline-state.ts     # PipelineStage, PipelineState
-│   │   │   │   ├── analysis-report.ts, optimization-plan.ts, validation-report.ts
-│   │   │   │   ├── content-snapshot.ts, change-record.ts, change-impact.ts, change-type.ts
-│   │   │   │   ├── geo-time-series.ts, llm-probe.ts, llm-provider-config.ts
-│   │   │   │   ├── agent-prompt-config.ts, error-event.ts
-│   │   │   │   ├── effectiveness-index.ts, semantic-change-record.ts
-│   │   │   │   └── ...
-│   │   │   ├── prompts/                   # ★ 에이전트 시스템 프롬프트
-│   │   │   │   ├── defaults.ts               # 6개 에이전트 기본 프롬프트
-│   │   │   │   ├── prompt-loader.ts          # 프롬프트 로드 (workspace → default fallback)
-│   │   │   │   ├── template-engine.ts        # 템플릿 렌더링 + classifySite()
-│   │   │   │   └── evaluation-templates/     # ★ 평가 프롬프트 템플릿 (9-E)
-│   │   │   │       ├── index.ts                 # 템플릿 레지스트리, 스키마, Cycle 제어
-│   │   │   │       ├── manufacturer.md / research.md / generic.md
-│   │   │   │       └── viz-specs/               # VisualizationSpec 3-계층 시각화
-│   │   │   ├── llm/                        # ★ LLM 추상화 레이어 (9-B)
-│   │   │   │   ├── provider-config.ts        # ProviderConfigManager + 스키마
-│   │   │   │   ├── geo-llm-client.ts         # GeoLLMClient (chat + CostTracker 내장)
-│   │   │   │   ├── oauth-manager.ts          # OAuth 토큰 관리 (발급/갱신/폐기)
-│   │   │   │   └── pi-ai-bridge.ts           # pi-ai 어댑터 (Agent Loop + 단일 호출)
-│   │   │   ├── skills/                    # ★ 스킬 로더
-│   │   │   │   ├── skill-loader.ts           # SKILL.md 파싱 + 로드
-│   │   │   │   └── geo-analysis.skill.md     # GEO 분석 스킬 정의
-│   │   │   ├── pipeline/                  # ★ 파이프라인 실행 엔진 (9-A)
-│   │   │   │   ├── state-machine.ts          # 파이프라인 상태 머신
-│   │   │   │   └── orchestrator.ts           # Orchestrator (StageHandler 순차 실행)
-│   │   │   ├── clone/                     # ★ 클론 관리 (9-C.1)
-│   │   │   │   └── clone-manager.ts          # CloneManager (생성/읽기/쓰기/diff/archive)
-│   │   │   ├── report/                    # ★ 결과 리포트 & Archive 생성 (9-C.3)
-│   │   │   │   ├── report-generator.ts       # ReportBuilder + renderSimpleDiff
-│   │   │   │   ├── archive-builder.ts        # Archive 패키징
-│   │   │   │   └── dashboard-html-generator.ts # Interactive HTML Dashboard 생성
-│   │   │   ├── db/                        # ★ 데이터베이스
-│   │   │   │   ├── schema.ts                # drizzle 테이블 정의 (8개)
-│   │   │   │   ├── connection.ts            # SQLite 연결 + ensureTables()
-│   │   │   │   └── repositories/
-│   │   │   │       ├── target-repository.ts
-│   │   │   │       ├── pipeline-repository.ts
-│   │   │   │       └── stage-execution-repository.ts
-│   │   │   ├── config/
-│   │   │   │   └── settings.ts            # AppSettings (Zod validated, GEO_WORKSPACE 지원)
-│   │   │   ├── logger.ts                  # pino 구조화 로깅
-│   │   │   └── index.ts                   # 패키지 entry point
-│   │   ├── package.json
-│   │   └── tsconfig.json
-│   │
-│   ├── skills/                            # ★ 스킬 패키지
-│   │   ├── src/
-│   │   │   ├── index.ts                   # SkillRegistry (등록/조회/실행)
-│   │   │   ├── dual-crawl.ts              # crawlTarget() + crawlMultiplePages()
-│   │   │   └── geo-scorer.ts              # scoreTarget() — Level 2 GEO Readiness Score (S1~S7)
-│   │   └── package.json
-│   │
-│   ├── cli/                               # ★ CLI 패키지
-│   │   ├── src/
-│   │   │   └── index.ts                   # geo start/stop/status/init/analyze/run
-│   │   └── package.json
-│   │
-│   └── dashboard/                         # ★ localhost 웹 대시보드
-│       ├── src/
-│       │   ├── server.ts                  # Hono API 서버 + SSE broadcastSSE()
-│       │   ├── routes/
-│       │   │   ├── targets.ts             # /api/targets/** CRUD
-│       │   │   ├── settings.ts            # /api/settings/** 프롬프트 + LLM Provider
-│       │   │   └── pipeline.ts            # /api/targets/:id/pipeline/** + cycle + evaluation
-│       │   │   # ── [미구현] ──
-│       │   │   # tracking.ts              # /tracking/** Change Tracking 엔드포인트
-│       │   │   # auth.ts                  # /auth/callback OAuth 콜백
-│       │   └── ui/
-│       │       └── dashboard.html         # 단일 HTML SPA (5탭, 다크 테마, Evaluation 10서브탭)
-│       └── package.json
-│
-├── workspace/                             # ★ 사용자 작업 공간 (런타임 생성)
-│   ├── prompts/                           # 사용자 커스텀 프롬프트 (4-A)
-│   │   └── {agent}.json                   # 수정 시 생성, 없으면 default fallback
-│   ├── clones/                            # 로컬 클론 저장소 (9-C.1)
-│   │   └── {target_id}/
-│   │       ├── metadata.json              #   클론 메타데이터
-│   │       ├── original/                  #   원본 (불변)
-│   │       │   └── index.html
-│   │       └── working/                   #   작업 사본 (수정 대상)
-│   │           └── index.html
-│   ├── config/                            # LLM Provider 설정 등
-│   ├── reports/                           # 결과 리포트 & Archive (9-C.3)
-│   │   └── {target_id}/
-│   │       ├── report-{date}.html         #   Before-After 비교 리포트
-│   │       └── archive-{date}.zip         #   수정된 결과 Archive
-│   ├── skills/                            # Workspace Skills (사용자/자동 생성)
-│   │   └── (사용자가 생성한 커스텀 스킬)
-│   ├── data/                              # 로컬 데이터 저장
-│   │   ├── snapshots/
-│   │   ├── reports/
-│   │   └── db/                            # SQLite DB 파일
-│   └── config.json                        # 시스템 설정 (API 키, 기본값 등)
-│
-├── docker-compose.yml
-├── package.json                           # 모노레포 루트
-├── tsconfig.json
-├── biome.json                             # biome 설정 (pi-mono 표준)
-└── ARCHITECTURE.md
-```
+단일 HTML 파일 (Chart.js CDN, 다크 테마, 인라인 CSS/JS). 10탭 구성은 `RichAnalysisReport` 스키마(4.2 참조)와 1:1 매핑. 구현 상세는 `dashboard-html-generator.ts` 참조.
 
 ---
 
 ## 11. Known Issues (v1 한계)
 
-> 아래 항목들은 현재 아키텍처의 알려진 구조적 한계이며, 차기 버전에서 해결한다.
+> 상세 설명, 영향 범위, 해결 방향은 GitHub Issues를 참조한다.
 
-### KI-001. 인용 감정(Citation Sentiment) 분석 부재 — 심각도: 높음
-
-**문제**: GEO Score가 인용의 "존재 여부"만 측정하며, 인용이 긍정·부정·중립 어떤 맥락에서 이루어졌는지 판정하지 않는다. Target Page가 빈번히 인용되더라도 부정적 프레이밍으로 인용되는 경우를 "성공"으로 오판한다.
-
-**영향 범위**: GEO Score 전체 신뢰도, "긍정적 인식" 목표 달성 불가
-
-**차기 해결 방향**:
-- GEO Score에 `Citation Sentiment (가중치 TBD)` 지표 추가
-- Analysis Agent가 LLM Probe에서 인용 발견 시 해당 문맥의 감정 분석 수행
-- 긍정 인용률 / 부정 인용률 / 중립 인용률 분리 추적
-- Change Impact에 sentiment delta 포함
-
----
-
-### KI-002. 외부 평판 환경 분석 부재 — 심각도: 높음
-
-**문제**: LLM의 Target Page에 대한 인식은 페이지 자체보다 웹 전체에서의 평판에 더 크게 좌우된다. 현 아키텍처는 Target Page 내부만 분석·개선하며, 외부에서 Target에 대해 어떻게 언급하고 있는지를 파악하지 못한다.
-
-**영향 범위**: Strategy Agent의 전략 수립이 내부 요인에만 의존하여 효과 제한적
-
-**차기 해결 방향**:
-- **Reputation Scout Agent** 신규 도입
-  - 경쟁 페이지 콘텐츠에서 Target 관련 서술 수집
-  - 포럼, 뉴스, 리뷰 사이트에서 Target 평판 분석
-  - Wikipedia 등 권위 출처에서의 표현 방식 추적
-- 외부 평판 점수를 Strategy Agent 컨텍스트에 주입
-- 외부 평판 개선이 필요한 경우 별도 권고 리포트 생성
-
----
-
-### KI-003. LLM 지식 획득 경로 미구분 — 심각도: 중간
-
-**문제**: Pre-training 학습 데이터, 실시간 검색(RAG), 에이전트 직접 탐색 등 LLM이 웹 콘텐츠를 "아는" 경로가 근본적으로 다르지만, 현 아키텍처는 이를 구분하지 않고 동일한 최적화를 적용한다.
-
-**구체적 문제 상황**:
-
-| LLM 경로 | 현 아키텍처의 최적화 효과 |
-|---|---|
-| Pre-training (ChatGPT/Claude 기본) | JSON-LD, 시맨틱 구조 등 페이지 수정 → **즉시 반영 안 됨** |
-| Search-RAG (Perplexity, Copilot) | 효과 있으나 **전통 SEO 순위가 전제 조건** (미다룸) |
-| Agent 직접 탐색 | 구조화 데이터 최적화 → **효과 있음** |
-
-**차기 해결 방향**:
-- LLM Knowledge Pathway Model 도입 (Pre-training / Search-RAG / Agent 3분류)
-- Strategy Agent가 경로별 최적화 가능 범위를 인지하고 차별화된 전략 수립
-- Search-RAG 경로의 경우 전통 SEO 요소와의 연계 전략 포함
-
----
-
-### KI-004. 테스트 질의(Query Universe) 설계 체계 부재 — 심각도: 중간
-
-**문제**: Analysis Agent가 LLM Probe 수행 시 "타겟 주제 관련 질의를 발송"하지만, 어떤 질의를 어떻게 설계·선정하는지 체계가 없다. 질의 세트가 편향되면 GEO Score 전체가 왜곡된다.
-
-**구체적 위험**:
-- 동일 최적화도 질의 유형에 따라 효과가 반대일 수 있음
-- "A사 추천해줘"에서는 성공, "A사 vs B사"에서는 실패 → 평균으로 묻힘
-- 사용자들이 실제로 LLM에 하는 질의와 테스트 질의가 괴리될 수 있음
-
-**차기 해결 방향**:
-- **Query Universe Engine** 도입
-  - 타겟 주제에 대한 예상 질의를 자동 생성·분류 (정보형 / 비교형 / 추천형 / 검증형)
-  - 질의 유형별 GEO Score 분리 측정
-  - "어떤 유형의 질의에서 약한가" 진단 리포트
-- 질의 중요도 가중치 (검색 볼륨 유사 개념) 적용
-
----
-
-### KI-005. 간접 인용 감지(Indirect Citation Detection) 부재 — 심각도: 중간
-
-**문제**: 대부분의 LLM API는 출처 인용(source citation)을 제공하지 않는다.
-
-| LLM 서비스 | 인용 출처 제공 | 현 아키텍처의 측정 가능성 |
-|---|---|---|
-| Perplexity | O (URL 포함) | 직접 측정 가능 |
-| Copilot | O (출처 표시) | 직접 측정 가능 |
-| ChatGPT Browsing | 부분적 | 제한적 |
-| ChatGPT API 기본 | **X** | **측정 불가** |
-| Claude API | **X** | **측정 불가** |
-| Gemini API | **X** | **측정 불가** |
-
-Citation Rate가 GEO Score의 30%인데, 타겟 LLM 절반 이상에서 직접 측정이 불가능하다.
-
-**차기 해결 방향**:
-- 출처 미표기 LLM 응답에서 Target 콘텐츠와의 **시맨틱 유사도** 기반 간접 인용 추정
-- 핵심 팩트·수치·고유 표현의 일치 여부로 간접 인용 확률 산출
-- 직접 인용 / 간접 인용(추정) / 미인용 3단계 분류
-- GEO Score 산출 시 간접 인용은 confidence 가중치 적용
-
----
-
-### KI-006. ~~배포 경계(Deployment Boundary) 미정의~~ — **해결됨**
-
-> **해결**: 읽기 전용 원칙 도입 (섹션 1.3)으로 근본적 해결.
-> 시스템은 Target Web Page에 대한 직접 수정 권한이 없다는 전제 하에,
-> 모든 최적화를 로컬 클론에서 수행하고 결과를 Before-After 리포트 + Archive로 전달한다.
-> 사용자가 리포트를 검토 후 원본 사이트에 수동 반영한다. (섹션 9-C 참조)
-
----
-
-### KI-007. LLM 신뢰 형성 모델(Trust Model) 부재 — 심각도: 낮음
-
-**문제**: LLM이 출처를 "신뢰"하게 되는 메커니즘이 다층적인데, 현 아키텍처는 페이지 내 E-E-A-T 시그널 추가만을 다룬다.
-
-```
-LLM 신뢰 형성 요인:
-  1. 학습 데이터 내 출처 빈도           ← 제어 불가 (과거 데이터)
-  2. 타 출처와의 정보 일관성            ← KI-2에 의존
-  3. 도메인 권위 (학습 시점 기준)       ← 제어 불가 (장기 과제)
-  4. 검색 엔진 순위 (실시간 검색형)     ← KI-3에 의존
-  5. 페이지 내 자기 신뢰 시그널         ← ★ 현재 유일하게 다루는 부분
-```
-
-**차기 해결 방향**:
-- 요인 1~4에 대한 진단 능력을 Reputation Scout Agent(KI-2)에 통합
-- "현재 제어 가능한 것 vs 불가능한 것"을 Strategy Agent에 명시적으로 제공
-- 장기적으로 제어 불가 요인의 간접 개선 전략 (외부 인용 확보, 도메인 권위 구축 가이드)
-
----
-
-### KI-008. Remote Web 대시보드 미지원 — 심각도: 낮음 (v1 의도적 제한)
-
-**문제**: v1에서 대시보드는 localhost에서만 접근 가능하다. 팀 공유, 원격 모니터링, 모바일 접근이 불가하다.
-
-**v1 의도적 제한 사유**: 인증/인가 시스템 없이 외부 노출 시 보안 위험
-
-**차기 해결 방향**:
-- 인증/인가 시스템 도입 (OAuth2 또는 API Key 기반)
-- HTTPS 지원 (Let's Encrypt 또는 리버스 프록시)
-- 멀티 사용자 세션 관리
-- 읽기 전용 공유 링크 (GEO 리포트 외부 공유용)
-
----
-
-### KI-009. 에이전트 자동 생성 스킬의 안전성 검증 — 심각도: 중간
-
-**문제**: Strategy/Optimization Agent가 자동으로 스킬을 생성할 수 있는데, 생성된 코드의 안전성·정확성을 보장하는 체계가 미비하다.
-
-**구체적 위험**:
-- 자동 생성 코드에 보안 취약점 (인젝션, 무한 루프 등) 포함 가능
-- 외부 API 호출 스킬의 rate limiting/비용 통제 미비
-- 자동 생성 스킬 간 의존성 충돌 가능
-
-**현재 대응** (v1 최소 안전장치):
-- Workspace Skills 계층에만 생성 허용
-- `auto_generated: true` 플래그 + sandbox 모드 실행
-- 시스템 명령 실행 권한 차단
-
-**차기 해결 방향**:
-- 생성된 스킬의 정적 분석 (AST 검사, 위험 패턴 감지)
-- 스킬 실행 리소스 제한 (시간, 메모리, 네트워크 요청 수)
-- 관리자 승인 워크플로우 (auto → pending_review → approved)
-- 스킬 실행 감사 로그 (어떤 스킬이 어떤 외부 API를 호출했는지)
-
----
-
-### KI-010. pi-mono 업스트림 의존 관리 — 심각도: 낮음
-
-**결정**: pi-mono는 업스트림을 추종하지 않고, **현재 최종 stable 버전으로 고정(pin)** 한다. 향후 업스트림 업데이트가 있더라도 자동 반영하지 않으며, 필요 시 수동으로 검토 후 선택적으로 반영한다.
-
-**v1 대응** (즉시 적용):
-- `package.json`에서 pi-mono 패키지를 정확한 버전으로 고정 (캐럿/틸드 없이 exact version)
-- `package-lock.json` 커밋하여 의존성 트리 전체 고정
-- pi-mono 소스를 vendor 디렉터리에 스냅샷 보관 (업스트림 소실 대비)
-
-**잔여 위험 및 차기 해결 방향**:
-- 고정 버전에서 보안 취약점 발견 시 패치 적용 절차 필요
-- pi-agent-core 인터페이스에 대한 얇은 추상화 레이어 유지 → 장기적 교체 가능성 확보
-- 핵심 인터페이스(Agent, Tool, LLM Provider)에 대해 자체 타입 정의 보유
-
-### KI-011. 멀티 페이지 최적화 미적용 — 심각도: 높음
-
-**문제**: Analysis Agent와 Validation Agent는 멀티 페이지 크롤링/채점을 지원하지만, Optimization Agent는 클론의 `index.html`(첫 번째 .html 파일)만 최적화한다. samsung.com처럼 제품 페이지, 카테고리 페이지 등 수십 개 서브 페이지가 있는 사이트에서 전체 GEO Readiness Score 개선이 제한적이다.
-
-**영향 범위**: Level 2 GEO Readiness Score 전체 (특히 S2 구조화 데이터, S4 팩트 밀도), 멀티 페이지 사이트의 최적화 효과
-
-**차기 해결 방향**:
-- Optimization Agent의 `listWorkingFiles()` → 모든 .html 파일에 대해 최적화 태스크 생성
-- 페이지별 우선순위 부여 (홈 > 제품 상세 > 카테고리 > 기타)
-- Strategy Agent가 페이지별 차별화된 최적화 계획 수립
-- 페이지 간 Schema.org 연결 (BreadcrumbList, SiteNavigationElement) 자동 생성
-
----
-
-### Known Issues 우선순위 로드맵
-
-```
-v2 (단기):  KI-001 인용 감정 분석     ←  측정 체계 보완의 핵심
-            KI-004 Query Universe     ←  측정 신뢰도의 전제 조건
-            KI-005 간접 인용 감지     ←  LLM 커버리지 확보
-            KI-009 스킬 안전성 검증   ←  자동 스킬 생성 안정화
-            KI-011 멀티 페이지 최적화 ←  samsung.com 등 대규모 사이트 대응
-
-v3 (중기):  KI-002 외부 평판 분석     ←  Reputation Scout Agent 신규 개발
-            KI-003 LLM 경로 구분     ←  Strategy Agent 대폭 개선
-            KI-008 Remote Web        ←  팀 공유/원격 접근 지원
-
-v4 (장기):  KI-006 ~~배포 경계~~ (해결됨 — 읽기 전용 원칙 + 클론 워크플로우)
-            KI-007 Trust Model       ←  KI-002, KI-003 완료 후 통합
-            KI-010 pi-mono 의존      ←  장기 유지보수 전략
-```
+| # | 항목 | 심각도 | 로드맵 |
+|---|------|--------|--------|
+| KI-001 | 인용 감정(Citation Sentiment) 분석 부재 | 높음 | v2 |
+| KI-002 | 외부 평판 환경 분석 부재 | 높음 | v3 |
+| KI-003 | LLM 지식 획득 경로 미구분 | 중간 | v3 |
+| KI-004 | 테스트 질의(Query Universe) 설계 체계 부재 | 중간 | v2 |
+| KI-005 | 간접 인용 감지 부재 | 중간 | v2 |
+| KI-006 | ~~배포 경계 미정의~~ | ~~해결됨~~ | — (읽기 전용 원칙, 섹션 1.3) |
+| KI-007 | LLM 신뢰 형성 모델 부재 | 낮음 | v4 |
+| KI-008 | Remote Web 대시보드 미지원 | 낮음 | v3 |
+| KI-009 | 에이전트 자동 생성 스킬 안전성 검증 | 중간 | v2 |
+| KI-010 | pi-mono 업스트림 의존 관리 | 낮음 | v4 |
+| KI-011 | 멀티 페이지 최적화 미적용 | 높음 | v2 |
 
 ---
 
@@ -3636,4 +2882,4 @@ v4 (장기):  KI-006 ~~배포 경계~~ (해결됨 — 읽기 전용 원칙 + 클
 
 ---
 
-*최종 수정: 2026-03-18*
+*최종 수정: 2026-03-22*
