@@ -10,6 +10,7 @@ export * from "./db/schema.js";
 export * from "./db/repositories/target-repository.js";
 export * from "./db/repositories/pipeline-repository.js";
 export * from "./db/repositories/stage-execution-repository.js";
+export * from "./db/seed-default-targets.js";
 
 // Logger
 export * from "./logger.js";
