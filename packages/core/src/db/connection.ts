@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS change_records (
 	change_id TEXT PRIMARY KEY,
 	experiment_id TEXT NOT NULL,
 	url TEXT NOT NULL,
+	target_id TEXT,
 	changed_at TEXT NOT NULL,
 	change_type TEXT NOT NULL,
 	change_summary TEXT NOT NULL,

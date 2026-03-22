@@ -208,6 +208,22 @@ describe("createDatabase — auto-table creation (Bug #5)", () => {
 		expect(colNames).toContain("resumable");
 	});
 
+	it("change_records table has target_id column", async () => {
+		const settings = makeSettings();
+		const db = createDatabase(settings);
+		await ensureTables(db);
+
+		const dbPath = path.join(settings.workspace_dir, settings.db_path);
+		const client = createClient({ url: `file:${dbPath}` });
+		const result = await client.execute("PRAGMA table_info(change_records)");
+		client.close();
+
+		const colNames = result.rows.map((r) => r.name as string);
+		expect(colNames).toContain("change_id");
+		expect(colNames).toContain("target_id");
+		expect(colNames).toContain("change_type");
+	});
+
 	it("fresh DB with tables allows immediate insert and query", async () => {
 		const settings = makeSettings();
 		const db = createDatabase(settings);

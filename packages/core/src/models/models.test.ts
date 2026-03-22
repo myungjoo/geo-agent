@@ -645,7 +645,7 @@ describe("TargetProfile", () => {
 				expect(result.data.topics).toEqual([]);
 				expect(result.data.status).toBe("active");
 				expect(result.data.site_type).toBe("generic");
-				expect(result.data.monitoring_interval).toBe("6h");
+				expect(result.data.monitoring_interval).toBe("daily");
 			}
 		});
 

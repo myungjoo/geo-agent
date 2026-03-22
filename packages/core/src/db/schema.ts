@@ -40,6 +40,7 @@ export const changeRecords = sqliteTable("change_records", {
 	change_id: text("change_id").primaryKey(),
 	experiment_id: text("experiment_id").notNull(),
 	url: text("url").notNull(),
+	target_id: text("target_id"), // nullable — 기존 레코드 호환
 	changed_at: text("changed_at").notNull(),
 	change_type: text("change_type").notNull(),
 	change_summary: text("change_summary").notNull(),

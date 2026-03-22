@@ -180,9 +180,9 @@ function buildGeoScore(scoreData: {
 		citation_rate: 0, // Probe 실행 후 pipeline-runner에서 반영 (probeResults → current_geo_score)
 		citation_accuracy: 0, // Probe 실행 후 pipeline-runner에서 반영
 		info_recognition_score: 0, // Probe 실행 후 pipeline-runner에서 반영
-		coverage: dimMap.S3 ?? 0, // 콘텐츠 기계가독성 → coverage 근사
+		coverage: 0, // Probe 실행 후 pipeline-runner에서 반영 (LLM 서비스 커버리지)
 		rank_position: 0,
-		structured_score: dimMap.S2 ?? 0, // 구조화 데이터 → structured_score
+		structured_score: scoreData.overall_score, // Level 2 GEO Readiness Score (S1~S7 가중 합산)
 		measured_at: new Date().toISOString(),
 		llm_breakdown: {},
 	};

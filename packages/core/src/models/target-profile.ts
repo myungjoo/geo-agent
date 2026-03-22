@@ -55,7 +55,7 @@ export const TargetProfileSchema = z.object({
 	created_at: z.string().datetime(),
 	updated_at: z.string().datetime(),
 	status: z.enum(["active", "paused", "archived"]).default("active"),
-	monitoring_interval: z.string().default("6h"),
+	monitoring_interval: z.string().default("daily"),
 });
 
 export type TargetProfile = z.infer<typeof TargetProfileSchema>;

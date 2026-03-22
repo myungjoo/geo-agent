@@ -146,4 +146,10 @@ describe("DEFAULT_PROMPTS", () => {
 		const slots = DEFAULT_PROMPTS.monitoring.context_slots.map((s) => s.slot_name);
 		expect(slots).toContain("{{AVAILABLE_TOOLS}}");
 	});
+
+	it("analysis prompt does not claim Playwright capability", () => {
+		const instruction = DEFAULT_PROMPTS.analysis.system_instruction;
+		expect(instruction).not.toContain("Playwright");
+		expect(instruction).toContain("이중 크롤링");
+	});
 });
