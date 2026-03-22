@@ -10,7 +10,15 @@
 		"declaration": true,
 		"declarationMap": true,
 		"sourceMap": true,
-		"noEmit": true,
+		"composite": true,
+		"incremental": true,
 		"resolveJsonModule": true
-	}
+	},
+	"references": [
+		{ "path": "packages/core/tsconfig.build.json" },
+		{ "path": "packages/skills/tsconfig.build.json" },
+		{ "path": "packages/cli/tsconfig.build.json" },
+		{ "path": "packages/dashboard/tsconfig.build.json" }
+	],
+	"files": []
 }

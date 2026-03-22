@@ -12,8 +12,8 @@
 		}
 	},
 	"scripts": {
-		"build": "tsc -b",
-		"dev": "tsc -b --watch",
+		"build": "tsc -b tsconfig.build.json",
+		"dev": "tsc -b tsconfig.build.json --watch",
 		"test": "vitest run",
 		"clean": "rimraf dist .tsbuildinfo"
 	},
