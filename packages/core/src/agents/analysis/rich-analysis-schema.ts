@@ -295,6 +295,27 @@ export interface RoadmapTab {
 
 // ── Full Report ────────────────────────────────────────────
 
+/**
+ * LLM Agent Loop가 생성하는 10탭 분석 보고서.
+ *
+ * llm-analysis-agent.ts의 piAiAgentLoop()가 SKILL.md 프롬프트를 따라
+ * 9개 도구(crawl_page, score_geo, classify_site 등)를 호출하며 수집한 데이터를 종합.
+ * 파이프라인 ANALYZING 단계에서 생성되며, pipeline-runner.ts에서 `richReport`로 보관.
+ *
+ * 10탭 구조:
+ *  1. overview         — 종합 점수, 강점/약점/기회
+ *  2. crawlability     — robots.txt, 봇 접근성, llms.txt
+ *  3. structured_data  — JSON-LD, Schema.org 현황
+ *  4. products         — 제품/서비스 인식 정보
+ *  5. brand            — 브랜드/마케팅 메시지
+ *  6. pages            — 멀티 페이지별 분석
+ *  7. recommendations  — 개선 권고사항
+ *  8. evidence         — 수집 증거 원문
+ *  9. probes           — Synthetic Probe 결과 (nullable)
+ * 10. roadmap          — 개선 로드맵/기회 매트릭스
+ *
+ * @see ARCHITECTURE.md 4.2, 9-C.3, 9-E.5
+ */
 export interface RichAnalysisReport {
 	/** Target site info */
 	target: {

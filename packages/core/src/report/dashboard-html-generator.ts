@@ -2,12 +2,26 @@ import type { EvaluationResult } from "../prompts/evaluation-templates/index.js"
 /**
  * Interactive Dashboard HTML Generator
  *
- * 평가 결과를 단일 HTML 파일로 생성 (Chart.js, 다크 테마, 10탭 구조)
- * - 초기/중간/최종 결과 동일 포맷
- * - Tab 10: 사이클 이력 (cycle >= 1일 때만 표시)
+ * OptimizationReport (Before-After 비교)를 단일 HTML 파일로 렌더링한다.
+ *
+ * - 출력: 단일 HTML (Chart.js v4 CDN, 다크 테마, 인라인 CSS/JS)
+ * - 테마: #1a1a2e (배경), #16213e (카드), #e94560 (액센트)
+ * - 기본 9탭: Overview, Score Breakdown, Changes, Before vs After,
+ *   Crawlability, Structured Data, Content Analysis, Improvements, Remaining Issues
+ * - 조건부 10번째 탭: Cycle History (cycle >= 1일 때만 표시)
+ *
+ * @todo [우선순위 높음] RichAnalysisReport (10탭 분석 결과)를 함께 통합 렌더링해야 함.
+ *       현재는 OptimizationReport만 렌더링하므로, 초기 분석의 상세 진단
+ *       (crawlability, products, brand, probes, roadmap 등)이 최종 리포트에 포함되지 않는다.
+ *       ARCHITECTURE.md 9-C.3 참조.
  */
 import type { OptimizationReport, ScoreComparison } from "./report-generator.js";
 
+/**
+ * 대시보드 생성 입력 데이터.
+ *
+ * @todo RichAnalysisReport 통합 시 `richReport?: RichAnalysisReport` 필드 추가 필요.
+ */
 export interface DashboardData {
 	report: OptimizationReport;
 	evaluation?: EvaluationResult;
