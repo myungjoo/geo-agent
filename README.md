@@ -183,6 +183,87 @@ curl -X PUT http://localhost:3000/api/settings/llm-providers/microsoft \
 | GET/PUT | `/api/settings/agents/prompts` | 에이전트 프롬프트 |
 | GET/PUT | `/api/settings/llm-providers` | LLM 프로바이더 |
 
+## CI에서 LLM API Key 사용하기 (GitHub Actions)
+
+GitHub Actions에서 실제 LLM을 사용하는 테스트(E2E, LLM Integration)를 실행하려면 **GitHub Secrets**를 설정해야 합니다.
+
+### 1단계: GitHub Secrets 등록
+
+리포지토리 **Settings → Secrets and variables → Actions → New repository secret**에서 등록합니다.
+
+| Secret 이름 | 설명 | 예시 |
+|---|---|---|
+| `AZURE_OPENAI_API_KEY` | Azure OpenAI API Key | 32자 hex |
+| `AZURE_OPENAI_BASE_URL` | Azure OpenAI Endpoint | `https://YOUR_REGION.api.cognitive.microsoft.com` |
+| `OPENAI_API_KEY` | OpenAI API Key | `sk-...` |
+| `ANTHROPIC_API_KEY` | Anthropic API Key | `sk-ant-...` |
+| `GOOGLE_API_KEY` | Google AI API Key | `AIzaSy...` |
+| `PERPLEXITY_API_KEY` | Perplexity API Key | `pplx-...` |
+
+> **하나만 등록해도 동작합니다.** 사용하려는 프로바이더의 API Key만 등록하면 됩니다.
+
+### 2단계: 동작 원리
+
+`ProviderConfigManager`는 `llm-providers.json` 파일에 API Key가 없을 때 **환경변수를 자동으로 fallback**합니다 (`provider-config.ts`의 `ENV_VAR_MAP`). 환경변수에서 키를 읽으면 해당 프로바이더가 자동으로 `enabled: true`로 활성화됩니다.
+
+CI 워크플로우(`.github/workflows/ci.yml`)에서 시크릿을 환경변수로 주입합니다:
+
+```yaml
+# E2E 테스트 (매 PR)
+- name: Test (e2e)
+  run: npm run test:e2e
+  env:
+    AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+    AZURE_OPENAI_BASE_URL: ${{ secrets.AZURE_OPENAI_BASE_URL }}
+
+# LLM Integration 테스트 (schedule/manual/push to main 전용)
+- name: LLM Integration Tests
+  run: npm run test:llm
+  env:
+    AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+    AZURE_OPENAI_BASE_URL: ${{ secrets.AZURE_OPENAI_BASE_URL }}
+```
+
+### 3단계: 테스트 동작 방식
+
+| 시크릿 상태 | E2E 테스트 | LLM Integration 테스트 |
+|---|---|---|
+| **미등록** (Fork PR 등) | 파이프라인 LLM 테스트 `skip` 처리 (CI 통과) | `describe.skipIf`로 전체 skip (CI 통과) |
+| **등록됨** | 실제 LLM으로 전체 파이프라인 검증 | Azure OpenAI 연동 검증 (chat, json_mode) |
+
+### 비용 관리
+
+- `llm-integration` job은 **schedule, workflow_dispatch, push to main** 에서만 실행됩니다 (PR에서는 실행 안 됨)
+- Fork PR에서는 GitHub Secrets가 자동으로 접근 불가하므로 보안 위험 없음
+- CI 기본 모델은 `gpt-4o`이므로, 비용이 우려되면 `gpt-4o-mini`로 변경 권장
+
+### 로컬에서 동일하게 테스트
+
+환경변수를 설정하면 로컬에서도 동일하게 동작합니다:
+
+```bash
+# Linux/Mac
+AZURE_OPENAI_API_KEY=xxx AZURE_OPENAI_BASE_URL=https://... npm run test:llm
+
+# Windows (PowerShell)
+$env:AZURE_OPENAI_API_KEY="xxx"; $env:AZURE_OPENAI_BASE_URL="https://..."; npm run test:llm
+
+# Windows (cmd)
+set AZURE_OPENAI_API_KEY=xxx && set AZURE_OPENAI_BASE_URL=https://... && npm run test:llm
+```
+
+### 다른 프로바이더 추가
+
+다른 프로바이더의 시크릿을 추가하려면:
+
+1. GitHub Secrets에 환경변수 등록 (예: `OPENAI_API_KEY`)
+2. `.github/workflows/ci.yml`의 해당 step의 `env:` 블록에 추가:
+   ```yaml
+   env:
+     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+   ```
+3. `provider-config.ts`의 `ENV_VAR_MAP`에 이미 매핑이 정의되어 있으므로 코드 변경 불필요
+
 ## LLM 프로바이더 설정
 
 | 프로바이더 | Provider ID | API Key 형식 | 비고 |
