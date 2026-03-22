@@ -6,6 +6,13 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# TypeScript build outputs in src/ (should only exist in dist/)
+packages/*/src/**/*.js
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.js.map
+*.config.js
+*.config.d.ts
+
 # Test coverage
 coverage/
 
