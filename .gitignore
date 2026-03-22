@@ -10,8 +10,15 @@ dist/
 packages/*/src/**/*.js
 packages/*/src/**/*.d.ts
 packages/*/src/**/*.js.map
-*.config.js
-*.config.d.ts
+# tsc-compiled config files (source is .ts)
+vitest.config.js
+vitest.config.d.ts
+packages/*/vitest.config.js
+packages/*/vitest.config.d.ts
+packages/*/drizzle.config.js
+packages/*/drizzle.config.d.ts
+**/*.config.js.map
+**/*.config.d.ts.map
 
 # Test coverage
 coverage/
