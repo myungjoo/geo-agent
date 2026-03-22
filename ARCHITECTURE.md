@@ -488,6 +488,15 @@ MachineReadabilityGrade:
 - A/B 테스트 시나리오 설계
 - ROI 예측 및 실행 로드맵 생성
 
+**전략 수립 제약**:
+
+| 규칙 | 설명 |
+|------|------|
+| **데이터 우선** | 과거에 효과가 입증된 변경 유형을 우선 채택 |
+| **실패 회피** | Agent Memory의 negative patterns에 해당하는 유형은 명시적 사유 없이 채택 금지 |
+| **LLM 우선순위 반영** | `llm_priorities`에서 critical/important인 LLM을 우선 고려 |
+| **정보 인식 개선** | InfoRecognition에서 missing/hallucinated 항목은 우선 최적화 대상 |
+
 **출력**: `OptimizationPlan` (우선순위 정렬된 태스크 목록)
 
 ### 4.4 Optimization Agent (최적화 실행 에이전트)
@@ -495,6 +504,14 @@ MachineReadabilityGrade:
 **목적**: 전략에 따라 **로컬 클론**의 콘텐츠를 최적화
 
 > **읽기 전용 원칙**: 원본 Target Web Page는 절대 수정하지 않는다. 모든 수정은 `clone_base_path`의 로컬 클론에만 적용한다.
+
+**실행 제약**:
+
+| 규칙 | 설명 |
+|------|------|
+| **정보 정확성 보존** | 기존 정확한 정보(가격, 스펙, 연락처 등)를 변경하지 않는다 |
+| **1태스크 1변경** | 각 OptimizationTask마다 별도의 ChangeRecord를 생성 |
+| **diff 필수** | 모든 변경은 before/after diff를 명시적으로 기록 |
 
 **수행 작업**:
 
