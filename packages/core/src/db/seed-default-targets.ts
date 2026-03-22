@@ -14,15 +14,7 @@ const DEFAULT_TARGETS: CreateTarget[] = [
 			"삼성전자 글로벌 공식 사이트. 모바일, 태블릿, 노트북, TV, 로봇청소기, 냉장고, 세탁기 등 주요 제품군의 GEO 최적화 대상.",
 		brand: "Samsung",
 		site_type: "manufacturer",
-		topics: [
-			"모바일",
-			"태블릿",
-			"노트북",
-			"TV",
-			"로봇청소기",
-			"냉장고",
-			"세탁기",
-		],
+		topics: ["모바일", "태블릿", "노트북", "TV", "로봇청소기", "냉장고", "세탁기"],
 		target_queries: [
 			"best smartphone 2025",
 			"best tablet for productivity",
