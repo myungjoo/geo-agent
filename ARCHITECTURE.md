@@ -2360,7 +2360,12 @@ CostSummary {
 
 ### 9-C.3 결과 전달 (Report + Archive)
 
-최적화 루프 완료 후, 사용자에게 두 가지 결과물을 제공한다:
+최적화 루프 완료 후, 사용자에게 두 가지 결과물을 제공한다.
+
+> **[미구현 — 우선순위 높음]** 현재 최종 리포트는 `OptimizationReport`(Before-After 비교)만 HTML 렌더링한다.
+> 초기 분석의 `RichAnalysisReport`(10탭 진단 결과)를 최종 리포트에 **함께 통합 렌더링**해야 한다.
+> `dashboard-html-generator.ts`가 `DashboardData`에 `RichAnalysisReport`를 추가로 받아
+> OptimizationReport 탭과 RichAnalysisReport 10탭을 하나의 HTML에 통합 출력하도록 확장할 것.
 
 **(1) Before-After 비교 리포트 (OptimizationReport)**
 
@@ -2846,7 +2851,10 @@ PUT  /api/targets/{id}/cycle/config           # 사이클 설정 변경 (max, ta
 
 ### 9-E.5 Interactive Dashboard 출력 사양
 
-단일 HTML 파일 (Chart.js CDN, 다크 테마, 인라인 CSS/JS). 10탭 구성은 `RichAnalysisReport` 스키마(4.2 참조)와 1:1 매핑. 구현 상세는 `dashboard-html-generator.ts` 참조.
+단일 HTML 파일 (Chart.js CDN, 다크 테마, 인라인 CSS/JS). 구현: `dashboard-html-generator.ts`.
+
+**현재 상태**: `OptimizationReport` 기반 9탭(Overview, Score Breakdown, Changes, Before vs After 등)만 렌더링.
+**목표**: `RichAnalysisReport` 10탭(overview, crawlability, structured_data, products, brand, pages, recommendations, evidence, probes, roadmap)을 통합하여 하나의 HTML에 출력. 상세는 9-C.3 참조.
 
 ---
 
