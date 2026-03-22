@@ -206,6 +206,32 @@ tr:hover td { background: var(--surface2); }
 }
 .toggle input:checked + .slider { background: var(--primary); }
 .toggle input:checked + .slider::before { transform: translateX(18px); }
+/* Evaluation grouped tabs */
+.eval-tab-groups { display: flex; gap: 0; flex-wrap: wrap; border-bottom: 1px solid var(--border); background: var(--surface); }
+.eval-tab-group { display: flex; align-items: stretch; border-right: 1px solid var(--border); }
+.eval-tab-group:last-child { border-right: none; }
+.eval-tab-group-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.7px; padding: 6px 10px 0; align-self: center; opacity: 0.6; font-weight: 700; }
+.eval-tab-btn { background: none; border: none; color: var(--text-muted); padding: 8px 12px; cursor: pointer; font-size: 12px; border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; }
+.eval-tab-btn:hover { color: var(--text); background: var(--surface2); }
+.eval-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+/* Collapsible sections */
+details.collapsible { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; }
+details.collapsible > summary { padding: 12px 16px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-muted); background: var(--surface2); border-radius: var(--radius); list-style: none; display: flex; align-items: center; gap: 8px; }
+details.collapsible > summary::before { content: '\25B6'; font-size: 10px; transition: transform 0.2s; }
+details.collapsible[open] > summary::before { transform: rotate(90deg); }
+details.collapsible > summary::-webkit-details-marker { display: none; }
+details.collapsible > .collapsible-content { padding: 16px; }
+/* Verdict badges */
+.verdict-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+.verdict-much_better { background: rgba(16,185,129,0.2); color: #34D399; }
+.verdict-better { background: rgba(16,185,129,0.15); color: #6EE7B7; }
+.verdict-marginally_better { background: rgba(245,158,11,0.15); color: #FBBF24; }
+.verdict-no_change { background: rgba(156,163,175,0.15); color: #9CA3AF; }
+.verdict-worse { background: rgba(239,68,68,0.15); color: #F87171; }
+/* Rich data cards */
+.rich-metric-card { padding: 14px; background: var(--surface2); border-radius: 8px; text-align: center; }
+.rich-metric-card .metric-value { font-size: 24px; font-weight: 800; }
+.rich-metric-card .metric-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -266,7 +292,7 @@ tr:hover td { background: var(--surface2); }
 				<button class="btn btn-primary btn-sm" onclick="loadEvaluation()">Refresh</button>
 			</div>
 		</div>
-		<div id="evalSubTabs" class="hidden" style="display:none;overflow-x:auto;white-space:nowrap;border-bottom:1px solid var(--border);margin-bottom:16px;padding-bottom:0;">
+		<div id="evalSubTabs" class="eval-tab-groups hidden" style="overflow-x:auto;margin-bottom:16px;">
 		</div>
 		<div id="evalContent">
 			<div class="empty">Select a target to view evaluation results.</div>
@@ -861,7 +887,7 @@ async function onEvalTargetChange() {
 		pipelineSelect.style.display = 'none';
 		pipelineSelect.innerHTML = '';
 		container.innerHTML = '<div class="empty">Select a target to view evaluation results.</div>';
-		subTabsContainer.style.display = 'none';
+		subTabsContainer.classList.add('hidden');
 		return;
 	}
 
@@ -871,7 +897,7 @@ async function onEvalTargetChange() {
 		if (!pipelines || pipelines.length === 0) {
 			pipelineSelect.style.display = 'none';
 			container.innerHTML = '<div class="empty">No pipeline found. Run a pipeline first.</div>';
-			subTabsContainer.style.display = 'none';
+			subTabsContainer.classList.add('hidden');
 			return;
 		}
 		pipelines.sort(function(a, b) { return new Date(b.started_at) - new Date(a.started_at); });
@@ -884,7 +910,7 @@ async function onEvalTargetChange() {
 	} catch (e) {
 		pipelineSelect.style.display = 'none';
 		container.innerHTML = '<div class="empty">No pipeline found. Run a pipeline first.</div>';
-		subTabsContainer.style.display = 'none';
+		subTabsContainer.classList.add('hidden');
 	}
 }
 
@@ -896,19 +922,19 @@ async function loadEvaluation() {
 
 	if (!targetId) {
 		container.innerHTML = '<div class="empty">Select a target to view evaluation results.</div>';
-		subTabsContainer.style.display = 'none';
+		subTabsContainer.classList.add('hidden');
 		return;
 	}
 
 	var selectedPipelineId = pipelineSelect.value;
 	if (!selectedPipelineId) {
 		container.innerHTML = '<div class="empty">No pipeline selected.</div>';
-		subTabsContainer.style.display = 'none';
+		subTabsContainer.classList.add('hidden');
 		return;
 	}
 
 	container.innerHTML = '<div class="empty">Loading evaluation...</div>';
-	subTabsContainer.style.display = 'none';
+	subTabsContainer.classList.add('hidden');
 
 	try {
 		// Fetch specific pipeline info
@@ -929,7 +955,7 @@ async function loadEvaluation() {
 			var evalData = await api('/api/targets/' + targetId + '/pipeline/' + selectedPipelineId + '/evaluation');
 			currentEvalData = evalData;
 			buildEvalSubTabs(evalData);
-			subTabsContainer.style.display = 'flex';
+			subTabsContainer.classList.remove('hidden');
 			// Add LLM models info to status header
 			if (evalData.llm_models_used && evalData.llm_models_used.length > 0) {
 				statusHtml = statusHtml.replace('</div></div>', ' · LLM: <code>' + esc(evalData.llm_models_used.join(', ')) + '</code></div></div>');
@@ -963,26 +989,40 @@ async function loadEvaluation() {
 }
 
 function buildEvalSubTabs(data) {
-	var tabs = [
-		{ id: 'overview', icon: '📊', label: '종합 개요' },
-		{ id: 'crawlability', icon: '🤖', label: '크롤링 접근성' },
-		{ id: 'structure', icon: '🏗️', label: '구조화 데이터' },
-		{ id: 'products', icon: '📦', label: '제품 정보 인식' },
-		{ id: 'brand', icon: '💬', label: '브랜드 메시지' },
-		{ id: 'pages', icon: '🔍', label: '페이지별 분석' },
-		{ id: 'recommendations', icon: '🎯', label: '개선 권고' },
-		{ id: 'evidence', icon: '🔬', label: '실증 데이터' },
-		{ id: 'roadmap', icon: '🗺️', label: '개선 로드맵' },
-		{ id: 'probes', icon: '🧪', label: 'Synthetic Probes' },
-		{ id: 'report', icon: '📋', label: 'Analysis Report' },
-		{ id: 'pipeline', icon: '⏱️', label: '실행 요약' },
-		{ id: 'llmlog', icon: '🔎', label: 'LLM Call Log' },
+	var tabGroups = [
+		{ label: '종합', tabs: [{id:'overview', icon:'📊', label:'종합 개요'}] },
+		{ label: '분석', tabs: [
+			{id:'crawlability', icon:'🤖', label:'크롤링'},
+			{id:'structure', icon:'🏗️', label:'구조화'},
+			{id:'products', icon:'📦', label:'제품'},
+			{id:'brand', icon:'💬', label:'브랜드'},
+			{id:'pages', icon:'🔍', label:'페이지'},
+			{id:'evidence', icon:'🔬', label:'실증'},
+			{id:'recommendations', icon:'🎯', label:'권고'},
+			{id:'probes', icon:'🧪', label:'Probes'}
+		]},
+		{ label: '보고서', tabs: [
+			{id:'initial-report', icon:'📋', label:'Initial'},
+			{id:'validation-report', icon:'✅', label:'Validation'},
+			{id:'final-report', icon:'📊', label:'Final'}
+		]},
+		{ label: '기술', tabs: [
+			{id:'pipeline', icon:'⏱️', label:'실행'},
+			{id:'llmlog', icon:'🔎', label:'LLM Log'},
+			{id:'raw-data', icon:'💾', label:'Raw'}
+		]}
 	];
 	var html = '';
-	for (var i = 0; i < tabs.length; i++) {
-		var t = tabs[i];
-		var active = t.id === activeEvalSubTab ? 'color:var(--primary);border-bottom:2px solid var(--primary);' : 'color:var(--text-muted);border-bottom:2px solid transparent;';
-		html += '<button onclick="switchEvalSubTab(\'' + t.id + '\')" style="background:none;border:none;cursor:pointer;padding:10px 16px;font-size:13px;white-space:nowrap;transition:all 0.2s;' + active + '">' + t.icon + ' ' + t.label + '</button>';
+	for (var g = 0; g < tabGroups.length; g++) {
+		var grp = tabGroups[g];
+		html += '<div class="eval-tab-group">';
+		html += '<span class="eval-tab-group-label">' + grp.label + '</span>';
+		for (var i = 0; i < grp.tabs.length; i++) {
+			var t = grp.tabs[i];
+			var cls = t.id === activeEvalSubTab ? 'eval-tab-btn active' : 'eval-tab-btn';
+			html += '<button class="' + cls + '" onclick="switchEvalSubTab(\'' + t.id + '\')">' + t.icon + ' ' + t.label + '</button>';
+		}
+		html += '</div>';
 	}
 	document.getElementById('evalSubTabs').innerHTML = html;
 }
@@ -1042,46 +1082,53 @@ function renderSprintGroup(label, color, items) {
 
 function renderEvalSubTab(tabId, data, container) {
 	var ed = data.eval_data || {};
+	var rr = data.rich_report || null;
 	var html = '';
 	switch (tabId) {
 	case 'overview':
-		html = renderOverviewTab(data, ed);
+		html = renderOverviewTab(data, ed, rr);
 		break;
 	case 'crawlability':
-		html = renderCrawlabilityTab(ed);
+		html = renderCrawlabilityTab(data, ed, rr);
 		break;
 	case 'structure':
-		html = renderStructureTab(ed);
+		html = renderStructureTab(data, ed, rr);
 		break;
 	case 'products':
-		html = renderProductsTab(ed);
+		html = renderProductsTab(data, ed, rr);
 		break;
 	case 'brand':
-		html = renderBrandTab(ed);
+		html = renderBrandTab(data, ed, rr);
 		break;
 	case 'pages':
-		html = renderPagesTab(data);
+		html = renderPagesTab(data, rr);
 		break;
 	case 'recommendations':
-		html = renderRecommendationsTab(ed);
+		html = renderRecommendationsTab(data, ed, rr);
 		break;
 	case 'evidence':
-		html = renderEvidenceTab(ed);
-		break;
-	case 'roadmap':
-		html = renderRoadmapTab(ed);
+		html = renderEvidenceTab(data, ed, rr);
 		break;
 	case 'probes':
-		html = renderProbesTab(data);
+		html = renderProbesTab(data, rr);
 		break;
-	case 'report':
-		html = renderAnalysisReportTab(data);
+	case 'initial-report':
+		html = renderInitialReportTab(data);
+		break;
+	case 'validation-report':
+		html = renderValidationReportTab(data);
+		break;
+	case 'final-report':
+		html = renderFinalReportTab(data);
 		break;
 	case 'pipeline':
 		html = renderPipelineTab(data);
 		break;
 	case 'llmlog':
 		html = buildLLMLogTab(data);
+		break;
+	case 'raw-data':
+		html = renderRawDataTab(data);
 		break;
 	default:
 		html = '<div class="empty">Unknown tab</div>';
@@ -1090,7 +1137,7 @@ function renderEvalSubTab(tabId, data, container) {
 }
 
 // ── Tab 1: Overview ──────────────────────────────────
-function renderOverviewTab(data, ed) {
+function renderOverviewTab(data, ed, rr) {
 	var html = '';
 	var color = scoreColor(data.initial_score);
 	var fColor = data.delta !== 0 ? scoreColor(data.final_score) : color;
@@ -1151,38 +1198,63 @@ function renderOverviewTab(data, ed) {
 		html += '</div></div></div>';
 	}
 
-	// Strengths / Weaknesses / Opportunities
-	if (ed.strengths || ed.weaknesses || ed.opportunities) {
+	// Rich Report Overview: summary_cards, llm_accessibility
+	if (rr && rr.overview) {
+		var ov = rr.overview;
+		if (ov.summary_cards && ov.summary_cards.length > 0) {
+			html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">';
+			for (var si = 0; si < ov.summary_cards.length; si++) {
+				var sc = ov.summary_cards[si];
+				html += '<div class="rich-metric-card"><div class="metric-value" style="font-size:18px;color:var(--primary);">' + esc(String(sc.score !== undefined ? sc.score : (sc.value || ''))) + '</div>';
+				html += '<div class="metric-label">' + esc(sc.label || sc.title || '') + '</div></div>';
+			}
+			html += '</div>';
+		}
+		if (ov.llm_accessibility && ov.llm_accessibility.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🤖 LLM 서비스별 접근성</h3>';
+			for (var ai = 0; ai < ov.llm_accessibility.length; ai++) {
+				var la = ov.llm_accessibility[ai];
+				var laScore = la.score || la.accessibility_score || 0;
+				html += '<div class="eval-dim-bar"><div class="bar-header"><span>' + esc(la.service || la.name || '') + '</span><span style="color:' + scoreColor(laScore) + ';font-weight:600;">' + laScore + '</span></div>';
+				html += '<div class="bar-track"><div class="bar-fill" style="width:' + laScore + '%;background:' + scoreColor(laScore) + ';"></div></div></div>';
+			}
+			html += '</div>';
+		}
+	}
+
+	// Strengths / Weaknesses / Opportunities (prefer rich_report, fallback to eval_data)
+	var findings = {};
+	if (rr && rr.overview) {
+		findings.strengths = rr.overview.strengths || ed.strengths;
+		findings.weaknesses = rr.overview.weaknesses || ed.weaknesses;
+		findings.opportunities = rr.overview.opportunities || ed.opportunities;
+	} else {
+		findings.strengths = ed.strengths;
+		findings.weaknesses = ed.weaknesses;
+		findings.opportunities = ed.opportunities;
+	}
+	if (findings.strengths || findings.weaknesses || findings.opportunities) {
 		html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">';
-		// Strengths
 		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">✅ 잘 된 점 (Strengths)</h3>';
-		if (ed.strengths && ed.strengths.length > 0) {
-			for (var i = 0; i < ed.strengths.length; i++) {
-				html += findingCard(ed.strengths[i].icon, ed.strengths[i].title, ed.strengths[i].description);
+		if (findings.strengths && findings.strengths.length > 0) {
+			for (var i = 0; i < findings.strengths.length; i++) {
+				html += findingCard(findings.strengths[i].icon || '✅', findings.strengths[i].title || '', findings.strengths[i].description || '');
 			}
-		} else {
-			html += '<div class="empty" style="font-size:12px;">분석 완료 후 표시</div>';
-		}
+		} else { html += '<div class="empty" style="font-size:12px;">분석 완료 후 표시</div>'; }
 		html += '</div>';
-		// Weaknesses
 		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">⚠️ 취약점 (Weaknesses)</h3>';
-		if (ed.weaknesses && ed.weaknesses.length > 0) {
-			for (var i = 0; i < ed.weaknesses.length; i++) {
-				html += findingCard(ed.weaknesses[i].icon, ed.weaknesses[i].title, ed.weaknesses[i].description);
+		if (findings.weaknesses && findings.weaknesses.length > 0) {
+			for (var i = 0; i < findings.weaknesses.length; i++) {
+				html += findingCard(findings.weaknesses[i].icon || '⚠️', findings.weaknesses[i].title || '', findings.weaknesses[i].description || '');
 			}
-		} else {
-			html += '<div class="empty" style="font-size:12px;">분석 완료 후 표시</div>';
-		}
+		} else { html += '<div class="empty" style="font-size:12px;">분석 완료 후 표시</div>'; }
 		html += '</div>';
-		// Opportunities
 		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🚀 핵심 기회 (Opportunities)</h3>';
-		if (ed.opportunities && ed.opportunities.length > 0) {
-			for (var i = 0; i < ed.opportunities.length; i++) {
-				html += findingCard(ed.opportunities[i].icon, ed.opportunities[i].title, ed.opportunities[i].description);
+		if (findings.opportunities && findings.opportunities.length > 0) {
+			for (var i = 0; i < findings.opportunities.length; i++) {
+				html += findingCard(findings.opportunities[i].icon || '🚀', findings.opportunities[i].title || '', findings.opportunities[i].description || '');
 			}
-		} else {
-			html += '<div class="empty" style="font-size:12px;">분석 완료 후 표시</div>';
-		}
+		} else { html += '<div class="empty" style="font-size:12px;">분석 완료 후 표시</div>'; }
 		html += '</div></div>';
 	}
 
@@ -1190,8 +1262,55 @@ function renderOverviewTab(data, ed) {
 }
 
 // ── Tab 2: Crawlability ──────────────────────────────
-function renderCrawlabilityTab(ed) {
+function renderCrawlabilityTab(data, ed, rr) {
 	var html = '';
+	// Rich report crawlability
+	if (rr && rr.crawlability) {
+		var rc = rr.crawlability;
+		if (rc.bot_policies && rc.bot_policies.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🤖 AI 봇 정책 (LLM 분석)</h3>';
+			html += '<table class="eval-page-table"><thead><tr><th>봇</th><th>서비스</th><th>상태</th><th>비고</th></tr></thead><tbody>';
+			for (var i = 0; i < rc.bot_policies.length; i++) {
+				var bp = rc.bot_policies[i];
+				var st = bp.status || bp.access || 'unknown';
+				var stColor = st === 'allowed' ? 'var(--success)' : st === 'blocked' ? 'var(--danger)' : 'var(--warning)';
+				html += '<tr><td><code>' + esc(bp.bot_name || bp.bot || '') + '</code></td>';
+				html += '<td>' + esc(bp.service || '') + '</td>';
+				html += '<td style="color:' + stColor + ';font-weight:600;">' + esc(st) + '</td>';
+				html += '<td style="font-size:11px;color:var(--text-muted);">' + esc(bp.note || bp.reason || (bp.disallowed_paths ? bp.disallowed_paths.join(', ') : '')) + '</td></tr>';
+			}
+			html += '</tbody></table></div>';
+		}
+		if (rc.robots_txt_ai_section) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:8px;">robots.txt AI Section</h3>';
+			html += '<pre style="font-size:11px;color:var(--text-muted);background:var(--surface2);padding:12px;border-radius:6px;max-height:200px;overflow:auto;white-space:pre-wrap;">' + esc(rc.robots_txt_ai_section) + '</pre></div>';
+		}
+		if (rc.blocked_paths && rc.blocked_paths.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:8px;">🚫 차단 경로</h3>';
+			for (var i = 0; i < rc.blocked_paths.length; i++) {
+				var bp = rc.blocked_paths[i];
+				var pathText = typeof bp === 'string' ? bp : (bp.path || bp.url || '');
+				var pathReason = typeof bp === 'object' ? (bp.reason || '') : '';
+				html += '<div style="padding:6px 0;border-bottom:1px solid rgba(55,65,81,0.3);font-size:12px;"><code>' + esc(pathText) + '</code>';
+				if (pathReason) html += ' <span style="color:var(--text-muted);font-size:11px;">— ' + esc(pathReason) + '</span>';
+				html += '</div>';
+			}
+			html += '</div>';
+		}
+		if (rc.allowed_paths && rc.allowed_paths.length > 0) {
+			html += collapsible('허용 경로 (' + rc.allowed_paths.length + ')', (function() {
+				var h = '';
+				rc.allowed_paths.forEach(function(p) { h += '<div style="padding:4px 0;font-size:12px;"><code>' + esc(typeof p === 'string' ? p : p.path || '') + '</code></div>'; });
+				return h;
+			})());
+		}
+		// Show eval_data as supplementary if both exist
+		if (ed.bot_policies) {
+			html += collapsible('정적 추출 데이터 (eval_data)', renderEvalCrawlability(ed));
+		}
+		return html;
+	}
+	// Fallback: eval_data only
 	if (!ed.bot_policies) return '<div class="empty">No crawlability data available.</div>';
 
 	html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">';
@@ -1253,8 +1372,47 @@ function renderCrawlabilityTab(ed) {
 }
 
 // ── Tab 3: Structure ─────────────────────────────────
-function renderStructureTab(ed) {
+function renderStructureTab(data, ed, rr) {
 	var html = '';
+	// Rich report structured data
+	if (rr && rr.structured_data) {
+		var rsd = rr.structured_data;
+		if (rsd.page_quality && rsd.page_quality.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">📄 페이지별 Schema 품질 (LLM 분석)</h3>';
+			html += '<table class="eval-page-table"><thead><tr><th>Page</th><th>Score</th><th>Schemas</th><th>Issues</th></tr></thead><tbody>';
+			for (var i = 0; i < rsd.page_quality.length; i++) {
+				var pq = rsd.page_quality[i];
+				html += '<tr><td style="font-size:11px;font-family:monospace;">' + esc(pq.url || pq.page || '') + '</td>';
+				html += '<td style="color:' + scoreColor(pq.score || 0) + ';font-weight:600;">' + (pq.score || 0) + '</td>';
+				html += '<td style="font-size:11px;">' + esc((pq.schemas || pq.schema_types || []).join(', ')) + '</td>';
+				html += '<td style="font-size:11px;color:var(--text-muted);">' + esc((pq.issues || []).join(', ') || '-') + '</td></tr>';
+			}
+			html += '</tbody></table></div>';
+		}
+		if (rsd.schema_analysis && rsd.schema_analysis.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🏗️ Schema 분석 매트릭스</h3>';
+			html += '<table class="eval-page-table"><thead><tr><th>Schema Type</th><th>Pages</th><th>Quality</th><th>LLM Utility</th></tr></thead><tbody>';
+			for (var i = 0; i < rsd.schema_analysis.length; i++) {
+				var sa = rsd.schema_analysis[i];
+				html += '<tr><td><strong>' + esc(sa.type || sa.schema_type || '') + '</strong></td>';
+				html += '<td>' + esc(String(sa.applied_pages || sa.count || 0)) + '</td>';
+				html += '<td>' + esc(sa.quality || '') + '</td>';
+				html += '<td>' + esc(sa.llm_utility || sa.utility || '-') + '</td></tr>';
+			}
+			html += '</tbody></table></div>';
+		}
+		if (rsd.schema_counts) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:8px;">Schema Counts</h3>';
+			html += '<div style="display:flex;gap:12px;flex-wrap:wrap;">';
+			var counts = rsd.schema_counts;
+			for (var key in counts) {
+				html += '<div class="rich-metric-card" style="min-width:100px;"><div class="metric-value" style="font-size:20px;">' + counts[key] + '</div><div class="metric-label">' + esc(key) + '</div></div>';
+			}
+			html += '</div></div>';
+		}
+		if (ed.schema_coverage) html += collapsible('정적 추출 데이터 (eval_data)', renderEvalStructure(ed));
+		return html;
+	}
 	if (!ed.schema_coverage) return '<div class="empty">No structure data available.</div>';
 
 	html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">';
@@ -1311,8 +1469,59 @@ function renderStructureTab(ed) {
 }
 
 // ── Tab 4: Products ──────────────────────────────────
-function renderProductsTab(ed) {
+function renderProductsTab(data, ed, rr) {
 	var html = '';
+	// Rich report products
+	if (rr && rr.products) {
+		var rp = rr.products;
+		if (rp.category_scores && rp.category_scores.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">📦 카테고리별 점수 (LLM 분석)</h3>';
+			html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">';
+			for (var i = 0; i < rp.category_scores.length; i++) {
+				var cs = rp.category_scores[i];
+				var csScore = cs.score || 0;
+				html += '<div class="rich-metric-card" style="border-left:3px solid ' + scoreColor(csScore) + ';">';
+				html += '<div class="metric-value" style="color:' + scoreColor(csScore) + ';">' + csScore + '</div>';
+				html += '<div class="metric-label">' + esc(cs.category || cs.name || '') + '</div></div>';
+			}
+			html += '</div></div>';
+		}
+		if (rp.product_lists && rp.product_lists.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">제품 목록</h3>';
+			for (var i = 0; i < rp.product_lists.length; i++) {
+				var pl = rp.product_lists[i];
+				html += '<div style="margin-bottom:12px;padding:10px;background:var(--surface2);border-radius:6px;">';
+				html += '<div style="font-weight:600;font-size:13px;margin-bottom:6px;">' + esc(pl.category || pl.name || 'Products') + '</div>';
+				if (pl.products && pl.products.length > 0) {
+					for (var j = 0; j < pl.products.length; j++) {
+						var prod = pl.products[j];
+						var prodName = typeof prod === 'string' ? prod : (prod.name || prod.title || '');
+						var recog = typeof prod === 'object' ? (prod.recognition || prod.llm_recognition || '') : '';
+						html += '<div style="padding:4px 0;font-size:12px;border-bottom:1px solid rgba(55,65,81,0.2);">' + esc(prodName);
+						if (recog) html += ' <span style="font-size:10px;color:' + (recog === 'full' ? 'var(--success)' : recog === 'partial' ? 'var(--warning)' : 'var(--danger)') + ';">[' + esc(recog) + ']</span>';
+						html += '</div>';
+					}
+				}
+				html += '</div>';
+			}
+			html += '</div>';
+		}
+		if (rp.spec_recognition && rp.spec_recognition.length > 0) {
+			html += collapsible('Spec Recognition Matrix', (function() {
+				var h = '<table class="eval-page-table"><thead><tr><th>Product</th><th>Spec</th><th>In Schema</th><th>In HTML</th><th>LLM Visible</th></tr></thead><tbody>';
+				for (var i = 0; i < rp.spec_recognition.length; i++) {
+					var sr = rp.spec_recognition[i];
+					h += '<tr><td>' + esc(sr.product || '') + '</td><td>' + esc(sr.spec || sr.name || '') + '</td>';
+					h += '<td>' + (sr.in_schema ? '✅' : '❌') + '</td><td>' + (sr.in_html ? '✅' : '❌') + '</td>';
+					h += '<td>' + (sr.llm_visible ? '✅' : '❌') + '</td></tr>';
+				}
+				h += '</tbody></table>';
+				return h;
+			})());
+		}
+		if (ed.product_info && ed.product_info.length > 0) html += collapsible('정적 추출 데이터 (eval_data)', renderEvalProducts(ed));
+		return html;
+	}
 	if (!ed.product_info || ed.product_info.length === 0) return '<div class="empty">No product information extracted.</div>';
 
 	var hasProducts = ed.product_info.some(function(p) { return p.info.product_name || p.info.prices.length > 0 || p.info.specs_in_schema.length > 0; });
@@ -1371,8 +1580,40 @@ function renderProductsTab(ed) {
 }
 
 // ── Tab 5: Brand ─────────────────────────────────────
-function renderBrandTab(ed) {
+function renderBrandTab(data, ed, rr) {
 	var html = '';
+	// Rich report brand
+	if (rr && rr.brand) {
+		var rb = rr.brand;
+		if (rb.dimensions && rb.dimensions.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">💬 브랜드 차원 분석 (LLM)</h3>';
+			for (var i = 0; i < rb.dimensions.length; i++) {
+				var bd = rb.dimensions[i];
+				var bdScore = bd.score || bd.value || 0;
+				html += '<div class="eval-dim-bar"><div class="bar-header"><span>' + esc(bd.name || bd.dimension || '') + '</span><span style="color:' + scoreColor(bdScore) + ';font-weight:600;">' + bdScore + '</span></div>';
+				html += '<div class="bar-track"><div class="bar-fill" style="width:' + bdScore + '%;background:' + scoreColor(bdScore) + ';"></div></div>';
+				if (bd.description) html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">' + esc(bd.description) + '</div>';
+				html += '</div>';
+			}
+			html += '</div>';
+		}
+		if (rb.claims && rb.claims.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">Marketing Claims (LLM 분석)</h3>';
+			html += '<table class="eval-page-table"><thead><tr><th>Claim</th><th>Sentiment</th><th>Verifiability</th><th>Source</th></tr></thead><tbody>';
+			for (var i = 0; i < rb.claims.length; i++) {
+				var cl = rb.claims[i];
+				var sColor = cl.sentiment === 'positive' ? 'var(--success)' : cl.sentiment === 'negative' ? 'var(--danger)' : 'var(--text-muted)';
+				var vColor = (cl.verifiability === 'verifiable' || cl.verifiability === 'factual') ? 'var(--success)' : cl.verifiability === 'partial' ? 'var(--warning)' : 'var(--danger)';
+				html += '<tr><td style="font-size:12px;max-width:300px;">' + esc(cl.text || cl.claim || '') + '</td>';
+				html += '<td style="color:' + sColor + ';">' + esc(cl.sentiment || '-') + '</td>';
+				html += '<td style="color:' + vColor + ';font-weight:600;">' + esc(cl.verifiability || '-') + '</td>';
+				html += '<td>' + (cl.has_source || cl.source ? '✅' : '❌') + '</td></tr>';
+			}
+			html += '</tbody></table></div>';
+		}
+		if (ed.marketing_claims && ed.marketing_claims.length > 0) html += collapsible('정적 추출 데이터 (eval_data)', renderEvalBrand(ed));
+		return html;
+	}
 	if (!ed.marketing_claims || ed.marketing_claims.length === 0) return '<div class="empty">No marketing claims found. The site may use minimal marketing language.</div>';
 
 	html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">💬 마케팅 클레임 & 검증 가능성 분석</h3>';
@@ -1401,9 +1642,43 @@ function renderBrandTab(ed) {
 }
 
 // ── Tab 6: Pages ─────────────────────────────────────
-function renderPagesTab(data) {
+function renderPagesTab(data, rr) {
 	var html = '';
+	// Rich report pages
+	if (rr && rr.pages && rr.pages.pages && rr.pages.pages.length > 0) {
+		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🔍 페이지별 분석 (LLM)</h3>';
+		html += '<table class="eval-page-table"><thead><tr><th>URL</th><th>Title</th><th>Score</th><th>Tags</th></tr></thead><tbody>';
+		for (var i = 0; i < rr.pages.pages.length; i++) {
+			var pg = rr.pages.pages[i];
+			var pgScore = pg.score || 0;
+			var urlShort = (pg.url || '').length > 50 ? '...' + (pg.url || '').slice(-45) : (pg.url || '-');
+			html += '<tr><td style="font-family:monospace;font-size:11px;">' + esc(urlShort) + '</td>';
+			html += '<td style="font-size:12px;">' + esc(pg.title || '-') + '</td>';
+			html += '<td style="color:' + scoreColor(pgScore) + ';font-weight:600;">' + pgScore + '</td>';
+			html += '<td style="font-size:11px;">';
+			if (pg.tags && pg.tags.length > 0) {
+				pg.tags.forEach(function(t) {
+					var tColor = t === 'good' ? 'rgba(16,185,129,0.15)' : t === 'bad' ? 'rgba(239,68,68,0.15)' : 'rgba(156,163,175,0.15)';
+					var tText = t === 'good' ? 'var(--success)' : t === 'bad' ? 'var(--danger)' : 'var(--text-muted)';
+					html += '<span style="display:inline-block;padding:1px 6px;margin:1px;border-radius:3px;background:' + tColor + ';color:' + tText + ';font-size:10px;">' + esc(typeof t === 'string' ? t : t.name || '') + '</span>';
+				});
+			}
+			html += '</td></tr>';
+		}
+		html += '</tbody></table></div>';
+		if (pg && pg.description) {
+			html += collapsible('Page Descriptions', (function() {
+				var h = '';
+				for (var i = 0; i < rr.pages.pages.length; i++) {
+					var pg2 = rr.pages.pages[i];
+					if (pg2.description) h += '<div style="margin-bottom:8px;padding:8px;background:var(--surface2);border-radius:6px;"><strong style="font-size:12px;">' + esc(pg2.url || '') + '</strong><div style="font-size:12px;color:var(--text-muted);margin-top:4px;">' + esc(pg2.description) + '</div></div>';
+				}
+				return h || '<div>No descriptions</div>';
+			})());
+		}
+	}
 	if (!data.multi_page || !data.multi_page.pages || data.multi_page.pages.length === 0) {
+		if (html) return html; // rich report had data
 		return '<div class="empty">Multi-page analysis not available. Only single-page analysis was performed.</div>';
 	}
 	var mp = data.multi_page;
@@ -1428,8 +1703,64 @@ function renderPagesTab(data) {
 }
 
 // ── Tab 7: Recommendations ───────────────────────────
-function renderRecommendationsTab(ed) {
+function renderRecommendationsTab(data, ed, rr) {
 	var html = '';
+	// Rich report recommendations
+	if (rr && rr.recommendations) {
+		var rec = rr.recommendations;
+		var priorityGroups = [
+			{ key: 'high_priority', label: '🔴 High Priority', color: 'var(--danger)', items: rec.high_priority || [] },
+			{ key: 'medium_priority', label: '🟡 Medium Priority', color: 'var(--warning)', items: rec.medium_priority || [] },
+			{ key: 'low_priority', label: '🟢 Low Priority', color: 'var(--success)', items: rec.low_priority || [] }
+		];
+		for (var g = 0; g < priorityGroups.length; g++) {
+			var grp = priorityGroups[g];
+			if (grp.items.length === 0) continue;
+			html += '<div class="card"><h3 style="font-size:14px;color:' + grp.color + ';margin-bottom:12px;">' + grp.label + ' (' + grp.items.length + ')</h3>';
+			for (var i = 0; i < grp.items.length; i++) {
+				var r = grp.items[i];
+				html += '<div style="padding:10px 14px;margin-bottom:8px;background:var(--surface2);border-radius:6px;border-left:3px solid ' + grp.color + ';">';
+				html += '<div style="font-weight:600;font-size:13px;">' + esc(r.title || r.id || '') + '</div>';
+				if (r.description) html += '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">' + esc(r.description) + '</div>';
+				var meta = [];
+				if (r.effort) meta.push('Effort: ' + r.effort);
+				if (r.impact) meta.push('Impact: ' + r.impact);
+				if (r.expected_improvement) meta.push('Expected: ' + r.expected_improvement);
+				if (r.affected_dimensions) meta.push('Dims: ' + (Array.isArray(r.affected_dimensions) ? r.affected_dimensions.join(', ') : r.affected_dimensions));
+				if (meta.length > 0) html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + esc(meta.join(' · ')) + '</div>';
+				html += '</div>';
+			}
+			html += '</div>';
+		}
+		// Competitive comparison
+		if (rec.competitive_comparison) {
+			var cc = rec.competitive_comparison;
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">경쟁 비교</h3>';
+			if (typeof cc === 'string') {
+				html += '<div style="font-size:12px;color:var(--text-muted);">' + esc(cc) + '</div>';
+			} else if (cc.summary) {
+				html += '<div style="font-size:12px;color:var(--text-muted);">' + esc(cc.summary) + '</div>';
+			}
+			if (cc.gaps && cc.gaps.length > 0) {
+				html += '<div style="margin-top:8px;">';
+				cc.gaps.forEach(function(gap) { html += findingCard('🎯', gap.area || gap.title || '', gap.description || gap.detail || ''); });
+				html += '</div>';
+			}
+			html += '</div>';
+		}
+		// Roadmap (sprint grouping from eval_data)
+		if (ed.improvements && ed.improvements.length > 0) {
+			var sprint1 = ed.improvements.filter(function(r) { return r.sprint === 1; });
+			var sprint2 = ed.improvements.filter(function(r) { return r.sprint === 2; });
+			var sprint3 = ed.improvements.filter(function(r) { return r.sprint === 3; });
+			var roadmapHtml = '';
+			roadmapHtml += renderSprintGroup('Sprint 1 — 즉시 실행', 'var(--danger)', sprint1);
+			roadmapHtml += renderSprintGroup('Sprint 2 — 1~3개월', 'var(--warning)', sprint2);
+			roadmapHtml += renderSprintGroup('Sprint 3 — 분기 내', 'var(--success)', sprint3);
+			if (roadmapHtml) html += collapsible('개선 로드맵 (eval_data)', roadmapHtml);
+		}
+		return html;
+	}
 	if (!ed.improvements || ed.improvements.length === 0) return '<div class="empty">No recommendations generated.</div>';
 
 	html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🎯 개선 권고사항 (' + ed.improvements.length + '건)</h3>';
@@ -1453,9 +1784,69 @@ function renderRecommendationsTab(ed) {
 }
 
 // ── Tab 8: Evidence ──────────────────────────────────
-function renderEvidenceTab(ed) {
+function renderEvidenceTab(data, ed, rr) {
 	var html = '';
-	if (!ed.schema_coverage && !ed.js_dependency) return '<div class="empty">No evidence data available.</div>';
+	// Rich report evidence
+	if (rr && rr.evidence) {
+		var rev = rr.evidence;
+		// Evidence sections
+		if (rev.sections && rev.sections.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🔬 실증 분석 섹션 (LLM)</h3>';
+			for (var i = 0; i < rev.sections.length; i++) {
+				var sec = rev.sections[i];
+				var secTitle = sec.title || sec.category || ('Section ' + (i + 1));
+				var secContent = sec.content || sec.text || sec.description || '';
+				html += collapsible(secTitle, '<div style="font-size:12px;color:var(--text-muted);line-height:1.6;white-space:pre-wrap;">' + esc(secContent) + '</div>', i === 0);
+			}
+			html += '</div>';
+		}
+		// Schema implementation matrix
+		if (rev.schema_implementation_matrix && rev.schema_implementation_matrix.length > 0) {
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">Schema Implementation Matrix</h3>';
+			html += '<table class="eval-page-table"><thead><tr><th>Schema</th><th>Page</th><th>Status</th><th>Quality</th></tr></thead><tbody>';
+			for (var i = 0; i < rev.schema_implementation_matrix.length; i++) {
+				var sim = rev.schema_implementation_matrix[i];
+				html += '<tr><td>' + esc(sim.schema || sim.type || '') + '</td>';
+				html += '<td style="font-size:11px;">' + esc(sim.page || sim.url || '') + '</td>';
+				html += '<td>' + (sim.implemented || sim.present ? '✅' : '❌') + '</td>';
+				html += '<td>' + esc(sim.quality || '-') + '</td></tr>';
+			}
+			html += '</tbody></table></div>';
+		}
+		// JS dependency details
+		if (rev.js_dependency_details && rev.js_dependency_details.length > 0) {
+			html += collapsible('JS Dependency Details', (function() {
+				var h = '<table class="eval-page-table"><thead><tr><th>Script</th><th>Type</th><th>Impact</th></tr></thead><tbody>';
+				rev.js_dependency_details.forEach(function(jd) {
+					h += '<tr><td style="font-size:11px;">' + esc(jd.script || jd.src || '') + '</td>';
+					h += '<td>' + esc(jd.type || '') + '</td><td>' + esc(jd.impact || '-') + '</td></tr>';
+				});
+				h += '</tbody></table>';
+				return h;
+			})());
+		}
+		// Claim verifications
+		if (rev.claim_verifications && rev.claim_verifications.length > 0) {
+			html += collapsible('Claim Verifications', (function() {
+				var h = '<table class="eval-page-table"><thead><tr><th>Claim</th><th>Trust Level</th><th>Factcheck Risk</th></tr></thead><tbody>';
+				rev.claim_verifications.forEach(function(cv) {
+					var trustColor = cv.trust_level === 'high' ? 'var(--success)' : cv.trust_level === 'medium' ? 'var(--warning)' : 'var(--danger)';
+					h += '<tr><td style="font-size:12px;max-width:300px;">' + esc(cv.claim || cv.text || '') + '</td>';
+					h += '<td style="color:' + trustColor + ';font-weight:600;">' + esc(cv.trust_level || '-') + '</td>';
+					h += '<td>' + esc(cv.factcheck_risk || '-') + '</td></tr>';
+				});
+				h += '</tbody></table>';
+				return h;
+			})());
+		}
+	}
+	if (!ed.schema_coverage && !ed.js_dependency && !html) return '<div class="empty">No evidence data available.</div>';
+	if (html && (ed.schema_coverage || ed.product_info)) {
+		// Show eval_data evidence as collapsible supplement
+		html += collapsible('정적 추출 실증 데이터', renderEvalEvidenceContent(ed));
+		return html;
+	}
+	if (html) return html;
 
 	// Schema comparison: implemented vs not
 	if (ed.schema_coverage) {
@@ -1504,28 +1895,56 @@ function renderEvidenceTab(ed) {
 	return html;
 }
 
-// ── Tab 9: Roadmap ───────────────────────────────────
-function renderRoadmapTab(ed) {
-	var html = '';
-	if (!ed.improvements || ed.improvements.length === 0) return '<div class="empty">No improvement roadmap available.</div>';
-
-	var sprint1 = ed.improvements.filter(function(r) { return r.sprint === 1; });
-	var sprint2 = ed.improvements.filter(function(r) { return r.sprint === 2; });
-	var sprint3 = ed.improvements.filter(function(r) { return r.sprint === 3; });
-
-	html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🗺️ 개선 로드맵 (' + ed.improvements.length + ' recommendations)</h3>';
-	html += renderSprintGroup('🔴 Sprint 1 — 즉시 실행 (1~2주)', 'var(--danger)', sprint1);
-	html += renderSprintGroup('🟡 Sprint 2 — 1~3개월', 'var(--warning)', sprint2);
-	html += renderSprintGroup('🟢 Sprint 3 — 분기 내', 'var(--success)', sprint3);
-	html += '</div>';
-	return html;
-}
-
 // ── Tab: Synthetic Probes ────────────────────────────
-function renderProbesTab(data) {
+function renderProbesTab(data, rr) {
+	// Rich report probes supplement
+	if (rr && rr.probes) {
+		var rpb = rr.probes;
+		var richHtml = '';
+		if (rpb.methodology) {
+			richHtml += '<div class="card" style="padding:12px 16px;margin-bottom:12px;"><div style="font-size:12px;color:var(--text-muted);"><strong>Methodology:</strong> ' + esc(rpb.methodology) + '</div></div>';
+		}
+		if (rpb.summary) {
+			richHtml += '<div class="card" style="padding:12px;margin-bottom:12px;">';
+			richHtml += '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;">';
+			if (rpb.summary.pass !== undefined) richHtml += '<span style="color:var(--success);font-weight:600;">PASS: ' + rpb.summary.pass + '</span>';
+			if (rpb.summary.partial !== undefined) richHtml += '<span style="color:var(--warning);font-weight:600;">PARTIAL: ' + rpb.summary.partial + '</span>';
+			if (rpb.summary.fail !== undefined) richHtml += '<span style="color:var(--danger);font-weight:600;">FAIL: ' + rpb.summary.fail + '</span>';
+			richHtml += '</div></div>';
+		}
+		// If rich probes have detailed results, show them
+		if (rpb.results && rpb.results.length > 0) {
+			richHtml += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">LLM Probe Results</h3>';
+			for (var i = 0; i < rpb.results.length; i++) {
+				var rp = rpb.results[i];
+				var vCol = (rp.verdict === 'PASS' || rp.verdict === 'pass') ? 'var(--success)' : (rp.verdict === 'PARTIAL' || rp.verdict === 'partial') ? 'var(--warning)' : 'var(--danger)';
+				richHtml += '<div style="padding:10px;margin-bottom:8px;background:var(--surface2);border-radius:6px;border-left:3px solid ' + vCol + ';">';
+				richHtml += '<div style="font-weight:600;font-size:13px;">' + esc(rp.probe_id || rp.id || '') + ' ' + esc(rp.probe_name || rp.name || '') + ' <span style="color:' + vCol + ';">[' + esc(rp.verdict || '') + ']</span></div>';
+				if (rp.required_data) richHtml += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Required: ' + esc(rp.required_data) + '</div>';
+				if (rp.data_availability) richHtml += '<div style="font-size:11px;color:var(--text-muted);">Availability: ' + esc(rp.data_availability) + '</div>';
+				if (rp.evidence_claim) richHtml += '<div style="font-size:11px;color:var(--text-muted);">Evidence: ' + esc(rp.evidence_claim) + '</div>';
+				if (rp.tags && rp.tags.length > 0) {
+					richHtml += '<div style="margin-top:4px;">';
+					rp.tags.forEach(function(t) { richHtml += '<span style="display:inline-block;font-size:10px;padding:1px 6px;margin:1px;border-radius:3px;background:rgba(99,102,241,0.1);color:#818cf8;">' + esc(t) + '</span>'; });
+					richHtml += '</div>';
+				}
+				richHtml += '</div>';
+			}
+			richHtml += '</div>';
+		}
+		// Then show the actual synthetic probe execution results below
+		if (richHtml) {
+			var actualProbes = renderActualProbes(data);
+			if (actualProbes) richHtml += collapsible('Synthetic Probe 실행 결과 (상세)', actualProbes, true);
+			return richHtml;
+		}
+	}
+	return renderActualProbes(data) || '<div class="card"><div class="empty">Synthetic Probe 결과 없음</div></div>';
+}
+function renderActualProbes(data) {
 	var probes = data.synthetic_probes;
 	if (!probes || !probes.probes || probes.probes.length === 0) {
-		return '<div class="card"><div class="empty">Synthetic Probe 결과 없음 — LLM API Key 설정 후 파이프라인 실행 시 프로브가 실행됩니다.</div></div>';
+		return '';
 	}
 	var html = '';
 	// Summary card
@@ -1582,29 +2001,25 @@ function renderProbesTab(data) {
 	return html;
 }
 
-// ── Tab: Analysis Report ─────────────────────────────
-function renderAnalysisReportTab(data) {
+// (renderAnalysisReportTab replaced by renderInitialReportTab above)
+
+// ── Tab: Initial Report ──────────────────────────────
+function renderInitialReportTab(data) {
 	var report = data.analysis_report || {};
 	var html = '';
 
 	// Score + grade + site type
-	html += '<div class="card" style="padding:16px;margin-bottom:16px;">';
-	html += '<h3 style="font-size:16px;margin-bottom:12px;">Analysis Report Summary</h3>';
+	html += '<div class="card" style="padding:16px;">';
+	html += '<h3 style="font-size:16px;margin-bottom:12px;">Initial Analysis Report (ANALYZING Stage)</h3>';
 	html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">';
-	html += '<div style="background:var(--surface2);padding:12px;border-radius:6px;text-align:center;">';
-	html += '<div style="font-size:28px;font-weight:700;color:' + scoreColor(report.score || 0) + ';">' + (report.score || 0) + '</div>';
-	html += '<div style="font-size:11px;color:var(--text-muted);">Overall Score</div></div>';
-	html += '<div style="background:var(--surface2);padding:12px;border-radius:6px;text-align:center;">';
-	html += '<div style="font-size:16px;font-weight:600;">' + esc(report.grade || 'N/A') + '</div>';
-	html += '<div style="font-size:11px;color:var(--text-muted);">Grade</div></div>';
-	html += '<div style="background:var(--surface2);padding:12px;border-radius:6px;text-align:center;">';
-	html += '<div style="font-size:16px;font-weight:600;">' + esc(report.site_type || 'N/A') + '</div>';
-	html += '<div style="font-size:11px;color:var(--text-muted);">Site Type</div></div>';
+	html += '<div class="rich-metric-card"><div class="metric-value" style="color:' + scoreColor(report.score || 0) + ';">' + (report.score || 0) + '</div><div class="metric-label">Overall Score</div></div>';
+	html += '<div class="rich-metric-card"><div class="metric-value" style="font-size:16px;">' + esc(report.grade || 'N/A') + '</div><div class="metric-label">Grade</div></div>';
+	html += '<div class="rich-metric-card"><div class="metric-value" style="font-size:16px;">' + esc(report.site_type || 'N/A') + '</div><div class="metric-label">Site Type</div></div>';
 	html += '</div></div>';
 
 	// Dimensions
 	if (report.dimensions && report.dimensions.length > 0) {
-		html += '<div class="card" style="padding:16px;margin-bottom:16px;">';
+		html += '<div class="card" style="padding:16px;">';
 		html += '<h3 style="font-size:14px;margin-bottom:12px;">7-Dimension Scores</h3>';
 		for (var i = 0; i < report.dimensions.length; i++) {
 			var d = report.dimensions[i];
@@ -1623,30 +2038,27 @@ function renderAnalysisReportTab(data) {
 	}
 
 	// Multi-page summary
-	if (report.multi_page) {
+	if (report.multi_page && report.multi_page.pages) {
 		var mp = report.multi_page;
-		html += '<div class="card" style="padding:16px;margin-bottom:16px;">';
-		html += '<h3 style="font-size:14px;margin-bottom:12px;">Multi-Page Analysis (' + (mp.page_count || mp.pages?.length || 0) + ' pages)</h3>';
+		html += '<div class="card" style="padding:16px;">';
+		html += '<h3 style="font-size:14px;margin-bottom:12px;">Multi-Page Analysis (' + (mp.page_count || mp.pages.length || 0) + ' pages)</h3>';
 		if (mp.aggregate_score !== undefined) {
 			html += '<div style="font-size:13px;margin-bottom:8px;">Aggregate Score: <strong style="color:' + scoreColor(mp.aggregate_score) + ';">' + mp.aggregate_score + '</strong> (' + esc(mp.aggregate_grade || '') + ')</div>';
 		}
-		if (mp.pages) {
-			html += '<table class="eval-table" style="font-size:11px;"><thead><tr><th>Page</th><th>Score</th><th>Grade</th></tr></thead><tbody>';
-			for (var j = 0; j < mp.pages.length; j++) {
-				var p = mp.pages[j];
-				html += '<tr><td>' + esc(p.filename || p.url || '') + '</td>';
-				html += '<td style="color:' + scoreColor(p.score) + ';font-weight:600;">' + p.score + '</td>';
-				html += '<td>' + esc(p.grade || '') + '</td></tr>';
-			}
-			html += '</tbody></table>';
+		html += '<table class="eval-page-table" style="font-size:11px;"><thead><tr><th>Page</th><th>Score</th><th>Grade</th></tr></thead><tbody>';
+		for (var j = 0; j < mp.pages.length; j++) {
+			var p = mp.pages[j];
+			html += '<tr><td>' + esc(p.filename || p.url || '') + '</td>';
+			html += '<td style="color:' + scoreColor(p.score) + ';font-weight:600;">' + p.score + '</td>';
+			html += '<td>' + esc(p.grade || '') + '</td></tr>';
 		}
-		html += '</div>';
+		html += '</tbody></table></div>';
 	}
 
-	// Eval data highlights
+	// Key Findings (from eval_data)
 	var ed = report.eval_data || data.eval_data || {};
 	if (ed.strengths || ed.weaknesses || ed.opportunities) {
-		html += '<div class="card" style="padding:16px;margin-bottom:16px;">';
+		html += '<div class="card" style="padding:16px;">';
 		html += '<h3 style="font-size:14px;margin-bottom:12px;">Key Findings</h3>';
 		html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;">';
 		if (ed.strengths && ed.strengths.length > 0) {
@@ -1669,7 +2081,7 @@ function renderAnalysisReportTab(data) {
 
 	// LLM Assessment
 	if (report.llm_assessment) {
-		html += '<div class="card" style="padding:16px;margin-bottom:16px;">';
+		html += '<div class="card" style="padding:16px;">';
 		html += '<h3 style="font-size:14px;margin-bottom:12px;">LLM Quality Assessment</h3>';
 		var la = report.llm_assessment;
 		if (la.brand_recognition) {
@@ -1683,25 +2095,233 @@ function renderAnalysisReportTab(data) {
 		if (la.overall_assessment) {
 			html += '<div style="font-size:12px;color:var(--text-muted);padding:8px;background:var(--surface2);border-radius:6px;">' + esc(la.overall_assessment) + '</div>';
 		}
+		html += '</div>';
 	}
 
-	// Rich Report (if available)
-	if (data.rich_report) {
-		html += '<div class="card" style="padding:16px;margin-bottom:16px;">';
-		html += '<h3 style="font-size:14px;margin-bottom:12px;">LLM-Generated Rich Report (10-Tab)</h3>';
-		html += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">LLM agent loop이 생성한 상세 보고서입니다.</p>';
-		html += '<details><summary style="cursor:pointer;font-size:12px;color:var(--primary);">Raw JSON (click to expand)</summary>';
-		html += '<pre style="white-space:pre-wrap;font-size:11px;color:var(--text-muted);max-height:600px;overflow:auto;margin-top:8px;padding:12px;background:rgba(0,0,0,0.3);border-radius:6px;">' + esc(JSON.stringify(data.rich_report, null, 2)) + '</pre>';
-		html += '</details></div>';
+	// Raw data collapsible
+	html += collapsible('Full ANALYZING stage result (JSON)', jsonBlock(report));
+
+	return html;
+}
+
+// ── Tab: Validation Report ───────────────────────────
+function renderValidationReportTab(data) {
+	var v = data.validation;
+	if (!v) {
+		return '<div class="card"><div class="empty">Validation 미실행 — 파이프라인이 VALIDATING 단계까지 진행되지 않았습니다.</div></div>';
 	}
 
-	// Full raw analysis data
-	html += '<div class="card" style="padding:16px;margin-bottom:16px;">';
-	html += '<h3 style="font-size:14px;margin-bottom:12px;">Raw Analysis Data</h3>';
-	html += '<details><summary style="cursor:pointer;font-size:12px;color:var(--primary);">Full ANALYZING stage result (click to expand)</summary>';
-	html += '<pre style="white-space:pre-wrap;font-size:11px;color:var(--text-muted);max-height:600px;overflow:auto;margin-top:8px;padding:12px;background:rgba(0,0,0,0.3);border-radius:6px;">' + esc(JSON.stringify(report, null, 2)) + '</pre>';
-	html += '</details></div>';
+	var html = '';
 
+	// Before/After Score comparison
+	html += '<div class="card eval-score-card">';
+	var beforeScore = data.initial_score || 0;
+	var afterScore = v.after || v.after_score || data.final_score || beforeScore;
+	var delta = (v.delta !== undefined) ? v.delta : (afterScore - beforeScore);
+	var bColor = scoreColor(beforeScore);
+	var aColor = scoreColor(afterScore);
+
+	html += '<div style="text-align:center;"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">Before</div>';
+	html += '<div class="score-circle" style="background:conic-gradient(' + bColor + ' 0% ' + beforeScore + '%, var(--border) ' + beforeScore + '%);">';
+	html += '<span style="color:' + bColor + ';">' + Math.round(beforeScore) + '</span></div>';
+	html += '<div style="font-size:20px;font-weight:800;color:' + bColor + ';margin-top:4px;">' + beforeScore.toFixed(1) + '</div></div>';
+
+	html += '<div style="text-align:center;padding:0 20px;align-self:center;">';
+	html += '<div style="font-size:24px;margin-bottom:4px;">→</div>' + deltaBadge(delta) + '</div>';
+
+	html += '<div style="text-align:center;"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:4px;">After</div>';
+	html += '<div class="score-circle" style="background:conic-gradient(' + aColor + ' 0% ' + afterScore + '%, var(--border) ' + afterScore + '%);">';
+	html += '<span style="color:' + aColor + ';">' + Math.round(afterScore) + '</span></div>';
+	html += '<div style="font-size:20px;font-weight:800;color:' + aColor + ';margin-top:4px;">' + afterScore.toFixed(1) + '</div></div>';
+	html += '</div>';
+
+	// Stop reason
+	if (v.stop_reason) {
+		html += '<div class="card" style="padding:12px 16px;font-size:13px;">Stop Reason: <strong>' + esc(v.stop_reason) + '</strong></div>';
+	}
+
+	// Dimension deltas
+	if (v.dimension_deltas && v.dimension_deltas.length > 0) {
+		html += '<div class="card" style="padding:16px;">';
+		html += '<h3 style="font-size:14px;margin-bottom:12px;">차원별 변화</h3>';
+		html += '<table class="eval-page-table"><thead><tr><th>차원</th><th>Before</th><th>After</th><th>Delta</th></tr></thead><tbody>';
+		for (var i = 0; i < v.dimension_deltas.length; i++) {
+			var dd = v.dimension_deltas[i];
+			var ddColor = dd.delta > 0 ? 'var(--success)' : dd.delta < 0 ? 'var(--danger)' : 'var(--text-muted)';
+			var ddSign = dd.delta > 0 ? '+' : '';
+			html += '<tr><td><strong>' + esc(dd.id || '') + '</strong> ' + esc(dd.label || '') + '</td>';
+			html += '<td>' + (dd.before !== undefined ? dd.before.toFixed(1) : '-') + '</td>';
+			html += '<td style="color:' + scoreColor(dd.after || 0) + ';font-weight:600;">' + (dd.after !== undefined ? dd.after.toFixed(1) : '-') + '</td>';
+			html += '<td style="color:' + ddColor + ';font-weight:600;">' + ddSign + (dd.delta !== undefined ? dd.delta.toFixed(1) : '-') + '</td></tr>';
+		}
+		html += '</tbody></table>';
+
+		// Visual bars
+		html += '<div style="margin-top:16px;">';
+		for (var i = 0; i < v.dimension_deltas.length; i++) {
+			var dd = v.dimension_deltas[i];
+			html += '<div style="margin-bottom:8px;">';
+			html += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">';
+			html += '<span>' + esc(dd.id || '') + ' ' + esc(dd.label || '') + '</span>';
+			html += '<span>' + (dd.before !== undefined ? dd.before.toFixed(1) : '-') + ' → ' + (dd.after !== undefined ? dd.after.toFixed(1) : '-') + '</span></div>';
+			html += '<div style="height:6px;background:var(--surface2);border-radius:3px;position:relative;">';
+			html += '<div style="position:absolute;height:100%;width:' + Math.min(dd.before || 0, 100) + '%;background:var(--border);border-radius:3px;opacity:0.5;"></div>';
+			html += '<div style="position:absolute;height:100%;width:' + Math.min(dd.after || 0, 100) + '%;background:' + scoreColor(dd.after || 0) + ';border-radius:3px;"></div>';
+			html += '</div></div>';
+		}
+		html += '</div></div>';
+	}
+
+	// LLM Verdict
+	if (v.llm_verdict) {
+		var lv = v.llm_verdict;
+		html += '<div class="card" style="padding:16px;">';
+		html += '<h3 style="font-size:14px;margin-bottom:12px;">LLM Quality Verdict</h3>';
+		if (lv.llm_friendliness_verdict) {
+			html += '<div style="margin-bottom:12px;"><span class="verdict-badge verdict-' + lv.llm_friendliness_verdict + '">' + esc(lv.llm_friendliness_verdict.replace(/_/g, ' ').toUpperCase()) + '</span>';
+			if (lv.confidence !== undefined) html += ' <span style="font-size:11px;color:var(--text-muted);">Confidence: ' + Math.round(lv.confidence * 100) + '%</span>';
+			html += '</div>';
+		}
+		if (lv.improved_aspects && lv.improved_aspects.length > 0) {
+			html += '<div style="margin-bottom:10px;"><strong style="font-size:12px;color:var(--success);">Improved Aspects:</strong><ul style="margin:4px 0 0 16px;font-size:12px;">';
+			lv.improved_aspects.forEach(function(a) { html += '<li>' + esc(a) + '</li>'; });
+			html += '</ul></div>';
+		}
+		if (lv.remaining_issues && lv.remaining_issues.length > 0) {
+			html += '<div style="margin-bottom:10px;"><strong style="font-size:12px;color:var(--danger);">Remaining Issues:</strong><ul style="margin:4px 0 0 16px;font-size:12px;">';
+			lv.remaining_issues.forEach(function(a) { html += '<li>' + esc(a) + '</li>'; });
+			html += '</ul></div>';
+		}
+		if (lv.specific_recommendations && lv.specific_recommendations.length > 0) {
+			html += '<div><strong style="font-size:12px;color:var(--primary);">Recommendations:</strong><ul style="margin:4px 0 0 16px;font-size:12px;">';
+			lv.specific_recommendations.forEach(function(a) { html += '<li>' + esc(a) + '</li>'; });
+			html += '</ul></div>';
+		}
+		html += '</div>';
+	}
+
+	// After dimensions
+	if (v.after_dimensions && v.after_dimensions.length > 0) {
+		html += collapsible('After Dimensions (상세)', (function() {
+			var h = '<table class="eval-page-table"><thead><tr><th>ID</th><th>Label</th><th>Score</th><th>Weight</th><th>Details</th></tr></thead><tbody>';
+			v.after_dimensions.forEach(function(d) {
+				h += '<tr><td>' + esc(d.id || '') + '</td><td>' + esc(d.label || '') + '</td>';
+				h += '<td style="color:' + scoreColor(d.score || 0) + ';font-weight:600;">' + (d.score || 0) + '</td>';
+				h += '<td>' + (d.weight || 0) + '</td>';
+				h += '<td style="font-size:11px;">' + (d.details ? d.details.map(esc).join(', ') : '-') + '</td></tr>';
+			});
+			h += '</tbody></table>';
+			return h;
+		})());
+	}
+
+	// Page deltas
+	if (v.page_deltas && v.page_deltas.length > 0) {
+		html += collapsible('Page Deltas (멀티페이지)', (function() {
+			var h = '<table class="eval-page-table"><thead><tr><th>URL</th><th>Before</th><th>After</th><th>Delta</th></tr></thead><tbody>';
+			v.page_deltas.forEach(function(pd) {
+				var pdColor = pd.delta > 0 ? 'var(--success)' : pd.delta < 0 ? 'var(--danger)' : 'var(--text-muted)';
+				h += '<tr><td style="font-family:monospace;font-size:11px;">' + esc(pd.url || pd.filename || '') + '</td>';
+				h += '<td>' + (pd.before !== undefined ? pd.before.toFixed(1) : '-') + '</td>';
+				h += '<td style="color:' + scoreColor(pd.after || 0) + ';font-weight:600;">' + (pd.after !== undefined ? pd.after.toFixed(1) : '-') + '</td>';
+				h += '<td style="color:' + pdColor + ';font-weight:600;">' + (pd.delta > 0 ? '+' : '') + (pd.delta !== undefined ? pd.delta.toFixed(1) : '-') + '</td></tr>';
+			});
+			h += '</tbody></table>';
+			return h;
+		})());
+	}
+
+	// Raw validation data
+	html += collapsible('Raw Validation Data (JSON)', jsonBlock(v));
+
+	return html;
+}
+
+// ── Tab: Final Report ────────────────────────────────
+function renderFinalReportTab(data) {
+	var html = '';
+	var v = data.validation;
+
+	// Pipeline summary
+	html += '<div class="card" style="padding:16px;">';
+	html += '<h3 style="font-size:16px;margin-bottom:16px;">Pipeline Final Report</h3>';
+
+	// Score summary
+	var iScore = data.initial_score || 0;
+	var fScore = data.final_score || iScore;
+	var delta = data.delta || 0;
+	html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">';
+	html += '<div class="rich-metric-card"><div class="metric-value" style="color:' + scoreColor(iScore) + ';">' + iScore.toFixed(1) + '</div><div class="metric-label">Initial Score</div></div>';
+	html += '<div class="rich-metric-card"><div class="metric-value" style="color:' + scoreColor(fScore) + ';">' + fScore.toFixed(1) + '</div><div class="metric-label">Final Score</div></div>';
+	html += '<div class="rich-metric-card"><div class="metric-value">' + deltaBadge(delta) + '</div><div class="metric-label">Delta</div></div>';
+	html += '<div class="rich-metric-card"><div class="metric-value" style="font-size:16px;">' + esc(data.initial_grade || 'N/A') + '</div><div class="metric-label">Grade</div></div>';
+	html += '<div class="rich-metric-card"><div class="metric-value" style="font-size:16px;">' + esc(data.site_type || 'N/A') + '</div><div class="metric-label">Site Type</div></div>';
+	html += '</div>';
+
+	// LLM Models
+	if (data.llm_models_used && data.llm_models_used.length > 0) {
+		html += '<div style="margin-bottom:12px;font-size:12px;"><strong>LLM Models:</strong> ';
+		data.llm_models_used.forEach(function(m) {
+			html += '<code style="background:rgba(59,130,246,0.15);color:#93C5FD;padding:2px 8px;border-radius:4px;margin-right:6px;">' + esc(m) + '</code>';
+		});
+		html += '</div>';
+	}
+	html += '</div>';
+
+	// Validation verdict summary
+	if (v && v.llm_verdict) {
+		html += '<div class="card" style="padding:16px;">';
+		html += '<h3 style="font-size:14px;margin-bottom:12px;">Validation Verdict</h3>';
+		html += '<span class="verdict-badge verdict-' + (v.llm_verdict.llm_friendliness_verdict || 'no_change') + '">' + esc((v.llm_verdict.llm_friendliness_verdict || 'N/A').replace(/_/g, ' ').toUpperCase()) + '</span>';
+		if (v.stop_reason) html += ' <span style="font-size:12px;color:var(--text-muted);">(' + esc(v.stop_reason) + ')</span>';
+		html += '</div>';
+	}
+
+	// Stage timeline
+	if (data.stages && data.stages.length > 0) {
+		html += '<div class="card" style="padding:16px;">';
+		html += '<h3 style="font-size:14px;margin-bottom:12px;">Stage Timeline</h3>';
+		var totalDuration = 0;
+		for (var i = 0; i < data.stages.length; i++) {
+			var s = data.stages[i];
+			var icon = s.status === 'completed' ? '✅' : s.status === 'failed' ? '❌' : s.status === 'running' ? '🔄' : '⏳';
+			var dur = s.duration_ms ? ' (' + (s.duration_ms / 1000).toFixed(1) + 's)' : '';
+			if (s.duration_ms) totalDuration += s.duration_ms;
+			html += '<div style="padding:6px 0;border-bottom:1px solid rgba(55,65,81,0.3);font-size:13px;">';
+			html += icon + ' <strong>' + esc(s.stage) + '</strong>' + dur;
+			if (s.result_summary) html += '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">' + esc(s.result_summary) + '</div>';
+			html += '</div>';
+		}
+		html += '<div style="margin-top:10px;font-size:12px;color:var(--text-muted);">Total: ' + (totalDuration / 1000).toFixed(1) + 's | Stages: ' + data.stages.length + '</div>';
+		html += '</div>';
+	}
+
+	// LLM Errors
+	if (data.llm_errors && data.llm_errors.length > 0) {
+		html += '<div class="card" style="padding:16px;border-color:var(--danger);">';
+		html += '<h3 style="font-size:14px;color:var(--danger);margin-bottom:8px;">LLM Errors (' + data.llm_errors.length + ')</h3>';
+		html += '<ul style="margin-left:16px;font-size:12px;">';
+		data.llm_errors.forEach(function(e) { html += '<li style="color:var(--text-muted);margin-bottom:4px;">' + esc(e) + '</li>'; });
+		html += '</ul></div>';
+	}
+
+	return html;
+}
+
+// ── Tab: Raw Data ────────────────────────────────────
+function renderRawDataTab(data) {
+	var html = '<div class="card" style="padding:16px;">';
+	html += '<h3 style="font-size:14px;margin-bottom:12px;">Raw Data (Debugging)</h3>';
+	html += '<p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">파이프라인에서 수집된 모든 데이터를 JSON으로 확인할 수 있습니다.</p>';
+
+	if (data.rich_report) html += collapsible('Rich Report (LLM 10-Tab)', jsonBlock(data.rich_report));
+	if (data.analysis_report) html += collapsible('Analysis Report (ANALYZING result_full)', jsonBlock(data.analysis_report));
+	if (data.validation) html += collapsible('Validation Report (VALIDATING result_full)', jsonBlock(data.validation));
+	if (data.synthetic_probes) html += collapsible('Synthetic Probes', jsonBlock(data.synthetic_probes));
+	if (data.eval_data) html += collapsible('Eval Data (정적 추출)', jsonBlock(data.eval_data));
+	if (data.dimensions) html += collapsible('Dimensions', jsonBlock(data.dimensions));
+
+	html += '</div>';
 	return html;
 }
 
@@ -1954,6 +2574,99 @@ async function resetAllProviders() {
 
 // ── Utils ────────────────────────────────────────────
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+var escHtml = esc;
+
+function collapsible(title, contentHtml, defaultOpen) {
+	return '<details class="collapsible"' + (defaultOpen ? ' open' : '') + '>' +
+		'<summary>' + esc(title) + '</summary>' +
+		'<div class="collapsible-content">' + contentHtml + '</div></details>';
+}
+
+function jsonBlock(obj) {
+	return '<pre style="white-space:pre-wrap;font-size:11px;color:var(--text-muted);max-height:600px;overflow:auto;padding:12px;background:rgba(0,0,0,0.3);border-radius:6px;">' + esc(JSON.stringify(obj, null, 2)) + '</pre>';
+}
+
+// ── Eval Data Helpers (for collapsible supplementary sections) ──
+function renderEvalCrawlability(ed) {
+	var html = '';
+	if (!ed.bot_policies) return '<div class="empty">No eval_data crawlability.</div>';
+	html += '<table class="eval-page-table"><thead><tr><th>AI Bot</th><th>Service</th><th>Status</th><th>Blocked Paths</th></tr></thead><tbody>';
+	for (var i = 0; i < ed.bot_policies.length; i++) {
+		var bot = ed.bot_policies[i];
+		var stStyle = bot.status === 'allowed' ? 'color:var(--success)' : bot.status === 'blocked' ? 'color:var(--danger)' : 'color:var(--warning)';
+		html += '<tr><td><code>' + esc(bot.bot_name) + '</code></td><td>' + esc(bot.service) + '</td>';
+		html += '<td style="' + stStyle + ';font-weight:600;">' + esc(bot.status) + '</td>';
+		html += '<td style="font-size:11px;">' + (bot.disallowed_paths && bot.disallowed_paths.length > 0 ? esc(bot.disallowed_paths.slice(0, 3).join(', ')) : '-') + '</td></tr>';
+	}
+	html += '</tbody></table>';
+	return html;
+}
+function renderEvalStructure(ed) {
+	if (!ed.schema_coverage) return '';
+	var html = '<table class="eval-page-table"><thead><tr><th>Schema</th><th>Present</th><th>Quality</th><th>Details</th></tr></thead><tbody>';
+	for (var i = 0; i < ed.schema_coverage.length; i++) {
+		var sc = ed.schema_coverage[i];
+		html += '<tr><td>' + esc(sc.schema_type) + '</td><td>' + (sc.present ? '✅' : '❌') + '</td>';
+		html += '<td>' + esc(sc.quality || '') + '</td><td style="font-size:11px;">' + esc(sc.details || '') + '</td></tr>';
+	}
+	html += '</tbody></table>';
+	return html;
+}
+function renderEvalProducts(ed) {
+	if (!ed.product_info || ed.product_info.length === 0) return '';
+	var html = '<table class="eval-page-table"><thead><tr><th>Page</th><th>Product</th><th>Price</th><th>Schema Spec</th><th>Rating</th></tr></thead><tbody>';
+	for (var i = 0; i < ed.product_info.length; i++) {
+		var pi = ed.product_info[i];
+		html += '<tr><td style="font-size:11px;">' + esc(pi.filename || '') + '</td>';
+		html += '<td>' + (pi.info.product_name ? esc(pi.info.product_name) : '❌') + '</td>';
+		html += '<td>' + (pi.info.prices.length > 0 ? esc(pi.info.prices[0]) : '❌') + '</td>';
+		html += '<td>' + (pi.info.specs_in_schema.length > 0 ? pi.info.specs_in_schema.length : '❌') + '</td>';
+		html += '<td>' + (pi.info.has_aggregate_rating ? '✅' : '❌') + '</td></tr>';
+	}
+	html += '</tbody></table>';
+	return html;
+}
+function renderEvalBrand(ed) {
+	if (!ed.marketing_claims || ed.marketing_claims.length === 0) return '';
+	var html = '<table class="eval-page-table"><thead><tr><th>Claim</th><th>Source</th><th>Verifiability</th></tr></thead><tbody>';
+	for (var i = 0; i < ed.marketing_claims.length; i++) {
+		var cl = ed.marketing_claims[i];
+		html += '<tr><td style="font-size:12px;max-width:350px;">' + esc(cl.text) + '</td>';
+		html += '<td>' + (cl.has_source ? '✅' : '❌') + '</td>';
+		html += '<td>' + esc(cl.verifiability || '') + '</td></tr>';
+	}
+	html += '</tbody></table>';
+	return html;
+}
+function renderEvalEvidenceContent(ed) {
+	var html = '';
+	if (ed.schema_coverage) {
+		var impl = ed.schema_coverage.filter(function(s) { return s.present; });
+		var miss = ed.schema_coverage.filter(function(s) { return !s.present; });
+		html += '<div style="margin-bottom:12px;"><strong style="font-size:12px;">Implemented: ' + impl.length + '/' + ed.schema_coverage.length + '</strong></div>';
+		impl.forEach(function(s) { html += '<div style="font-size:11px;padding:4px 0;">' + esc(s.schema_type) + ' — ' + esc(s.quality || '') + '</div>'; });
+		if (miss.length > 0) {
+			html += '<div style="margin-top:8px;"><strong style="font-size:12px;color:var(--danger);">Missing:</strong></div>';
+			miss.forEach(function(s) { html += '<div style="font-size:11px;padding:4px 0;color:var(--danger);">' + esc(s.schema_type) + '</div>'; });
+		}
+	}
+	if (ed.product_info && ed.product_info.length > 0) {
+		html += '<div style="margin-top:12px;">' + renderEvalProducts(ed) + '</div>';
+	}
+	return html || '<div>No eval evidence data</div>';
+}
+function renderEvalRecommendations(ed) {
+	if (!ed.improvements || ed.improvements.length === 0) return '';
+	var html = '<table class="eval-page-table"><thead><tr><th>#</th><th>Title</th><th>Impact</th><th>Difficulty</th><th>Sprint</th></tr></thead><tbody>';
+	for (var i = 0; i < ed.improvements.length; i++) {
+		var r = ed.improvements[i];
+		html += '<tr><td>' + esc(r.id) + '</td><td>' + esc(r.title) + '</td>';
+		html += '<td>' + r.impact + '/5</td><td>' + r.difficulty + '</td>';
+		html += '<td>Sprint ' + r.sprint + '</td></tr>';
+	}
+	html += '</tbody></table>';
+	return html;
+}
 
 // ── Init ─────────────────────────────────────────────
 checkHealth();
