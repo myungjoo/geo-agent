@@ -119,13 +119,9 @@ export class Orchestrator {
 				break;
 			}
 
-			// 수동 중단 체크 — COMPLETED로 바로 갈 수 없으면 FAILED로 처리
+			// 수동 중단 체크 — STOPPED 상태로 전이
 			if (this.stopped) {
-				if (machine.canTransition("COMPLETED")) {
-					machine.transition("COMPLETED");
-				} else {
-					machine.fail("Pipeline manually stopped", false);
-				}
+				machine.transition("STOPPED");
 				this.emitStateChange(machine.getState());
 				break;
 			}

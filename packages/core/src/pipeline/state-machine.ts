@@ -11,16 +11,17 @@ import type { PipelineStage, PipelineState } from "../models/pipeline-state.js";
 
 /** 정상 진행 시 허용되는 전이 맵 */
 const TRANSITIONS: Record<string, PipelineStage[]> = {
-	INIT: ["ANALYZING", "FAILED"],
-	ANALYZING: ["CLONING", "FAILED"],
-	CLONING: ["STRATEGIZING", "FAILED"],
-	STRATEGIZING: ["OPTIMIZING", "FAILED"],
-	OPTIMIZING: ["VALIDATING", "FAILED"],
-	VALIDATING: ["REPORTING", "STRATEGIZING", "FAILED", "PARTIAL_FAILURE"],
-	REPORTING: ["COMPLETED", "FAILED"],
+	INIT: ["ANALYZING", "FAILED", "STOPPED"],
+	ANALYZING: ["CLONING", "FAILED", "STOPPED"],
+	CLONING: ["STRATEGIZING", "FAILED", "STOPPED"],
+	STRATEGIZING: ["OPTIMIZING", "FAILED", "STOPPED"],
+	OPTIMIZING: ["VALIDATING", "FAILED", "STOPPED"],
+	VALIDATING: ["REPORTING", "STRATEGIZING", "FAILED", "PARTIAL_FAILURE", "STOPPED"],
+	REPORTING: ["COMPLETED", "FAILED", "STOPPED"],
 	COMPLETED: [],
 	FAILED: [],
 	PARTIAL_FAILURE: [],
+	STOPPED: [],
 };
 
 export class PipelineStateMachine {
@@ -70,7 +71,7 @@ export class PipelineStateMachine {
 		this.state.stage = nextStage;
 		this.state.updated_at = new Date().toISOString();
 
-		if (nextStage === "COMPLETED" || nextStage === "FAILED" || nextStage === "PARTIAL_FAILURE") {
+		if (nextStage === "COMPLETED" || nextStage === "FAILED" || nextStage === "PARTIAL_FAILURE" || nextStage === "STOPPED") {
 			this.state.completed_at = this.state.updated_at;
 		}
 
@@ -122,7 +123,7 @@ export class PipelineStateMachine {
 
 	/** 터미널 상태인지 확인 */
 	isTerminal(): boolean {
-		return ["COMPLETED", "FAILED", "PARTIAL_FAILURE"].includes(this.state.stage);
+		return ["COMPLETED", "FAILED", "PARTIAL_FAILURE", "STOPPED"].includes(this.state.stage);
 	}
 
 	/** 허용되는 다음 전이 목록 */

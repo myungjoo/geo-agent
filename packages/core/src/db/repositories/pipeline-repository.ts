@@ -71,7 +71,7 @@ export class PipelineRepository {
 			updated_at: now,
 		};
 
-		if (stage === "COMPLETED" || stage === "FAILED" || stage === "PARTIAL_FAILURE") {
+		if (stage === "COMPLETED" || stage === "FAILED" || stage === "PARTIAL_FAILURE" || stage === "STOPPED") {
 			updates.completed_at = now;
 		}
 

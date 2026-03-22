@@ -62,6 +62,8 @@ export interface PipelineConfig {
 	timeout_ms?: number;
 	/** 스테이지 실행 기록 콜백 (optional) */
 	stageCallbacks?: StageCallbacks;
+	/** 외부에서 stop 시그널을 보낼 수 있도록 stop 함수를 등록하는 콜백 */
+	registerStop?: (stopFn: () => void) => void;
 }
 
 export interface LLMCallLogEntry {
@@ -209,6 +211,11 @@ export async function runPipeline(
 		timeoutMs: config.timeout_ms ?? 30 * 60 * 1000,
 		maxCycles: config.max_cycles ?? 10,
 	});
+
+	// Allow external callers (e.g., dashboard stop button) to signal the orchestrator
+	if (config.registerStop) {
+		config.registerStop(() => orchestrator.stop());
+	}
 
 	const cb = config.stageCallbacks;
 

@@ -126,7 +126,7 @@ describe("PipelineStateMachine", () => {
 		});
 
 		it("returns false for any transition from terminal stages", () => {
-			for (const terminal of ["COMPLETED", "FAILED", "PARTIAL_FAILURE"] as PipelineStage[]) {
+			for (const terminal of ["COMPLETED", "FAILED", "PARTIAL_FAILURE", "STOPPED"] as PipelineStage[]) {
 				const sm = PipelineStateMachine.fromState(buildState({ stage: terminal }));
 				expect(sm.canTransition("INIT")).toBe(false);
 				expect(sm.canTransition("ANALYZING")).toBe(false);
@@ -433,6 +433,11 @@ describe("PipelineStateMachine", () => {
 			expect(sm.isTerminal()).toBe(true);
 		});
 
+		it("returns true for STOPPED", () => {
+			const sm = PipelineStateMachine.fromState(buildState({ stage: "STOPPED" }));
+			expect(sm.isTerminal()).toBe(true);
+		});
+
 		it("returns false for non-terminal stages", () => {
 			const nonTerminal: PipelineStage[] = [
 				"INIT",
@@ -453,48 +458,49 @@ describe("PipelineStateMachine", () => {
 	// ─── 14. getAllowedTransitions() ─────────────────────────────────
 
 	describe("getAllowedTransitions()", () => {
-		it("returns [ANALYZING, FAILED] for INIT", () => {
+		it("returns [ANALYZING, FAILED, STOPPED] for INIT", () => {
 			const sm = new PipelineStateMachine(TARGET_ID);
-			expect(sm.getAllowedTransitions()).toEqual(["ANALYZING", "FAILED"]);
+			expect(sm.getAllowedTransitions()).toEqual(["ANALYZING", "FAILED", "STOPPED"]);
 		});
 
-		it("returns [CLONING, FAILED] for ANALYZING", () => {
+		it("returns [CLONING, FAILED, STOPPED] for ANALYZING", () => {
 			const sm = PipelineStateMachine.fromState(buildState({ stage: "ANALYZING" }));
-			expect(sm.getAllowedTransitions()).toEqual(["CLONING", "FAILED"]);
+			expect(sm.getAllowedTransitions()).toEqual(["CLONING", "FAILED", "STOPPED"]);
 		});
 
-		it("returns [STRATEGIZING, FAILED] for CLONING", () => {
+		it("returns [STRATEGIZING, FAILED, STOPPED] for CLONING", () => {
 			const sm = PipelineStateMachine.fromState(buildState({ stage: "CLONING" }));
-			expect(sm.getAllowedTransitions()).toEqual(["STRATEGIZING", "FAILED"]);
+			expect(sm.getAllowedTransitions()).toEqual(["STRATEGIZING", "FAILED", "STOPPED"]);
 		});
 
-		it("returns [OPTIMIZING, FAILED] for STRATEGIZING", () => {
+		it("returns [OPTIMIZING, FAILED, STOPPED] for STRATEGIZING", () => {
 			const sm = PipelineStateMachine.fromState(buildState({ stage: "STRATEGIZING" }));
-			expect(sm.getAllowedTransitions()).toEqual(["OPTIMIZING", "FAILED"]);
+			expect(sm.getAllowedTransitions()).toEqual(["OPTIMIZING", "FAILED", "STOPPED"]);
 		});
 
-		it("returns [VALIDATING, FAILED] for OPTIMIZING", () => {
+		it("returns [VALIDATING, FAILED, STOPPED] for OPTIMIZING", () => {
 			const sm = PipelineStateMachine.fromState(buildState({ stage: "OPTIMIZING" }));
-			expect(sm.getAllowedTransitions()).toEqual(["VALIDATING", "FAILED"]);
+			expect(sm.getAllowedTransitions()).toEqual(["VALIDATING", "FAILED", "STOPPED"]);
 		});
 
-		it("returns [REPORTING, STRATEGIZING, FAILED, PARTIAL_FAILURE] for VALIDATING", () => {
+		it("returns [REPORTING, STRATEGIZING, FAILED, PARTIAL_FAILURE, STOPPED] for VALIDATING", () => {
 			const sm = PipelineStateMachine.fromState(buildState({ stage: "VALIDATING" }));
 			expect(sm.getAllowedTransitions()).toEqual([
 				"REPORTING",
 				"STRATEGIZING",
 				"FAILED",
 				"PARTIAL_FAILURE",
+				"STOPPED",
 			]);
 		});
 
-		it("returns [COMPLETED, FAILED] for REPORTING", () => {
+		it("returns [COMPLETED, FAILED, STOPPED] for REPORTING", () => {
 			const sm = PipelineStateMachine.fromState(buildState({ stage: "REPORTING" }));
-			expect(sm.getAllowedTransitions()).toEqual(["COMPLETED", "FAILED"]);
+			expect(sm.getAllowedTransitions()).toEqual(["COMPLETED", "FAILED", "STOPPED"]);
 		});
 
 		it("returns [] for terminal stages", () => {
-			for (const stage of ["COMPLETED", "FAILED", "PARTIAL_FAILURE"] as PipelineStage[]) {
+			for (const stage of ["COMPLETED", "FAILED", "PARTIAL_FAILURE", "STOPPED"] as PipelineStage[]) {
 				const sm = PipelineStateMachine.fromState(buildState({ stage }));
 				expect(sm.getAllowedTransitions()).toEqual([]);
 			}

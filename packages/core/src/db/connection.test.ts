@@ -224,3 +224,93 @@ describe("createDatabase — auto-table creation (Bug #5)", () => {
 		expect(fetched!.name).toBe("Auto-table test");
 	});
 });
+
+// ─── DB migration (applyMigrations) ────────────────────────────────
+
+describe("DB migration (applyMigrations)", () => {
+	it("applies migrations to a DB created without brand column", async () => {
+		const settings = makeSettings();
+		const dbPath = path.join(settings.workspace_dir, settings.db_path);
+		fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+		// Create a DB with an old schema missing brand, site_type, status columns
+		const rawClient = createClient({ url: `file:${dbPath}` });
+		await rawClient.execute(`
+			CREATE TABLE targets (
+				id TEXT PRIMARY KEY,
+				url TEXT NOT NULL,
+				name TEXT NOT NULL,
+				description TEXT NOT NULL DEFAULT '',
+				topics TEXT NOT NULL DEFAULT '[]',
+				target_queries TEXT NOT NULL DEFAULT '[]',
+				audience TEXT NOT NULL DEFAULT '',
+				competitors TEXT NOT NULL DEFAULT '[]',
+				business_goal TEXT NOT NULL DEFAULT '',
+				target_score REAL,
+				llm_priorities TEXT NOT NULL DEFAULT '[]',
+				clone_base_path TEXT,
+				notifications TEXT,
+				monitoring_interval TEXT NOT NULL DEFAULT 'daily',
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL
+			)
+		`);
+		rawClient.close();
+
+		// Now run createDatabase + ensureTables which should apply migrations
+		const db = createDatabase(settings);
+		await ensureTables(db);
+
+		// Verify the missing columns now exist
+		const checkClient = createClient({ url: `file:${dbPath}` });
+		const result = await checkClient.execute("PRAGMA table_info(targets)");
+		checkClient.close();
+
+		const colNames = result.rows.map((r) => r.name as string);
+		expect(colNames).toContain("brand");
+		expect(colNames).toContain("site_type");
+		expect(colNames).toContain("status");
+	});
+
+	it("migrations are idempotent — running on a fresh DB is a no-op", async () => {
+		const settings = makeSettings();
+		const db1 = createDatabase(settings);
+		await ensureTables(db1);
+
+		const dbPath = path.join(settings.workspace_dir, settings.db_path);
+		const client1 = createClient({ url: `file:${dbPath}` });
+		const before = await client1.execute("PRAGMA table_info(targets)");
+		client1.close();
+		const colsBefore = before.rows.map((r) => r.name as string);
+		expect(colsBefore).toContain("brand");
+
+		// Run createDatabase + ensureTables again on the same DB
+		const db2 = createDatabase(settings);
+		await ensureTables(db2);
+
+		const client2 = createClient({ url: `file:${dbPath}` });
+		const after = await client2.execute("PRAGMA table_info(targets)");
+		client2.close();
+		const colsAfter = after.rows.map((r) => r.name as string);
+
+		// Columns should be identical (no duplicates)
+		expect(colsAfter).toEqual(colsBefore);
+	});
+
+	it("PRAGMA user_version is set after migrations", async () => {
+		const settings = makeSettings();
+		const db = createDatabase(settings);
+		await ensureTables(db);
+
+		const dbPath = path.join(settings.workspace_dir, settings.db_path);
+		const client = createClient({ url: `file:${dbPath}` });
+		const result = await client.execute("PRAGMA user_version");
+		client.close();
+
+		const userVersion =
+			(result.rows[0]?.user_version as number) ??
+			(result.rows[0]?.[0] as number) ??
+			0;
+		expect(userVersion).toBeGreaterThanOrEqual(3);
+	});
+});

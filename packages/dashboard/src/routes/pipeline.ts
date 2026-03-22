@@ -56,8 +56,8 @@ function getTargetRepo(): TargetRepository {
 	return sharedTargetRepo;
 }
 
-// Track running pipelines to prevent double execution
-const runningPipelines = new Set<string>();
+// Track running pipelines to prevent double execution and enable stop signaling
+const runningPipelines = new Map<string, { stop: () => void }>();
 
 const pipelineRouter = new Hono();
 
@@ -65,6 +65,11 @@ const pipelineRouter = new Hono();
 
 // GET /api/targets/:id/pipeline — 타겟의 전체 파이프라인 목록
 pipelineRouter.get("/:id/pipeline", async (c) => {
+	const targetRepo = getTargetRepo();
+	const target = await targetRepo.findById(c.req.param("id"));
+	if (!target) {
+		return c.json({ error: "Target not found" }, 404);
+	}
 	const repo = getRepo();
 	const pipelines = await repo.findByTargetId(c.req.param("id"));
 	return c.json(pipelines);
@@ -196,11 +201,15 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 			chatLLM,
 		};
 
+		let pipelineStopFn: (() => void) | undefined;
 		const config: PipelineConfig = {
 			target_id: targetId,
 			target_url: target.url,
 			workspace_dir: workspaceDir,
 			stageCallbacks,
+			registerStop: (stopFn) => {
+				pipelineStopFn = stopFn;
+			},
 		};
 
 		// LLM mode is always "llm" (chatLLM is required, ARCHITECTURE.md 9-A.1)
@@ -219,7 +228,7 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 		});
 
 		// Fire-and-forget: execute pipeline in background
-		runningPipelines.add(targetId);
+		runningPipelines.set(targetId, { stop: () => pipelineStopFn?.() });
 		executePipelineAsync(pipeline.pipeline_id, targetId, config, deps, repo).finally(() => {
 			runningPipelines.delete(targetId);
 		});
@@ -540,14 +549,18 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/llm-log", async (c) => {
 // POST /api/targets/:id/cycle/stop — 수동 중단
 pipelineRouter.post("/:id/cycle/stop", async (c) => {
 	const repo = getRepo();
-	const pipeline = await repo.findLatestByTargetId(c.req.param("id"));
+	const targetId = c.req.param("id");
+	const pipeline = await repo.findLatestByTargetId(targetId);
 	if (!pipeline) {
 		return c.json({ error: "No active pipeline" }, 404);
 	}
-	if (pipeline.stage === "COMPLETED" || pipeline.stage === "FAILED") {
+	if (["COMPLETED", "FAILED", "PARTIAL_FAILURE", "STOPPED"].includes(pipeline.stage)) {
 		return c.json({ error: "Pipeline already terminated" }, 400);
 	}
-	const updated = await repo.updateStage(pipeline.pipeline_id, "COMPLETED");
+	// Signal the running orchestrator to stop and release the pipeline lock
+	runningPipelines.get(targetId)?.stop();
+	runningPipelines.delete(targetId);
+	const updated = await repo.updateStage(pipeline.pipeline_id, "STOPPED");
 	return c.json({ stopped: true, pipeline: updated });
 });
 
@@ -629,7 +642,7 @@ pipelineRouter.get("/:id/cycle/status", async (c) => {
 	return c.json({
 		pipeline_id: pipeline.pipeline_id,
 		stage: pipeline.stage,
-		is_terminal: ["COMPLETED", "FAILED", "PARTIAL_FAILURE"].includes(pipeline.stage),
+		is_terminal: ["COMPLETED", "FAILED", "PARTIAL_FAILURE", "STOPPED"].includes(pipeline.stage),
 		retry_count: pipeline.retry_count,
 		started_at: pipeline.started_at,
 		updated_at: pipeline.updated_at,

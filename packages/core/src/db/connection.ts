@@ -124,6 +124,59 @@ CREATE TABLE IF NOT EXISTS error_events (
 );
 `;
 
+// ── Lightweight schema migrations using PRAGMA user_version ──────────
+interface Migration {
+	version: number;
+	table: string;
+	column: string;
+	sql: string;
+}
+
+const MIGRATIONS: Migration[] = [
+	{
+		version: 1,
+		table: "targets",
+		column: "brand",
+		sql: "ALTER TABLE targets ADD COLUMN brand TEXT NOT NULL DEFAULT ''",
+	},
+	{
+		version: 2,
+		table: "targets",
+		column: "site_type",
+		sql: "ALTER TABLE targets ADD COLUMN site_type TEXT NOT NULL DEFAULT 'generic'",
+	},
+	{
+		version: 3,
+		table: "targets",
+		column: "status",
+		sql: "ALTER TABLE targets ADD COLUMN status TEXT NOT NULL DEFAULT 'active'",
+	},
+];
+
+async function applyMigrations(client: Client): Promise<void> {
+	const versionResult = await client.execute("PRAGMA user_version");
+	const currentVersion =
+		(versionResult.rows[0]?.user_version as number) ??
+		(versionResult.rows[0]?.[0] as number) ??
+		0;
+
+	for (const migration of MIGRATIONS) {
+		if (migration.version <= currentVersion) continue;
+
+		// Check if column already exists (idempotent for fresh DBs)
+		const tableInfo = await client.execute(`PRAGMA table_info(${migration.table})`);
+		const columnExists = tableInfo.rows.some(
+			(row) => (row.name ?? row[1]) === migration.column,
+		);
+
+		if (!columnExists) {
+			await client.execute(migration.sql);
+		}
+
+		await client.execute(`PRAGMA user_version = ${migration.version}`);
+	}
+}
+
 /**
  * Creates and returns a drizzle database instance backed by libSQL (SQLite-compatible).
  * Auto-creates all required tables if they don't exist.
@@ -141,11 +194,12 @@ export function createDatabase(settings: AppSettings): GeoDatabase {
 		url: `file:${dbPath}`,
 	});
 
-	// Enable WAL mode, foreign keys, and auto-create tables (Bug #5 fix)
+	// Enable WAL mode, foreign keys, auto-create tables, and apply migrations
 	// These are fire-and-forget — for immediate use, call ensureTables()
 	const initPromise = client
 		.executeMultiple("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
-		.then(() => client.executeMultiple(CREATE_TABLES_SQL));
+		.then(() => client.executeMultiple(CREATE_TABLES_SQL))
+		.then(() => applyMigrations(client));
 
 	const db = drizzle(client, { schema }) as GeoDatabase & { _initPromise?: Promise<void> };
 	db._initPromise = initPromise;

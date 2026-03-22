@@ -127,7 +127,12 @@ function getDashboardHtml(): string {
 			}
 		}
 		if (!dashboardHtmlCache) {
-			dashboardHtmlCache = "<html><body><h1>Dashboard HTML not found</h1></body></html>";
+			dashboardHtmlCache = `<html><body>
+<h1>Dashboard HTML not found</h1>
+<p>Tried the following paths:</p>
+<ul>${candidates.map((p) => `<li><code>${p}</code></li>`).join("")}</ul>
+<p>Run <code>npm run build</code> in the project root to generate the dashboard files.</p>
+</body></html>`;
 		}
 	}
 	return dashboardHtmlCache;

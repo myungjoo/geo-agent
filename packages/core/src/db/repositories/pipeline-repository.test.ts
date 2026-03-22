@@ -240,6 +240,13 @@ describe("PipelineRepository", () => {
 			expect(updated!.stage).toBe("PARTIAL_FAILURE");
 		});
 
+		it("sets completed_at when stage is STOPPED", async () => {
+			const pipeline = await repo.create(FAKE_TARGET_ID);
+			const updated = await repo.updateStage(pipeline.pipeline_id, "STOPPED");
+			expect(updated!.completed_at).not.toBeNull();
+			expect(updated!.stage).toBe("STOPPED");
+		});
+
 		it("22. returns null for non-existent pipeline", async () => {
 			const result = await repo.updateStage(NON_EXISTENT_ID, "ANALYZING");
 			expect(result).toBeNull();

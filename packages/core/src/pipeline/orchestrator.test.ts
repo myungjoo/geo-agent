@@ -178,9 +178,8 @@ describe("Orchestrator", () => {
 			});
 
 			const result = await orch.run("target-1");
-			// After ANALYZING completes, the loop checks stopped flag
-			// CLONING cannot transition to COMPLETED directly, so it goes to FAILED
-			expect(["COMPLETED", "FAILED"]).toContain(result.finalState.stage);
+			// After ANALYZING completes, the loop checks stopped flag and transitions to STOPPED
+			expect(["STOPPED", "FAILED"]).toContain(result.finalState.stage);
 		});
 
 		it("handler can check isStopped", async () => {

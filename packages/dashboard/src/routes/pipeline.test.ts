@@ -180,6 +180,14 @@ describe("GET /api/targets/:id/pipeline", () => {
 		expect(body).toHaveLength(1);
 		expect(body[0].target_id).toBe(targetId1);
 	});
+
+	it("returns 404 for nonexistent target", async () => {
+		const res = await app.request(
+			"/api/targets/00000000-0000-0000-0000-000000000000/pipeline",
+			{ method: "GET" },
+		);
+		expect(res.status).toBe(404);
+	});
 });
 
 // ══════════════════════════════════════════════════════════════
@@ -360,7 +368,7 @@ describe("POST /api/targets/:id/cycle/stop", () => {
 		const body = await res.json();
 		expect(body.stopped).toBe(true);
 		expect(body.pipeline).toBeDefined();
-		expect(body.pipeline.stage).toBe("COMPLETED");
+		expect(body.pipeline.stage).toBe("STOPPED");
 	});
 
 	it("returns 404 when no pipeline exists for the target", async () => {
@@ -420,6 +428,58 @@ describe("POST /api/targets/:id/cycle/stop", () => {
 		expect(body.error).toBe("Pipeline already terminated");
 	});
 
+	it("stop releases pipeline lock so re-run is possible", async () => {
+		const targetId = await getTargetId();
+
+		// Create a pipeline (no execute — avoids LLM dependency)
+		const startRes = await createPipeline(targetId);
+		expect(startRes.status).toBe(201);
+
+		// Advance to a non-terminal stage
+		const pipeline = await startRes.json();
+		await app.request(`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/stage`, {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ stage: "ANALYZING" }),
+		});
+
+		// Stop the pipeline
+		const stopRes = await app.request(`/api/targets/${targetId}/cycle/stop`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+		});
+		expect(stopRes.status).toBe(200);
+		const stopBody = await stopRes.json();
+		expect(stopBody.stopped).toBe(true);
+		expect(stopBody.pipeline.stage).toBe("STOPPED");
+
+		// Create a new pipeline — should NOT return 409 since old one is STOPPED
+		const rerunRes = await createPipeline(targetId);
+		expect(rerunRes.status).not.toBe(409);
+		expect(rerunRes.status).toBe(201);
+	});
+
+	it("stop on already-STOPPED pipeline returns 400", async () => {
+		const targetId = await getTargetId();
+		await createPipeline(targetId);
+
+		// First stop
+		const stopRes1 = await app.request(`/api/targets/${targetId}/cycle/stop`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+		});
+		expect(stopRes1.status).toBe(200);
+
+		// Second stop — should return 400
+		const stopRes2 = await app.request(`/api/targets/${targetId}/cycle/stop`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+		});
+		expect(stopRes2.status).toBe(400);
+		const body = await stopRes2.json();
+		expect(body.error).toBe("Pipeline already terminated");
+	});
+
 	it("stops pipeline in ANALYZING stage", async () => {
 		const targetId = await getTargetId();
 		const createRes = await createPipeline(targetId);
@@ -439,7 +499,7 @@ describe("POST /api/targets/:id/cycle/stop", () => {
 
 		const body = await res.json();
 		expect(body.stopped).toBe(true);
-		expect(body.pipeline.stage).toBe("COMPLETED");
+		expect(body.pipeline.stage).toBe("STOPPED");
 	});
 });
 
@@ -545,7 +605,7 @@ describe("GET /api/targets/:id/cycle/status", () => {
 
 		const res = await app.request(`/api/targets/${targetId}/cycle/status`, { method: "GET" });
 		const body = await res.json();
-		expect(body.stage).toBe("COMPLETED");
+		expect(body.stage).toBe("STOPPED");
 		expect(body.is_terminal).toBe(true);
 	});
 });
@@ -595,7 +655,7 @@ describe("Pipeline lifecycle", () => {
 		const statusRes = await app.request(`/api/targets/${targetId}/cycle/status`, { method: "GET" });
 		const status = await statusRes.json();
 		expect(status.is_terminal).toBe(true);
-		expect(status.stage).toBe("COMPLETED");
+		expect(status.stage).toBe("STOPPED");
 	});
 
 	it("latest returns most recent after multiple creates", async () => {

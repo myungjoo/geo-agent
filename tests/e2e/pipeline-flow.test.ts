@@ -51,7 +51,7 @@ async function waitForPipeline(
 	timeoutMs = 90_000,
 ): Promise<Record<string, unknown>> {
 	const start = Date.now();
-	const terminalStages = new Set(["COMPLETED", "FAILED", "PARTIAL_FAILURE"]);
+	const terminalStages = new Set(["COMPLETED", "FAILED", "PARTIAL_FAILURE", "STOPPED"]);
 
 	while (Date.now() - start < timeoutMs) {
 		const res = await api(`/api/targets/${targetId}/pipeline/latest`);
@@ -105,7 +105,7 @@ describe("Pipeline execution (rule-based mode)", () => {
 	it("pipeline reaches terminal state", async (testCtx) => {
 		pipelineResult = await waitForPipeline(targetId);
 		const stage = pipelineResult.stage as string;
-		expect(["COMPLETED", "FAILED", "PARTIAL_FAILURE"]).toContain(stage);
+		expect(["COMPLETED", "FAILED", "PARTIAL_FAILURE", "STOPPED"]).toContain(stage);
 
 		if (stage === "FAILED" && isApiKeyError(pipelineResult)) {
 			console.warn(

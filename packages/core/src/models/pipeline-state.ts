@@ -11,6 +11,7 @@ export const PipelineStageSchema = z.enum([
 	"COMPLETED",
 	"FAILED",
 	"PARTIAL_FAILURE",
+	"STOPPED",
 ]);
 
 export type PipelineStage = z.infer<typeof PipelineStageSchema>;
