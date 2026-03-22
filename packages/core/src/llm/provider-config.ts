@@ -109,6 +109,20 @@ export const DEFAULT_PROVIDERS: LLMProviderSettings[] = [
 	},
 ];
 
+// ── Environment Variable Fallback (CI/CD) ───────────────
+
+const ENV_VAR_MAP: Record<string, { apiKey: string; baseUrl?: string }> = {
+	openai: { apiKey: "OPENAI_API_KEY" },
+	anthropic: { apiKey: "ANTHROPIC_API_KEY" },
+	google: { apiKey: "GOOGLE_API_KEY" },
+	microsoft: { apiKey: "AZURE_OPENAI_API_KEY", baseUrl: "AZURE_OPENAI_BASE_URL" },
+	perplexity: { apiKey: "PERPLEXITY_API_KEY" },
+	meta: { apiKey: "META_API_KEY" },
+};
+
+/** export for testing */
+export { ENV_VAR_MAP };
+
 const PROVIDERS_FILE = "llm-providers.json";
 
 // ── Provider Config Manager ────────────────────────────────
@@ -120,20 +134,54 @@ export class ProviderConfigManager {
 		this.workspaceDir = workspaceDir;
 	}
 
-	/** 모든 프로바이더 설정 로드 */
+	/**
+	 * 환경변수 fallback 적용.
+	 * 파일 설정에 api_key가 없을 때만 env var로 채움.
+	 * env var로 키가 채워지면 자동으로 enabled: true.
+	 */
+	private applyEnvFallback(provider: LLMProviderSettings): LLMProviderSettings {
+		const envMap = ENV_VAR_MAP[provider.provider_id];
+		if (!envMap) return provider;
+
+		let changed = false;
+
+		if (!provider.api_key) {
+			const envKey = process.env[envMap.apiKey];
+			if (envKey) {
+				provider.api_key = envKey;
+				provider.enabled = true;
+				changed = true;
+			}
+		}
+
+		if (!provider.api_base_url && envMap.baseUrl) {
+			const envUrl = process.env[envMap.baseUrl];
+			if (envUrl) {
+				provider.api_base_url = envUrl;
+			}
+		}
+
+		return provider;
+	}
+
+	/** 모든 프로바이더 설정 로드 (환경변수 fallback 포함) */
 	loadAll(): LLMProviderSettings[] {
 		const configPath = path.join(this.workspaceDir, PROVIDERS_FILE);
+		let providers: LLMProviderSettings[];
 		if (!fs.existsSync(configPath)) {
-			return DEFAULT_PROVIDERS.map((p) => ({ ...p }));
+			providers = DEFAULT_PROVIDERS.map((p) => ({ ...p }));
+		} else {
+			try {
+				const raw = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+				providers = z.array(LLMProviderSettingsSchema).parse(raw);
+			} catch (err) {
+				throw new Error(
+					`Failed to parse LLM provider config ${configPath}: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
 		}
-		try {
-			const raw = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-			return z.array(LLMProviderSettingsSchema).parse(raw);
-		} catch (err) {
-			throw new Error(
-				`Failed to parse LLM provider config ${configPath}: ${err instanceof Error ? err.message : String(err)}`,
-			);
-		}
+
+		return providers.map((p) => this.applyEnvFallback(p));
 	}
 
 	/** 특정 프로바이더 설정 로드 */

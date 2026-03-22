@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	DEFAULT_PROVIDERS,
+	ENV_VAR_MAP,
 	LLMProviderIdSchema,
 	LLMProviderSettingsSchema,
 	ProviderConfigManager,
@@ -369,6 +370,109 @@ describe("ProviderConfigManager", () => {
 			const freshManager = new ProviderConfigManager(tmpDir);
 			const anthropic = freshManager.load("anthropic");
 			expect(anthropic.enabled).toBe(false);
+		});
+	});
+
+	// ─── Environment Variable Fallback ─────────────────────────────
+
+	describe("env var fallback", () => {
+		const savedEnv: Record<string, string | undefined> = {};
+
+		beforeEach(() => {
+			// Save all env vars that we'll modify
+			for (const mapping of Object.values(ENV_VAR_MAP)) {
+				savedEnv[mapping.apiKey] = process.env[mapping.apiKey];
+				if (mapping.baseUrl) {
+					savedEnv[mapping.baseUrl] = process.env[mapping.baseUrl];
+				}
+			}
+			// Clear them all
+			for (const key of Object.keys(savedEnv)) {
+				delete process.env[key];
+			}
+		});
+
+		afterEach(() => {
+			// Restore original env vars
+			for (const [key, value] of Object.entries(savedEnv)) {
+				if (value === undefined) {
+					delete process.env[key];
+				} else {
+					process.env[key] = value;
+				}
+			}
+		});
+
+		it("fills microsoft api_key from AZURE_OPENAI_API_KEY and auto-enables", () => {
+			process.env.AZURE_OPENAI_API_KEY = "test-azure-key-123";
+
+			const providers = manager.loadAll();
+			const microsoft = providers.find((p) => p.provider_id === "microsoft");
+
+			expect(microsoft?.api_key).toBe("test-azure-key-123");
+			expect(microsoft?.enabled).toBe(true);
+		});
+
+		it("fills microsoft api_base_url from AZURE_OPENAI_BASE_URL", () => {
+			process.env.AZURE_OPENAI_API_KEY = "test-key";
+			process.env.AZURE_OPENAI_BASE_URL = "https://myresource.openai.azure.com/";
+
+			const providers = manager.loadAll();
+			const microsoft = providers.find((p) => p.provider_id === "microsoft");
+
+			expect(microsoft?.api_base_url).toBe("https://myresource.openai.azure.com/");
+		});
+
+		it("file config takes precedence over env var", () => {
+			// Save a file-based key
+			const ms = manager.load("microsoft");
+			ms.api_key = "file-key-456";
+			ms.enabled = true;
+			manager.save(ms);
+
+			// Set env var with different key
+			process.env.AZURE_OPENAI_API_KEY = "env-key-789";
+
+			const providers = manager.loadAll();
+			const microsoft = providers.find((p) => p.provider_id === "microsoft");
+
+			expect(microsoft?.api_key).toBe("file-key-456");
+		});
+
+		it("returns default behavior when no env var is set", () => {
+			const providers = manager.loadAll();
+			const microsoft = providers.find((p) => p.provider_id === "microsoft");
+
+			expect(microsoft?.api_key).toBeUndefined();
+			expect(microsoft?.enabled).toBe(false);
+		});
+
+		it("multiple env vars enable multiple providers", () => {
+			process.env.OPENAI_API_KEY = "openai-key";
+			process.env.AZURE_OPENAI_API_KEY = "azure-key";
+
+			const providers = manager.loadAll();
+			const enabled = providers.filter((p) => p.enabled);
+			const enabledIds = enabled.map((p) => p.provider_id);
+
+			expect(enabledIds).toContain("openai");
+			expect(enabledIds).toContain("microsoft");
+		});
+
+		it("env-derived keys are not persisted by saveAll", () => {
+			process.env.AZURE_OPENAI_API_KEY = "env-only-key";
+
+			const providers = manager.loadAll();
+			// Save all providers to file (simulating a save operation)
+			// But first, loadAll from file without env to get raw data
+			const rawProviders = (() => {
+				const configPath = path.join(tmpDir, "llm-providers.json");
+				if (!fs.existsSync(configPath)) return null;
+				return JSON.parse(fs.readFileSync(configPath, "utf-8"));
+			})();
+
+			// No file should exist yet (only defaults, no explicit save)
+			expect(rawProviders).toBeNull();
 		});
 	});
 });

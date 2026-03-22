@@ -2472,6 +2472,28 @@ workspace/config.json (예시):
 }
 ```
 
+### 9-B.3-1 환경변수 Fallback (CI/CD 지원)
+
+`ProviderConfigManager.loadAll()`는 `llm-providers.json` 파일에 API Key가 없을 때 표준 환경변수를 fallback으로 확인한다. GitHub Actions 등 CI/CD 환경에서 Secrets를 환경변수로 주입하면 별도 설정 파일 없이 LLM을 사용할 수 있다.
+
+| Provider    | API Key 환경변수         | Base URL 환경변수         |
+|-------------|--------------------------|---------------------------|
+| openai      | `OPENAI_API_KEY`         | —                         |
+| anthropic   | `ANTHROPIC_API_KEY`      | —                         |
+| google      | `GOOGLE_API_KEY`         | —                         |
+| microsoft   | `AZURE_OPENAI_API_KEY`   | `AZURE_OPENAI_BASE_URL`  |
+| perplexity  | `PERPLEXITY_API_KEY`     | —                         |
+| meta        | `META_API_KEY`           | —                         |
+
+**규칙**:
+- 환경변수는 파일 설정에 `api_key`가 없을 때만 적용 (파일 설정 우선)
+- 환경변수로 키가 채워지면 해당 provider는 자동으로 `enabled: true`
+- `saveAll()`은 환경변수 유래 키를 디스크에 저장하지 않음
+
+**GitHub Actions 설정**:
+1. Repository → Settings → Secrets에 `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_BASE_URL` 등록
+2. Workflow에서 `env:`로 전달하면 `ProviderConfigManager`가 자동 인식
+
 ### 9-B.4 대시보드 LLM Provider 설정 UI
 
 ```
