@@ -127,7 +127,7 @@ describe("executeSkill", () => {
 		});
 
 		expect(result.success).toBe(false);
-		expect(result.error).toContain("agent integration");
+		expect(result.error).toContain("metadata-only");
 	});
 
 	it("custom skill execution works", async () => {
