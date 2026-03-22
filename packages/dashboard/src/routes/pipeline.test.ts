@@ -182,10 +182,9 @@ describe("GET /api/targets/:id/pipeline", () => {
 	});
 
 	it("returns 404 for nonexistent target", async () => {
-		const res = await app.request(
-			"/api/targets/00000000-0000-0000-0000-000000000000/pipeline",
-			{ method: "GET" },
-		);
+		const res = await app.request("/api/targets/00000000-0000-0000-0000-000000000000/pipeline", {
+			method: "GET",
+		});
 		expect(res.status).toBe(404);
 	});
 });

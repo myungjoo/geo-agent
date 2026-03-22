@@ -157,18 +157,14 @@ const MIGRATIONS: Migration[] = [
 async function applyMigrations(client: Client): Promise<void> {
 	const versionResult = await client.execute("PRAGMA user_version");
 	const currentVersion =
-		(versionResult.rows[0]?.user_version as number) ??
-		(versionResult.rows[0]?.[0] as number) ??
-		0;
+		(versionResult.rows[0]?.user_version as number) ?? (versionResult.rows[0]?.[0] as number) ?? 0;
 
 	for (const migration of MIGRATIONS) {
 		if (migration.version <= currentVersion) continue;
 
 		// Check if column already exists (idempotent for fresh DBs)
 		const tableInfo = await client.execute(`PRAGMA table_info(${migration.table})`);
-		const columnExists = tableInfo.rows.some(
-			(row) => (row.name ?? row[1]) === migration.column,
-		);
+		const columnExists = tableInfo.rows.some((row) => (row.name ?? row[1]) === migration.column);
 
 		if (!columnExists) {
 			await client.execute(migration.sql);

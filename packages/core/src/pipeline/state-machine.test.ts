@@ -126,7 +126,12 @@ describe("PipelineStateMachine", () => {
 		});
 
 		it("returns false for any transition from terminal stages", () => {
-			for (const terminal of ["COMPLETED", "FAILED", "PARTIAL_FAILURE", "STOPPED"] as PipelineStage[]) {
+			for (const terminal of [
+				"COMPLETED",
+				"FAILED",
+				"PARTIAL_FAILURE",
+				"STOPPED",
+			] as PipelineStage[]) {
 				const sm = PipelineStateMachine.fromState(buildState({ stage: terminal }));
 				expect(sm.canTransition("INIT")).toBe(false);
 				expect(sm.canTransition("ANALYZING")).toBe(false);
@@ -500,7 +505,12 @@ describe("PipelineStateMachine", () => {
 		});
 
 		it("returns [] for terminal stages", () => {
-			for (const stage of ["COMPLETED", "FAILED", "PARTIAL_FAILURE", "STOPPED"] as PipelineStage[]) {
+			for (const stage of [
+				"COMPLETED",
+				"FAILED",
+				"PARTIAL_FAILURE",
+				"STOPPED",
+			] as PipelineStage[]) {
 				const sm = PipelineStateMachine.fromState(buildState({ stage }));
 				expect(sm.getAllowedTransitions()).toEqual([]);
 			}
