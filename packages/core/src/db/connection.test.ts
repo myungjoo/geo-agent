@@ -308,9 +308,7 @@ describe("DB migration (applyMigrations)", () => {
 		client.close();
 
 		const userVersion =
-			(result.rows[0]?.user_version as number) ??
-			(result.rows[0]?.[0] as number) ??
-			0;
+			(result.rows[0]?.user_version as number) ?? (result.rows[0]?.[0] as number) ?? 0;
 		expect(userVersion).toBeGreaterThanOrEqual(3);
 	});
 });

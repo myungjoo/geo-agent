@@ -71,7 +71,12 @@ export class PipelineStateMachine {
 		this.state.stage = nextStage;
 		this.state.updated_at = new Date().toISOString();
 
-		if (nextStage === "COMPLETED" || nextStage === "FAILED" || nextStage === "PARTIAL_FAILURE" || nextStage === "STOPPED") {
+		if (
+			nextStage === "COMPLETED" ||
+			nextStage === "FAILED" ||
+			nextStage === "PARTIAL_FAILURE" ||
+			nextStage === "STOPPED"
+		) {
 			this.state.completed_at = this.state.updated_at;
 		}
 
