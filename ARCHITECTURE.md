@@ -348,11 +348,29 @@ GET    /health                                       # 헬스 체크
 - **핵심 정보 자동 추출**: JSON-LD + 본문에서 제품/가격/스펙/정책 등 자동 추출 → `InfoRecognitionItem[]` 생성
 - 제조사 사이트의 경우 제품 페이지를 탐색하여 크롤링 대상에 포함
 
-**(2) LLM Probe 테스트** (두 모드 공통, Available한 LLM 사용):
+**(2) LLM Probe 테스트** (두 모드 공통, Available한 모든 LLM 사용):
+
+> **Web Search 원칙**: 프로브는 실제 소비자가 LLM 서비스를 사용하는 환경을 재현한다.
+> 각 LLM에 **웹 검색(Web Search) 기능을 활성화**한 상태로 질의하여,
+> LLM이 Target 사이트를 실시간 조회하고 정보를 가져다 쓸 수 있는지를 직접 측정한다.
+>
+> | Provider | Web Search 활성화 방식 |
+> |----------|----------------------|
+> | OpenAI (ChatGPT) | `web_search` tool 활성화 |
+> | Perplexity | 기본 동작 (항상 웹 검색) |
+> | Google (Gemini) | `google_search_retrieval` grounding |
+> | Anthropic (Claude) | `web_search` tool 활성화 |
+> | Microsoft (Azure) | Bing grounding (가용 시) |
+>
+> Web Search를 지원하지 않는 Provider/모델은 학습 데이터 기반으로 fallback하되,
+> 결과에 `web_search_used: false`를 명시하여 해석 시 구분한다.
+
+- **멀티 프로바이더 실행**: API Key가 설정된 **모든 활성 프로바이더**에 동일 프로브를 병렬 실행하고, 서비스별 결과를 개별 기록한다. 단일 프로바이더만 사용하지 않는다
 - **페이지 정보 추출 프로브**: 대상 페이지의 HTML 핵심 구조(JSON-LD + meta + heading + 본문 요약)를 LLM 프롬프트에 직접 포함하여, LLM이 주요 정보를 정확히 추출하는지 테스트
 - **Entity 프로브**: 브랜드/회사/Entity 이름으로 질의 (예: "삼성전자에 대해 알려줘"). 이때 대상 페이지의 HTML 요약을 함께 제공하여 LLM이 참조할 수 있도록 한다. 프로브 결과에서 **"제공된 HTML에서 인용한 정보"**와 **"LLM 자체 지식에서 온 정보"**를 구분 태깅하여, 최적화 전후 HTML 변경이 LLM 응답에 미치는 영향을 정밀 측정한다
 - 프로브는 사이트 종류별로 8건 이상 수행. 프롬프트는 실제 사용자가 해당 페이지에 관해 물어볼 만한 질문으로 구성
 - 프로브 프롬프트는 사이트 종류별 기본값이 제공되며, 사용자가 커스터마이징 가능 (Reset으로 기본값 복원)
+- **서비스별 점수 합산**: 각 프로바이더의 프로브 결과를 `llm_priorities` 가중치에 따라 합산하여 Coverage 점수 및 종합 GEO Score를 산출한다
 
 **(3) 결과 저장**:
 - 모든 평가 결과는 `pipeline_id` + `stage` + `cycle` 기준으로 DB에 별도 저장
@@ -2107,7 +2125,8 @@ GEO 점수는 2-Level 계층 구조를 갖는다.
 ### 8.1 Level 1: GEO Score (최종 성과 점수)
 
 LLM 프로브(Synthetic Probes P-01~P-08)를 통해 측정하는 **실제 성과 지표**.
-LLM API Key가 필요하며, 각 LLM 서비스에 실제 쿼리를 보내 응답을 분석한다.
+API Key가 설정된 **모든 활성 LLM 서비스**에 웹 검색을 활성화한 상태로 실제 쿼리를 보내 응답을 분석한다.
+서비스별 결과를 `llm_priorities` 가중치에 따라 합산하여 최종 점수를 산출한다.
 
 ```
 GEO Score (0~100) = Σ(가중치 × 세부 지표)
@@ -2536,8 +2555,9 @@ workspace/config.json (예시):
 
 ┌─ LLM Probe 테스트 대상용 ──────────────────────────────────┐
 │  역할: "이 LLM이 Target Page를 잘 인용하는가" 측정 대상    │
-│  모델: 연결된 모든 Provider의 validation_target 모델       │
-│  호출 방식: GeoLLMClient 인터페이스로 통합 호출             │
+│  대상: API Key가 설정된 모든 활성 Provider (병렬 실행)     │
+│  Web Search: 원칙적으로 활성화 (실제 소비자 환경 재현)     │
+│  호출 방식: GeoLLMClient.queryAll() — 전체 활성 LLM 동시   │
 │  호출 주체: Analysis Agent (URL/Clone 모드 모두)           │
 │  인증: 각 Provider별 설정된 인증 방식 자동 적용            │
 │  주의: 에이전트 동작과 완전 분리 — 순수 질의+응답 수집용    │
@@ -2548,17 +2568,17 @@ workspace/config.json (예시):
 
 ```typescript
 interface GeoLLMClient {
-  // 단일 LLM에 질의
+  // 단일 LLM에 질의 (web_search 기본 활성화)
   query(
     provider: string,
     query: string,
-    options?: { model?: string; temperature?: number }
+    options?: { model?: string; temperature?: number; web_search?: boolean }
   ): Promise<LLMProbe>;
 
-  // 전체 활성 LLM에 동일 질의 (병렬 실행)
+  // 전체 활성 LLM에 동일 질의 (병렬 실행, web_search 기본 활성화)
   queryAll(
     query: string,
-    options?: { concurrency?: number }
+    options?: { concurrency?: number; web_search?: boolean }
   ): Promise<LLMProbe[]>;
 
   // 정보 인식 검증 (InfoRecognitionItem에 대한 질의 자동 생성)
