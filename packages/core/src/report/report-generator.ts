@@ -62,7 +62,6 @@ export class ReportBuilder {
 			report_id: reportId,
 			target_id: targetId,
 			target_url: targetUrl,
-			generated_at: new Date().toISOString(),
 		};
 	}
 
@@ -120,6 +119,7 @@ export class ReportBuilder {
 	build(): OptimizationReport {
 		return OptimizationReportSchema.parse({
 			...this.report,
+			generated_at: new Date().toISOString(),
 			changes: this._changes,
 			score_comparisons: this._scoreComparisons,
 			key_improvements: this._keyImprovements,
