@@ -2852,21 +2852,21 @@ PUT  /api/targets/{id}/cycle/config           # 사이클 설정 변경 (max, ta
 
 ## 11. Known Issues (v1 한계)
 
-> 상세 설명, 영향 범위, 해결 방향은 GitHub Issues를 참조한다.
+> 상세 설명, 영향 범위, 해결 방향은 각 GitHub Issue를 참조한다.
 
-| # | 항목 | 심각도 | 로드맵 |
-|---|------|--------|--------|
-| KI-001 | 인용 감정(Citation Sentiment) 분석 부재 | 높음 | v2 |
-| KI-002 | 외부 평판 환경 분석 부재 | 높음 | v3 |
-| KI-003 | LLM 지식 획득 경로 미구분 | 중간 | v3 |
-| KI-004 | 테스트 질의(Query Universe) 설계 체계 부재 | 중간 | v2 |
-| KI-005 | 간접 인용 감지 부재 | 중간 | v2 |
-| KI-006 | ~~배포 경계 미정의~~ | ~~해결됨~~ | — (읽기 전용 원칙, 섹션 1.3) |
-| KI-007 | LLM 신뢰 형성 모델 부재 | 낮음 | v4 |
-| KI-008 | Remote Web 대시보드 미지원 | 낮음 | v3 |
-| KI-009 | 에이전트 자동 생성 스킬 안전성 검증 | 중간 | v2 |
-| KI-010 | pi-mono 업스트림 의존 관리 | 낮음 | v4 |
-| KI-011 | 멀티 페이지 최적화 미적용 | 높음 | v2 |
+| # | 항목 | 심각도 | 로드맵 | Issue |
+|---|------|--------|--------|-------|
+| KI-001 | 인용 감정(Citation Sentiment) 분석 부재 | 높음 | v2 | [#29](https://github.com/myungjoo/GEO-agent/issues/29) |
+| KI-002 | 외부 평판 환경 분석 부재 | 높음 | v3 | [#30](https://github.com/myungjoo/GEO-agent/issues/30) |
+| KI-003 | LLM 지식 획득 경로 미구분 | 중간 | v3 | [#31](https://github.com/myungjoo/GEO-agent/issues/31) |
+| KI-004 | 테스트 질의(Query Universe) 설계 체계 부재 | 중간 | v2 | [#32](https://github.com/myungjoo/GEO-agent/issues/32) |
+| KI-005 | 간접 인용 감지 부재 | 중간 | v2 | [#33](https://github.com/myungjoo/GEO-agent/issues/33) |
+| KI-006 | ~~배포 경계 미정의~~ | ~~해결됨~~ | — | 읽기 전용 원칙 (섹션 1.3) |
+| KI-007 | LLM 신뢰 형성 모델 부재 | 낮음 | v4 | [#34](https://github.com/myungjoo/GEO-agent/issues/34) |
+| KI-008 | Remote Web 대시보드 미지원 | 낮음 | v3 | [#35](https://github.com/myungjoo/GEO-agent/issues/35) |
+| KI-009 | 에이전트 자동 생성 스킬 안전성 검증 | 중간 | v2 | [#36](https://github.com/myungjoo/GEO-agent/issues/36) |
+| KI-010 | pi-mono 업스트림 의존 관리 | 낮음 | v4 | [#37](https://github.com/myungjoo/GEO-agent/issues/37) |
+| KI-011 | 멀티 페이지 최적화 미적용 | 높음 | v2 | [#38](https://github.com/myungjoo/GEO-agent/issues/38) |
 
 ---
 
