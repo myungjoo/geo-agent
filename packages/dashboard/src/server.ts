@@ -14,6 +14,7 @@ import { type ServerType, serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { trimTrailingSlash } from "hono/trailing-slash";
+import { authMiddleware, getLoginPage, handleLogin, handleLogout } from "./auth.js";
 import { initPipelineRouter, pipelineRouter } from "./routes/pipeline.js";
 import { settingsRouter } from "./routes/settings.js";
 import { initTargetsRouter, targetsRouter } from "./routes/targets.js";
@@ -44,6 +45,7 @@ const app = new Hono();
 // Middleware
 app.use("*", cors());
 app.use(trimTrailingSlash());
+app.use("*", authMiddleware());
 
 // Error handler (Bug #4: malformed JSON → 400, DB schema mismatch → 503)
 app.onError((err, c) => {
@@ -76,6 +78,11 @@ app.onError((err, c) => {
 
 // Health check
 app.get("/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
+
+// Auth routes
+app.get("/login", (c) => c.html(getLoginPage()));
+app.post("/api/auth/login", handleLogin);
+app.post("/api/auth/logout", handleLogout);
 
 // Graceful shutdown endpoint
 app.post("/api/shutdown", (c) => {
