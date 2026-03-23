@@ -18,11 +18,20 @@
 		"test:llm": "vitest run --config tests/llm-integration/vitest.config.llm.ts",
 		"test:all": "npm test && npm run test:e2e",
 		"ci": "npm install && npm run build && npm test",
-		"clean": "npm run clean --workspaces"
+		"clean": "npm run clean --workspaces",
+		"prepare": "[ -n \"$CI\" ] || simple-git-hooks"
+	},
+	"simple-git-hooks": {
+		"pre-commit": "npx --no-install lint-staged"
+	},
+	"lint-staged": {
+		"**/*.{ts,tsx,js,mjs,cjs,json,jsonc}": "biome check --write --no-errors-on-unmatched"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.0",
+		"lint-staged": "^16.4.0",
 		"rimraf": "^6.1.3",
+		"simple-git-hooks": "^2.13.1",
 		"typescript": "^5.7.0",
 		"vitest": "^2.0.0"
 	},

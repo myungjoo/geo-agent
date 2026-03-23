@@ -313,12 +313,28 @@ npm run build
 # 테스트
 npm test
 
-# Lint
-npx biome check .
+# Lint 검사
+npm run lint
+
+# Lint 자동 수정
+npm run lint:fix
 
 # 개발 서버 (hot reload)
 node --import tsx packages/cli/src/index.ts start
 ```
+
+### Pre-commit Lint 훅
+
+`npm install` 시 **pre-commit 훅이 자동 설치**됩니다 (`prepare` 스크립트). 커밋 전 스테이징된 파일에 Biome lint/format이 자동 실행되어 CI lint 실패를 사전에 방지합니다.
+
+```
+git commit  →  lint-staged 실행 (스테이징된 *.ts, *.json 등)
+                  └─ biome check --write  →  문제 자동 수정 후 커밋 진행
+                                          →  수정 불가한 에러면 커밋 중단
+```
+
+> 훅을 건너뛰려면: `SKIP_SIMPLE_GIT_HOOKS=1 git commit ...`
+> 저장소 clone 후 훅이 없다면: `npx simple-git-hooks` 재실행
 
 ## 테스트
 
