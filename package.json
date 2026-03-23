@@ -6,7 +6,7 @@
 	"workspaces": ["packages/*"],
 	"scripts": {
 		"prebuild": "npm run clean --workspaces",
-		"build": "npm run build -w packages/core -w packages/skills -w packages/dashboard -w packages/cli",
+		"build": "tsc -b tsconfig.build.json --force",
 		"start": "node --import tsx packages/cli/src/index.ts start",
 		"dev": "npm run dev --workspace=packages/dashboard",
 		"analyze": "node --import tsx packages/cli/src/index.ts analyze",
