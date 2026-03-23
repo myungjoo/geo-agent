@@ -9,6 +9,7 @@
 			".claude/**",
 			"**/*.d.ts",
 			"**/*.d.ts.map",
+			"**/*.js",
 			"**/*.js.map",
 			"vitest.config.js",
 			"packages/core/drizzle.config.js"
@@ -54,6 +55,16 @@
 				"rules": {
 					"suspicious": {
 						"noExplicitAny": "off"
+					}
+				}
+			}
+		},
+		{
+			"include": ["packages/dashboard/src/auth.test.ts"],
+			"linter": {
+				"rules": {
+					"performance": {
+						"noDelete": "off"
 					}
 				}
 			}

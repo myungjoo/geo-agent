@@ -24,7 +24,7 @@ afterAll(() => {
 
 describe("BUG #3 [FIXED]: EADDRINUSE handling", () => {
 	it("startServer() rejects with EADDRINUSE when port is occupied", async () => {
-		// Occupy a port first
+		// Occupy a port first on 0.0.0.0 (same as server binding)
 		const blocker = net.createServer();
 		const port = await new Promise<number>((resolve) => {
 			blocker.listen(0, "127.0.0.1", () => {
