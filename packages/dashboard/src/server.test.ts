@@ -27,7 +27,7 @@ describe("BUG #3 [FIXED]: EADDRINUSE handling", () => {
 		// Occupy a port first
 		const blocker = net.createServer();
 		const port = await new Promise<number>((resolve) => {
-			blocker.listen(0, () => {
+			blocker.listen(0, "127.0.0.1", () => {
 				const addr = blocker.address() as net.AddressInfo;
 				resolve(addr.port);
 			});
@@ -35,7 +35,7 @@ describe("BUG #3 [FIXED]: EADDRINUSE handling", () => {
 
 		try {
 			// Try to start the server on the same port — should reject, not crash
-			await expect(startServer(port)).rejects.toThrow();
+			await expect(startServer(port, "127.0.0.1")).rejects.toThrow();
 		} finally {
 			blocker.close();
 		}

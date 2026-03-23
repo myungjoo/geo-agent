@@ -25,14 +25,16 @@ program
 	.command("start")
 	.description("Start the GEO Agent dashboard server")
 	.option("-p, --port <port>", "Server port", "3000")
+	.option("-h, --host <hostname>", "Server hostname", "0.0.0.0")
 	.action(async (opts) => {
 		const port = Number.parseInt(opts.port, 10);
+		const hostname = opts.host;
 		const settings = loadSettings();
 		initWorkspace(settings);
 
 		console.log("🚀 Starting GEO Agent System...");
-		await startServer(port);
-		console.log(`📊 Dashboard: http://localhost:${port}/dashboard`);
+		await startServer(port, hostname);
+		console.log(`📊 Dashboard: http://${hostname}:${port}/dashboard`);
 	});
 
 // ── geo run ──────────────────────────────────────────────

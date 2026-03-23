@@ -191,6 +191,7 @@ export { app };
  */
 export async function startServer(
 	port?: number,
+	hostname?: string,
 ): Promise<{ settings: AppSettings; server: ServerType }> {
 	const settings = loadSettings();
 	initWorkspace(settings);
@@ -203,15 +204,17 @@ export async function startServer(
 	initPipelineRouter(db, settings);
 
 	const serverPort = port ?? settings.port;
+	const serverHostname = hostname ?? "0.0.0.0";
 
 	return new Promise((resolve, reject) => {
 		const server = serve({
 			fetch: app.fetch,
 			port: serverPort,
+			hostname: serverHostname,
 		});
 
 		server.on("listening", () => {
-			console.log(`✅ GEO Agent Dashboard running on http://localhost:${serverPort}`);
+			console.log(`✅ GEO Agent Dashboard running on http://${serverHostname}:${serverPort}`);
 			resolve({ settings, server });
 		});
 
