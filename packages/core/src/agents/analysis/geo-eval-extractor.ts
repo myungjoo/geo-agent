@@ -33,6 +33,8 @@ const AI_BOTS: Array<{ name: string; service: string }> = [
 	{ name: "ClaudeBot", service: "Claude (Anthropic)" },
 	{ name: "Applebot", service: "Apple Intelligence" },
 	{ name: "Meta-ExternalAgent", service: "Meta AI" },
+	{ name: "Bytespider", service: "TikTok/ByteDance" },
+	{ name: "cohere-ai", service: "Cohere (Oracle AI)" },
 ];
 
 export function parseRobotsTxt(robotsTxt: string | null): BotPolicyEntry[] {
