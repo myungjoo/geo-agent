@@ -62,7 +62,7 @@ describe("authEnabled()", () => {
 // ── checkCredentials() ────────────────────────────────────
 
 describe("checkCredentials()", () => {
-	beforeAll(() => {
+	beforeEach(() => {
 		process.env.GEO_AUTH_USERNAME = "testuser";
 		process.env.GEO_AUTH_PASSWORD = "testpass";
 	});
