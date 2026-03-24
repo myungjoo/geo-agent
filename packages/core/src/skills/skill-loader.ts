@@ -109,7 +109,8 @@ function parseSimpleYaml(yaml: string): Record<string, unknown> {
  */
 export function loadBuiltinSkill(skillName: string): SkillDefinition {
 	const __dirname = path.dirname(fileURLToPath(import.meta.url));
-	const skillPath = path.join(__dirname, `${skillName}.skill.md`);
+	const packageRoot = path.resolve(__dirname, "..", "..");
+	const skillPath = path.join(packageRoot, "src", "skills", `${skillName}.skill.md`);
 
 	if (!fs.existsSync(skillPath)) {
 		throw new Error(`Built-in skill "${skillName}" not found at ${skillPath}`);
