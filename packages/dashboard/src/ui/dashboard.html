@@ -208,6 +208,109 @@ tr:hover td { background: var(--surface2); }
 .toggle input:checked + .slider { background: var(--primary); }
 .toggle input:checked + .slider::before { transform: translateX(18px); }
 /* Evaluation grouped tabs */
+/* Sticky GEO Score Header */
+.eval-sticky-header {
+	position: sticky; top: 0; z-index: 50;
+	background: var(--surface); border: 1px solid var(--border);
+	border-radius: var(--radius); margin-bottom: 16px;
+	box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+.eval-sticky-score {
+	display: flex; align-items: center; justify-content: center; gap: 32px; padding: 24px 32px;
+	border-bottom: 1px solid var(--border); flex-wrap: wrap;
+}
+.eval-sticky-score .geo-gauge {
+	position: relative; width: 144px; height: 144px; flex-shrink: 0;
+}
+.eval-sticky-score .geo-gauge canvas { width: 144px; height: 144px; }
+.eval-sticky-score .geo-gauge .gauge-value {
+	position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+	font-size: 42px; font-weight: 900; letter-spacing: -1px;
+}
+.eval-sticky-score .score-meta { flex-shrink: 0; }
+.eval-sticky-score .score-meta .score-label {
+	font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
+	color: var(--text-muted); font-weight: 700; margin-bottom: 2px;
+}
+.eval-sticky-score .score-meta .score-value {
+	font-size: 36px; font-weight: 900; line-height: 1.1;
+}
+.eval-sticky-score .score-meta .score-grade {
+	font-size: 13px; color: var(--text-muted); margin-top: 3px;
+}
+.eval-sticky-score .sticky-divider {
+	width: 1px; height: 96px; background: var(--border); flex-shrink: 0;
+}
+.eval-sticky-score .dim-mini-bars {
+	display: flex; gap: 10px; flex-shrink: 0;
+}
+.eval-sticky-score .dim-mini-bar {
+	text-align: center; width: 48px;
+}
+.eval-sticky-score .dim-mini-bar .mini-bar-track {
+	height: 64px; width: 100%; background: var(--surface2); border-radius: 4px;
+	position: relative; overflow: hidden;
+}
+.eval-sticky-score .dim-mini-bar .mini-bar-fill {
+	position: absolute; bottom: 0; width: 100%; border-radius: 4px;
+	transition: height 0.8s ease;
+}
+.eval-sticky-score .dim-mini-bar .mini-label {
+	font-size: 11px; color: var(--text-muted); margin-top: 3px; white-space: nowrap;
+}
+.eval-sticky-score .dim-mini-bar .mini-score {
+	font-size: 13px; font-weight: 700; margin-top: 2px;
+}
+/* Executive Summary */
+.exec-summary {
+	padding: 16px 24px; display: flex; gap: 20px; align-items: flex-start;
+}
+.exec-summary .exec-verdict {
+	flex: 1; min-width: 0;
+}
+.exec-summary .exec-catchphrase {
+	font-size: 18px; font-weight: 800; margin-bottom: 6px; line-height: 1.3;
+}
+.exec-summary .exec-text {
+	font-size: 13px; color: var(--text-muted); line-height: 1.6;
+}
+.exec-summary .exec-priorities {
+	width: 340px; flex-shrink: 0;
+}
+.exec-summary .exec-priorities h4 {
+	font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+	color: var(--text-muted); font-weight: 700; margin-bottom: 8px;
+}
+.exec-priority-item {
+	display: flex; gap: 10px; padding: 8px 10px; margin-bottom: 6px;
+	background: var(--surface2); border-radius: 6px; border-left: 3px solid var(--primary);
+}
+.exec-priority-item .pri-num {
+	font-size: 16px; font-weight: 900; color: var(--primary); flex-shrink: 0; width: 22px;
+}
+.exec-priority-item .pri-title {
+	font-size: 12px; font-weight: 700; margin-bottom: 2px;
+}
+.exec-priority-item .pri-desc {
+	font-size: 11px; color: var(--text-muted); line-height: 1.4;
+}
+.exec-risk-badge {
+	display: inline-block; padding: 3px 10px; border-radius: 12px;
+	font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+	margin-left: 8px; vertical-align: middle;
+}
+.exec-risk-critical { background: rgba(239,68,68,0.2); color: #F87171; }
+.exec-risk-warning { background: rgba(245,158,11,0.2); color: #FBBF24; }
+.exec-risk-moderate { background: rgba(59,130,246,0.2); color: #60A5FA; }
+.exec-risk-good { background: rgba(16,185,129,0.2); color: #34D399; }
+.exec-risk-excellent { background: rgba(16,185,129,0.3); color: #6EE7B7; }
+.exec-summary-loading {
+	padding: 16px 24px; text-align: center; color: var(--text-muted); font-size: 12px;
+}
+.exec-summary-loading .loading-dots::after {
+	content: ''; animation: loadDots 1.5s infinite;
+}
+@keyframes loadDots { 0% { content: '.'; } 33% { content: '..'; } 66% { content: '...'; } }
 .eval-tab-groups { display: flex; gap: 0; flex-wrap: wrap; border-bottom: 1px solid var(--border); background: var(--surface); }
 .eval-tab-group { display: flex; align-items: stretch; border-right: 1px solid var(--border); }
 .eval-tab-group:last-child { border-right: none; }
@@ -283,7 +386,7 @@ details.collapsible > .collapsible-content { padding: 16px; }
 	<!-- Evaluation Tab -->
 	<div id="tab-evaluation" class="hidden">
 		<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
-			<h2 style="font-size:18px;">GEO Evaluation Results</h2>
+			<h2 style="font-size:18px;">GEO Evaluation Report</h2>
 			<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
 				<select id="evalTargetSelect" onchange="onEvalTargetChange()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:8px 12px;border-radius:var(--radius);font-size:13px;min-width:200px;">
 					<option value="">Select a target...</option>
@@ -293,6 +396,7 @@ details.collapsible > .collapsible-content { padding: 16px; }
 				<button class="btn btn-primary btn-sm" onclick="loadEvaluation()">Refresh</button>
 			</div>
 		</div>
+		<div id="evalStickyHeader" class="hidden"></div>
 		<div id="evalSubTabs" class="eval-tab-groups hidden" style="overflow-x:auto;margin-bottom:16px;">
 		</div>
 		<div id="evalContent">
@@ -893,11 +997,14 @@ async function onEvalTargetChange() {
 	var container = document.getElementById('evalContent');
 	var subTabsContainer = document.getElementById('evalSubTabs');
 
+	var stickyHeader = document.getElementById('evalStickyHeader');
+
 	if (!targetId) {
 		pipelineSelect.style.display = 'none';
 		pipelineSelect.innerHTML = '';
 		container.innerHTML = '<div class="empty">Select a target to view evaluation results.</div>';
 		subTabsContainer.classList.add('hidden');
+		stickyHeader.classList.add('hidden');
 		return;
 	}
 
@@ -937,14 +1044,17 @@ async function loadEvaluation() {
 	}
 
 	var selectedPipelineId = pipelineSelect.value;
+	var stickyEl = document.getElementById('evalStickyHeader');
 	if (!selectedPipelineId) {
 		container.innerHTML = '<div class="empty">No pipeline selected.</div>';
 		subTabsContainer.classList.add('hidden');
+		stickyEl.classList.add('hidden');
 		return;
 	}
 
 	container.innerHTML = '<div class="empty">Loading evaluation...</div>';
 	subTabsContainer.classList.add('hidden');
+	stickyEl.classList.add('hidden');
 
 	try {
 		// Fetch specific pipeline info
@@ -966,6 +1076,17 @@ async function loadEvaluation() {
 			currentEvalData = evalData;
 			buildEvalSubTabs(evalData);
 			subTabsContainer.classList.remove('hidden');
+			// Render sticky score header
+			var stickyEl = document.getElementById('evalStickyHeader');
+			stickyEl.classList.remove('hidden');
+			stickyEl.innerHTML = renderStickyScoreHeader(evalData);
+			drawGaugeCanvas(evalData.initial_score);
+			// Load executive summary: use cached if available, otherwise fetch
+			if (evalData.executive_summary && evalData.executive_summary.catchphrase) {
+				renderExecutiveSummary(evalData.executive_summary);
+			} else {
+				loadExecutiveSummary(targetId, selectedPipelineId);
+			}
 			// Add LLM models info to status header
 			if (evalData.llm_models_used && evalData.llm_models_used.length > 0) {
 				statusHtml = statusHtml.replace('</div></div>', ' · LLM: <code>' + esc(evalData.llm_models_used.join(', ')) + '</code></div></div>');
@@ -973,7 +1094,7 @@ async function loadEvaluation() {
 			// Show LLM errors prominently
 			if (evalData.llm_errors && evalData.llm_errors.length > 0) {
 				var errHtml = '<div class="card" style="padding:12px 16px;margin-bottom:16px;border:1px solid var(--danger);background:rgba(239,68,68,0.1);">';
-				errHtml += '<div style="color:var(--danger);font-weight:600;margin-bottom:4px;">⚠️ LLM Errors (' + evalData.llm_errors.length + ')</div>';
+				errHtml += '<div style="color:var(--danger);font-weight:600;margin-bottom:4px;">LLM Errors (' + evalData.llm_errors.length + ')</div>';
 				errHtml += '<div style="font-size:12px;color:var(--text-muted);">LLM calls failed — results are rule-based only. Check model name and API key settings.</div>';
 				errHtml += '<ul style="margin:8px 0 0 16px;font-size:12px;">';
 				evalData.llm_errors.slice(0, 3).forEach(function(e) { errHtml += '<li>' + esc(e.slice(0, 150)) + '</li>'; });
@@ -1047,9 +1168,142 @@ function switchEvalSubTab(tabId) {
 }
 
 function scoreColor(score) {
-	if (score >= 75) return 'var(--success)';
-	if (score >= 55) return 'var(--warning)';
-	return 'var(--danger)';
+	if (score >= 80) return '#10B981';
+	if (score >= 60) return '#3B82F6';
+	if (score >= 40) return '#F59E0B';
+	return '#EF4444';
+}
+
+function scoreColorRgba(score, alpha) {
+	if (score >= 80) return 'rgba(16,185,129,' + alpha + ')';
+	if (score >= 60) return 'rgba(59,130,246,' + alpha + ')';
+	if (score >= 40) return 'rgba(245,158,11,' + alpha + ')';
+	return 'rgba(239,68,68,' + alpha + ')';
+}
+
+function renderStickyScoreHeader(data) {
+	var score = data.initial_score || 0;
+	var color = scoreColor(score);
+	var dims = data.dimensions || [];
+	var html = '<div class="eval-sticky-header">';
+	html += '<div class="eval-sticky-score">';
+	// Gauge
+	html += '<div class="geo-gauge"><canvas id="geoGaugeCanvas" width="288" height="288"></canvas>';
+	html += '<div class="gauge-value" style="color:' + color + ';">' + Math.round(score) + '</div></div>';
+	// Score meta
+	html += '<div class="score-meta">';
+	html += '<div class="score-label">GEO Readiness</div>';
+	html += '<div class="score-value" style="color:' + color + ';">' + score.toFixed(1) + '<span style="font-size:12px;color:var(--text-muted);font-weight:400;"> / 100</span></div>';
+	html += '<div class="score-grade">' + esc(String(data.initial_grade || '')) + ' · ' + esc(String(data.site_type || '')) + '</div>';
+	html += '</div>';
+	// Delta if exists
+	if (data.delta && data.delta !== 0) {
+		var fScore = data.final_score || score;
+		var fColor = scoreColor(fScore);
+		html += '<div style="display:flex;align-items:center;gap:12px;">';
+		html += '<div style="font-size:28px;color:var(--text-muted);">&#8594;</div>';
+		html += deltaBadge(data.delta);
+		html += '<div style="font-size:32px;font-weight:900;color:' + fColor + ';">' + Math.round(fScore) + '</div>';
+		html += '</div>';
+	}
+	// Divider + Mini dimension bars
+	if (dims.length > 0) {
+		html += '<div class="sticky-divider"></div>';
+		html += '<div class="dim-mini-bars">';
+		for (var i = 0; i < dims.length; i++) {
+			var d = dims[i];
+			var dc = scoreColor(d.score);
+			html += '<div class="dim-mini-bar">';
+			html += '<div class="mini-bar-track"><div class="mini-bar-fill" style="height:' + d.score + '%;background:' + dc + ';"></div></div>';
+			html += '<div class="mini-label">' + esc(d.id) + '</div>';
+			html += '<div class="mini-score" style="color:' + dc + ';">' + Math.round(d.score) + '</div>';
+			html += '</div>';
+		}
+		html += '</div>';
+	}
+	html += '</div>';
+	// Executive summary placeholder
+	html += '<div id="execSummaryArea" class="exec-summary-loading"><span>AI &#48516;&#49437; &#51473;</span><span class="loading-dots"></span></div>';
+	html += '</div>';
+	return html;
+}
+
+function drawGaugeCanvas(score) {
+	var canvas = document.getElementById('geoGaugeCanvas');
+	if (!canvas) return;
+	var ctx = canvas.getContext('2d');
+	var size = 288;
+	var cx = size / 2, cy = size / 2, r = 120;
+	var startAngle = 0.75 * Math.PI;
+	var endAngle = 2.25 * Math.PI;
+	var scoreAngle = startAngle + (endAngle - startAngle) * (score / 100);
+	var color = scoreColor(score);
+	ctx.clearRect(0, 0, size, size);
+	// Background arc
+	ctx.beginPath();
+	ctx.arc(cx, cy, r, startAngle, endAngle);
+	ctx.strokeStyle = 'rgba(55,65,81,0.5)';
+	ctx.lineWidth = 16;
+	ctx.lineCap = 'round';
+	ctx.stroke();
+	// Score arc
+	if (score > 0) {
+		ctx.beginPath();
+		ctx.arc(cx, cy, r, startAngle, scoreAngle);
+		ctx.strokeStyle = color;
+		ctx.lineWidth = 16;
+		ctx.lineCap = 'round';
+		ctx.stroke();
+	}
+}
+
+function renderExecutiveSummary(summary) {
+	var area = document.getElementById('execSummaryArea');
+	if (!area) return;
+	if (!summary || !summary.catchphrase) {
+		area.innerHTML = '';
+		area.className = '';
+		return;
+	}
+	var riskCls = 'exec-risk-' + (summary.risk_level || 'moderate');
+	var riskLabel = {critical:'CRITICAL',warning:'WARNING',moderate:'MODERATE',good:'GOOD',excellent:'EXCELLENT'}[summary.risk_level] || 'UNKNOWN';
+	var html = '<div class="exec-summary">';
+	html += '<div class="exec-verdict">';
+	html += '<div class="exec-catchphrase">' + esc(summary.catchphrase || '') + ' <span class="exec-risk-badge ' + riskCls + '">' + riskLabel + '</span></div>';
+	html += '<div class="exec-text">' + esc(summary.verdict || '') + '</div>';
+	html += '</div>';
+	if (summary.top_priorities && summary.top_priorities.length > 0) {
+		html += '<div class="exec-priorities"><h4>Top Priorities</h4>';
+		for (var i = 0; i < summary.top_priorities.length; i++) {
+			var p = summary.top_priorities[i];
+			var borderColor = i === 0 ? '#EF4444' : i === 1 ? '#F59E0B' : '#3B82F6';
+			html += '<div class="exec-priority-item" style="border-left-color:' + borderColor + ';">';
+			html += '<div class="pri-num">' + (i + 1) + '</div>';
+			html += '<div><div class="pri-title">' + esc(p.title || '') + '</div>';
+			html += '<div class="pri-desc">' + esc(p.description || '') + '</div></div></div>';
+		}
+		html += '</div>';
+	}
+	html += '</div>';
+	area.className = '';
+	area.innerHTML = html;
+}
+
+async function loadExecutiveSummary(targetId, pipelineId) {
+	var area = document.getElementById('execSummaryArea');
+	if (!area) return;
+	try {
+		var summary = await api('/api/targets/' + targetId + '/pipeline/' + pipelineId + '/executive-summary');
+		if (summary.error) {
+			area.innerHTML = '';
+			area.className = '';
+			return;
+		}
+		renderExecutiveSummary(summary);
+	} catch (e) {
+		area.innerHTML = '';
+		area.className = '';
+	}
 }
 
 function deltaBadge(delta) {
@@ -1149,79 +1403,68 @@ function renderEvalSubTab(tabId, data, container) {
 // ── Tab 1: Overview ──────────────────────────────────
 function renderOverviewTab(data, ed, rr) {
 	var html = '';
-	var color = scoreColor(data.initial_score);
-	var fColor = data.delta !== 0 ? scoreColor(data.final_score) : color;
-
-	// Score display
-	html += '<div class="card eval-score-card">';
-	html += '<div class="score-circle" style="background:conic-gradient(' + color + ' 0% ' + data.initial_score + '%, var(--border) ' + data.initial_score + '%);">';
-	html += '<span style="color:' + color + ';">' + Math.round(data.initial_score) + '</span></div>';
-	html += '<div style="flex:1;">';
-	html += '<div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">GEO Score</div>';
-	html += '<div style="font-size:24px;font-weight:800;color:' + color + ';">' + data.initial_score.toFixed(1) + '/100</div>';
-	html += '<div style="font-size:13px;color:var(--text-muted);">' + esc(String(data.initial_grade)) + ' · ' + esc(String(data.site_type)) + '</div>';
-	html += '</div>';
-	if (data.delta !== 0) {
-		html += '<div style="text-align:center;padding:0 16px;"><div style="font-size:20px;">→</div>' + deltaBadge(data.delta) + '</div>';
-		html += '<div class="score-circle" style="background:conic-gradient(' + fColor + ' 0% ' + data.final_score + '%, var(--border) ' + data.final_score + '%);">';
-		html += '<span style="color:' + fColor + ';">' + Math.round(data.final_score) + '</span></div>';
-		html += '<div><div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;">Final</div>';
-		html += '<div style="font-size:24px;font-weight:800;color:' + fColor + ';">' + data.final_score.toFixed(1) + '/100</div></div>';
-	}
-	html += '</div>';
 
 	// LLM Model Info
 	if (data.llm_models_used && data.llm_models_used.length > 0) {
-		html += '<div class="card" style="padding:12px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;">';
-		html += '<div style="font-size:12px;color:var(--text-muted);">🤖 사용된 LLM 모델:</div>';
+		html += '<div class="card" style="padding:10px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;">';
+		html += '<span style="color:var(--text-muted);font-weight:600;">Analysis Engine</span>';
 		for (var mi = 0; mi < data.llm_models_used.length; mi++) {
-			html += '<code style="background:rgba(59,130,246,0.15);color:#93C5FD;padding:2px 8px;border-radius:4px;font-size:12px;">' + esc(data.llm_models_used[mi]) + '</code>';
+			html += '<code style="background:rgba(59,130,246,0.12);color:#93C5FD;padding:2px 8px;border-radius:4px;font-size:11px;">' + esc(data.llm_models_used[mi]) + '</code>';
 		}
 		html += '</div>';
 	} else {
-		html += '<div class="card" style="padding:12px 16px;font-size:12px;color:var(--warning);">⚠️ LLM 미사용 — 규칙 기반 분석 결과입니다. LLM Providers 탭에서 API Key를 설정하면 더 정확한 분석이 가능합니다.</div>';
+		html += '<div class="card" style="padding:10px 16px;font-size:12px;color:var(--warning);border:1px solid rgba(245,158,11,0.3);">LLM &#48120;&#49324;&#50857; &#8212; &#44508;&#52825; &#44592;&#48152; &#48516;&#49437; &#44208;&#44284;. LLM Providers &#53485;&#50640;&#49436; API Key&#47484; &#49444;&#51221;&#54616;&#47732; &#45908; &#51221;&#54869;&#54620; &#48516;&#49437;&#51060; &#44032;&#45733;&#54633;&#45768;&#45796;.</div>';
 	}
 
-	// 7-Dimension Scores
+	// 7-Dimension Detailed Analysis
 	if (data.dimensions && data.dimensions.length > 0) {
-		html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">';
-		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">📈 GEO 차원별 점수</h3>';
+		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:16px;font-weight:700;">Dimension Analysis</h3>';
+		html += '<div style="display:grid;grid-template-columns:1fr;gap:0;">';
 		for (var i = 0; i < data.dimensions.length; i++) {
 			var d = data.dimensions[i];
 			var c = scoreColor(d.score);
-			html += '<div class="eval-dim-bar"><div class="bar-header"><span>' + esc(d.id + ' ' + d.label) + '</span><span style="color:' + c + ';font-weight:600;">' + d.score.toFixed(1) + '</span></div>';
-			html += '<div class="bar-track"><div class="bar-fill" style="width:' + d.score + '%;background:' + c + ';"></div></div></div>';
+			var bgc = scoreColorRgba(d.score, 0.06);
+			html += '<div style="display:flex;align-items:center;gap:16px;padding:12px 16px;border-bottom:1px solid var(--border);background:' + bgc + ';">';
+			// Score
+			html += '<div style="width:48px;text-align:center;flex-shrink:0;">';
+			html += '<div style="font-size:22px;font-weight:900;color:' + c + ';">' + Math.round(d.score) + '</div>';
+			html += '</div>';
+			// Label + bar
+			html += '<div style="flex:1;min-width:0;">';
+			html += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">';
+			html += '<span style="font-size:13px;font-weight:600;">' + esc(d.id + ' ' + d.label) + '</span>';
+			html += '<span style="font-size:11px;color:var(--text-muted);">weight ' + ((d.weight || 0) * 100).toFixed(0) + '%</span>';
+			html += '</div>';
+			html += '<div class="bar-track" style="height:6px;"><div class="bar-fill" style="width:' + d.score + '%;background:' + c + ';"></div></div>';
+			// Details
+			if (d.details && d.details.length > 0) {
+				html += '<div style="margin-top:4px;font-size:11px;color:var(--text-muted);line-height:1.5;">';
+				for (var j = 0; j < Math.min(d.details.length, 2); j++) {
+					html += esc(d.details[j]);
+					if (j < Math.min(d.details.length, 2) - 1) html += ' · ';
+				}
+				html += '</div>';
+			}
+			html += '</div></div>';
 		}
-		html += '</div>';
-
-		// Score summary cards (dimension highlights)
-		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">📊 핵심 차원 요약</h3>';
-		html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
-		for (var i = 0; i < Math.min(data.dimensions.length, 4); i++) {
-			var d = data.dimensions[i];
-			var c = scoreColor(d.score);
-			var cls = d.score >= 75 ? 'rgba(16,185,129,0.1)' : d.score >= 55 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)';
-			html += '<div style="padding:12px;background:' + cls + ';border-radius:6px;text-align:center;">';
-			html += '<div style="font-size:24px;font-weight:800;color:' + c + ';">' + Math.round(d.score) + '</div>';
-			html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">' + esc(d.label) + '</div></div>';
-		}
-		html += '</div></div></div>';
+		html += '</div></div>';
 	}
 
-	// Rich Report Overview: summary_cards, llm_accessibility
+	// Rich Report: summary_cards
 	if (rr && rr.overview) {
 		var ov = rr.overview;
 		if (ov.summary_cards && ov.summary_cards.length > 0) {
 			html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">';
 			for (var si = 0; si < ov.summary_cards.length; si++) {
 				var sc = ov.summary_cards[si];
-				html += '<div class="rich-metric-card"><div class="metric-value" style="font-size:18px;color:var(--primary);">' + esc(String(sc.score !== undefined ? sc.score : (sc.value || ''))) + '</div>';
-				html += '<div class="metric-label">' + esc(sc.label || sc.title || '') + '</div></div>';
+				html += '<div class="card" style="text-align:center;padding:16px;">';
+				html += '<div style="font-size:22px;font-weight:900;color:var(--primary);">' + esc(String(sc.score !== undefined ? sc.score : (sc.value || ''))) + '</div>';
+				html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + esc(sc.label || sc.title || '') + '</div></div>';
 			}
 			html += '</div>';
 		}
 		if (ov.llm_accessibility && ov.llm_accessibility.length > 0) {
-			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🤖 LLM 서비스별 접근성</h3>';
+			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;font-weight:700;">LLM Service Accessibility</h3>';
 			for (var ai = 0; ai < ov.llm_accessibility.length; ai++) {
 				var la = ov.llm_accessibility[ai];
 				var laScore = la.score || la.accessibility_score || 0;
@@ -1232,7 +1475,7 @@ function renderOverviewTab(data, ed, rr) {
 		}
 	}
 
-	// Strengths / Weaknesses / Opportunities (prefer rich_report, fallback to eval_data)
+	// Strengths / Weaknesses / Opportunities
 	var findings = {};
 	if (rr && rr.overview) {
 		findings.strengths = rr.overview.strengths || ed.strengths;
@@ -1245,26 +1488,26 @@ function renderOverviewTab(data, ed, rr) {
 	}
 	if (findings.strengths || findings.weaknesses || findings.opportunities) {
 		html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">';
-		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">✅ 잘 된 점 (Strengths)</h3>';
+		html += '<div class="card" style="border-top:3px solid #10B981;"><h3 style="font-size:13px;margin-bottom:12px;font-weight:700;color:#10B981;">STRENGTHS</h3>';
 		if (findings.strengths && findings.strengths.length > 0) {
 			for (var i = 0; i < findings.strengths.length; i++) {
-				html += findingCard(findings.strengths[i].icon || '✅', findings.strengths[i].title || '', findings.strengths[i].description || '');
+				html += findingCard(findings.strengths[i].icon || '', findings.strengths[i].title || '', findings.strengths[i].description || '');
 			}
-		} else { html += '<div class="empty" style="font-size:12px;">분석 완료 후 표시</div>'; }
+		} else { html += '<div class="empty" style="font-size:12px;">&#48516;&#49437; &#50756;&#47308; &#54980; &#54364;&#49884;</div>'; }
 		html += '</div>';
-		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">⚠️ 취약점 (Weaknesses)</h3>';
+		html += '<div class="card" style="border-top:3px solid #F59E0B;"><h3 style="font-size:13px;margin-bottom:12px;font-weight:700;color:#F59E0B;">WEAKNESSES</h3>';
 		if (findings.weaknesses && findings.weaknesses.length > 0) {
 			for (var i = 0; i < findings.weaknesses.length; i++) {
-				html += findingCard(findings.weaknesses[i].icon || '⚠️', findings.weaknesses[i].title || '', findings.weaknesses[i].description || '');
+				html += findingCard(findings.weaknesses[i].icon || '', findings.weaknesses[i].title || '', findings.weaknesses[i].description || '');
 			}
-		} else { html += '<div class="empty" style="font-size:12px;">분석 완료 후 표시</div>'; }
+		} else { html += '<div class="empty" style="font-size:12px;">&#48516;&#49437; &#50756;&#47308; &#54980; &#54364;&#49884;</div>'; }
 		html += '</div>';
-		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🚀 핵심 기회 (Opportunities)</h3>';
+		html += '<div class="card" style="border-top:3px solid #3B82F6;"><h3 style="font-size:13px;margin-bottom:12px;font-weight:700;color:#3B82F6;">OPPORTUNITIES</h3>';
 		if (findings.opportunities && findings.opportunities.length > 0) {
 			for (var i = 0; i < findings.opportunities.length; i++) {
-				html += findingCard(findings.opportunities[i].icon || '🚀', findings.opportunities[i].title || '', findings.opportunities[i].description || '');
+				html += findingCard(findings.opportunities[i].icon || '', findings.opportunities[i].title || '', findings.opportunities[i].description || '');
 			}
-		} else { html += '<div class="empty" style="font-size:12px;">분석 완료 후 표시</div>'; }
+		} else { html += '<div class="empty" style="font-size:12px;">&#48516;&#49437; &#50756;&#47308; &#54980; &#54364;&#49884;</div>'; }
 		html += '</div></div>';
 	}
 
