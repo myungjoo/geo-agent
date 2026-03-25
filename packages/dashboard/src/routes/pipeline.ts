@@ -448,15 +448,19 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 		? ((final_data.after as number) ?? ((final_data.delta as number) ?? 0) + initialScore)
 		: initialScore;
 
-	// Extract LLM models from REPORTING stage, then scan all stages
+	// Extract LLM models + generated summaries from REPORTING stage
 	const reportingStage = stages.find((s) => s.stage === "REPORTING" && s.result_full);
 	let llmModelsUsed: string[] = [];
 	let llmErrors: string[] = [];
+	let reportExecutiveSummary: Record<string, unknown> | null = null;
+	let reportStructuredRecs: Record<string, unknown> | null = null;
 	if (reportingStage?.result_full) {
 		try {
 			const reportData = JSON.parse(reportingStage.result_full);
 			llmModelsUsed = reportData.llm_models_used ?? [];
 			llmErrors = reportData.llm_errors ?? [];
+			reportExecutiveSummary = reportData.executive_summary ?? null;
+			reportStructuredRecs = reportData.structured_recommendations ?? null;
 		} catch (err) {
 			const msg = `Reporting stage parse error: ${err instanceof Error ? err.message : String(err)}`;
 			console.warn(`⚠️ ${msg}`);
@@ -504,7 +508,14 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 		multi_provider_probes: initial.multi_provider_probes ?? null,
 		probe_mode: initial.probe_mode ?? "single",
 		rich_report: initial.rich_report ?? null,
-		executive_summary: initial.executive_summary ?? null,
+		executive_summary:
+			reportExecutiveSummary ??
+			(initial.executive_summary as Record<string, unknown> | null) ??
+			null,
+		structured_recommendations:
+			reportStructuredRecs ??
+			(initial.structured_recommendations as Record<string, unknown> | null) ??
+			null,
 		analysis_report: initial,
 		validation: final_data,
 		llm_models_used: llmModelsUsed,
@@ -539,7 +550,18 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/executive-summary", async (c) => {
 		return c.json({ error: "Failed to parse evaluation data" }, 500);
 	}
 
-	// 2. Return cached summary if it exists
+	// 2. Return cached summary: check REPORTING stage first, then ANALYZING
+	const reportingStg = stages.find((s) => s.stage === "REPORTING" && s.result_full);
+	if (reportingStg?.result_full) {
+		try {
+			const rd = JSON.parse(reportingStg.result_full);
+			if (rd.executive_summary?.catchphrase) {
+				return c.json(rd.executive_summary);
+			}
+		} catch {
+			/* ignore */
+		}
+	}
 	const cached = initial.executive_summary as Record<string, unknown> | undefined;
 	if (cached?.catchphrase) {
 		return c.json(cached);
@@ -656,6 +678,189 @@ Return ONLY valid JSON, no markdown fences.`;
 
 		// 5. Save to ANALYZING stage result_full for future reuse
 		await stageRepo.patchResultFull(analyzingStage.id, { executive_summary: result });
+
+		return c.json(result);
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		return c.json({ error: `LLM call failed: ${msg}` }, 500);
+	}
+});
+
+// GET /api/targets/:id/pipeline/:pipelineId/recommendations — LLM 기반 권고사항 구조화 (캐시 지원)
+pipelineRouter.get("/:id/pipeline/:pipelineId/recommendations", async (c) => {
+	const stageRepo = getStageRepo();
+	const targetRepo = getTargetRepo();
+	const pipelineId = c.req.param("pipelineId");
+	const targetId = c.req.param("id");
+
+	const stages = await stageRepo.findByPipelineId(pipelineId);
+	const analyzingStage = stages.find((s) => s.stage === "ANALYZING" && s.result_full);
+	if (!analyzingStage?.result_full) {
+		return c.json({ error: "No evaluation data available" }, 404);
+	}
+
+	let initial: Record<string, unknown>;
+	try {
+		initial = JSON.parse(analyzingStage.result_full);
+	} catch {
+		return c.json({ error: "Failed to parse evaluation data" }, 500);
+	}
+
+	// Return cached: check REPORTING stage first, then ANALYZING
+	const reportingStgR = stages.find((s) => s.stage === "REPORTING" && s.result_full);
+	if (reportingStgR?.result_full) {
+		try {
+			const rd = JSON.parse(reportingStgR.result_full);
+			if (rd.structured_recommendations?.items) {
+				return c.json(rd.structured_recommendations);
+			}
+		} catch {
+			/* ignore */
+		}
+	}
+	const cached = initial.structured_recommendations as Record<string, unknown> | undefined;
+	if (cached?.items) {
+		return c.json(cached);
+	}
+
+	// Build LLM client
+	const workspaceDir = sharedSettings?.workspace_dir ?? "./run";
+	let client: GeoLLMClient;
+	try {
+		const configManager = new ProviderConfigManager(workspaceDir);
+		const providersWithKey = configManager.getEnabled().filter((p) => p.api_key);
+		if (providersWithKey.length === 0) {
+			return c.json({ error: "LLM API Key not configured" }, 400);
+		}
+		client = new GeoLLMClient(workspaceDir);
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		return c.json({ error: `LLM initialization failed: ${msg}` }, 500);
+	}
+
+	// Gather all recommendation sources
+	const target = await targetRepo.findById(targetId);
+	const score = (initial.score as number) ?? 0;
+	const grade = (initial.grade as string) ?? "Unknown";
+	const siteType = (initial.site_type as string) ?? "unknown";
+	const dimensions =
+		(initial.dimensions as Array<{
+			id: string;
+			label: string;
+			score: number;
+			details: string[];
+		}>) ?? [];
+	const evalData = (initial.eval_data as Record<string, unknown>) ?? {};
+	const richReport = (initial.rich_report as Record<string, unknown>) ?? {};
+
+	// Collect existing recommendations
+	const rrRecs = (richReport as Record<string, unknown>)?.recommendations as Record<
+		string,
+		unknown
+	> | null;
+	const edImprovements = (evalData as Record<string, unknown>)?.improvements as
+		| Array<Record<string, unknown>>
+		| undefined;
+
+	let existingRecs = "";
+	if (rrRecs) {
+		const allRr = [
+			...((rrRecs.high_priority as Array<Record<string, unknown>>) ?? []),
+			...((rrRecs.medium_priority as Array<Record<string, unknown>>) ?? []),
+			...((rrRecs.low_priority as Array<Record<string, unknown>>) ?? []),
+		];
+		existingRecs = allRr
+			.map(
+				(r) =>
+					`[${r.priority ?? "medium"}] ${r.title ?? ""}: ${r.description ?? ""} (impact: ${r.impact ?? ""}, effort: ${r.effort ?? ""})`,
+			)
+			.join("\n");
+	}
+	if (edImprovements && edImprovements.length > 0) {
+		const edText = edImprovements
+			.map(
+				(r) =>
+					`[impact:${r.impact ?? "?"}/5, difficulty:${r.difficulty ?? "?"}] ${r.title ?? ""}: ${r.description ?? ""} (현재: ${r.current_state ?? ""}, 영향: ${Array.isArray(r.affected_dimensions) ? (r.affected_dimensions as string[]).join(",") : ""})`,
+			)
+			.join("\n");
+		existingRecs += existingRecs ? `\n${edText}` : edText;
+	}
+
+	const dimSummary = dimensions
+		.map((d) => `${d.id} ${d.label}: ${d.score.toFixed(1)}/100`)
+		.join(", ");
+
+	// Gather strengths/weaknesses for context
+	const overview = (richReport as Record<string, unknown>)?.overview as
+		| Record<string, unknown>
+		| undefined;
+	const strengths = (overview?.strengths ??
+		(evalData as Record<string, unknown>)?.strengths ??
+		[]) as Array<Record<string, unknown>>;
+	const weaknesses = (overview?.weaknesses ??
+		(evalData as Record<string, unknown>)?.weaknesses ??
+		[]) as Array<Record<string, unknown>>;
+	const contextText = [
+		strengths.length > 0 ? `강점: ${strengths.map((s) => s.title ?? "").join(", ")}` : "",
+		weaknesses.length > 0 ? `약점: ${weaknesses.map((w) => w.title ?? "").join(", ")}` : "",
+	]
+		.filter(Boolean)
+		.join("\n");
+
+	const prompt = `You are a senior GEO consultant. Based on the analysis data below, produce structured improvement recommendations in Korean.
+
+Target: ${target?.name ?? "Unknown"} (${target?.url ?? ""})
+Site Type: ${siteType}
+GEO Score: ${score.toFixed(1)}/100 (${grade})
+Dimensions: ${dimSummary}
+${contextText}
+
+Existing analysis recommendations:
+${existingRecs || "None"}
+
+Generate a JSON with:
+- "items": Array of 5-8 recommendation objects, ordered by priority (highest first). Each object must have:
+  - "priority": "critical" | "high" | "medium" | "low"
+  - "title": Short Korean title (max 25 chars)
+  - "rationale": 1-2 sentence Korean explanation of WHY this is a problem, citing specific data from the analysis (scores, missing schemas, blocked bots, etc.)
+  - "action": 1-2 sentence Korean description of WHAT to do concretely
+  - "expected_effect": 1 sentence Korean description of the expected improvement (which dimensions improve, estimated score impact)
+  - "effort": "easy" | "medium" | "hard"
+  - "affected_dimensions": array of dimension IDs like ["S1","S2"]
+
+Rules:
+- Every rationale MUST reference specific findings from the analysis data (e.g. "S2 점수 32.5점으로 구조화 데이터 부재", "GPTBot 차단 상태")
+- Do NOT invent data. Only reference what is provided above.
+- Be actionable and specific in the action field.
+- Write entirely in Korean.
+Return ONLY valid JSON.`;
+
+	try {
+		const response = await client.chat({
+			prompt,
+			temperature: 0.3,
+			json_mode: true,
+			max_tokens: 2000,
+		});
+
+		let parsed: Record<string, unknown>;
+		try {
+			const cleaned = response.content
+				.replace(/```json\s*/g, "")
+				.replace(/```\s*/g, "")
+				.trim();
+			parsed = JSON.parse(cleaned);
+		} catch {
+			return c.json({ error: "Failed to parse LLM response", raw: response.content }, 500);
+		}
+
+		const result = {
+			...parsed,
+			generated_at: new Date().toISOString(),
+			model: `${response.provider}/${response.model}`,
+		};
+
+		await stageRepo.patchResultFull(analyzingStage.id, { structured_recommendations: result });
 
 		return c.json(result);
 	} catch (err) {

@@ -1958,82 +1958,115 @@ function renderPagesTab(data, rr) {
 // ── Tab 7: Recommendations ───────────────────────────
 function renderRecommendationsTab(data, ed, rr) {
 	var html = '';
-	// Rich report recommendations
-	if (rr && rr.recommendations) {
-		var rec = rr.recommendations;
-		var priorityGroups = [
-			{ key: 'high_priority', label: '🔴 High Priority', color: 'var(--danger)', items: rec.high_priority || [] },
-			{ key: 'medium_priority', label: '🟡 Medium Priority', color: 'var(--warning)', items: rec.medium_priority || [] },
-			{ key: 'low_priority', label: '🟢 Low Priority', color: 'var(--success)', items: rec.low_priority || [] }
-		];
-		for (var g = 0; g < priorityGroups.length; g++) {
-			var grp = priorityGroups[g];
-			if (grp.items.length === 0) continue;
-			html += '<div class="card"><h3 style="font-size:14px;color:' + grp.color + ';margin-bottom:12px;">' + grp.label + ' (' + grp.items.length + ')</h3>';
-			for (var i = 0; i < grp.items.length; i++) {
-				var r = grp.items[i];
-				html += '<div style="padding:10px 14px;margin-bottom:8px;background:var(--surface2);border-radius:6px;border-left:3px solid ' + grp.color + ';">';
-				html += '<div style="font-weight:600;font-size:13px;">' + esc(r.title || r.id || '') + '</div>';
-				if (r.description) html += '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">' + esc(r.description) + '</div>';
-				var meta = [];
-				if (r.effort) meta.push('Effort: ' + r.effort);
-				if (r.impact) meta.push('Impact: ' + r.impact);
-				if (r.expected_improvement) meta.push('Expected: ' + r.expected_improvement);
-				if (r.affected_dimensions) meta.push('Dims: ' + (Array.isArray(r.affected_dimensions) ? r.affected_dimensions.join(', ') : r.affected_dimensions));
-				if (meta.length > 0) html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">' + esc(meta.join(' · ')) + '</div>';
-				html += '</div>';
-			}
-			html += '</div>';
+	// Structured recommendations (LLM-generated, cached)
+	var sr = data.structured_recommendations;
+	if (sr && sr.items && sr.items.length > 0) {
+		html += renderStructuredRecommendations(sr);
+	} else {
+		// Show loading + trigger async fetch
+		html += '<div id="recsLoadingArea" class="card" style="text-align:center;padding:32px;color:var(--text-muted);">';
+		html += '<div style="font-size:14px;margin-bottom:8px;">AI 기반 권고사항 생성 중...</div>';
+		html += '<div style="font-size:12px;">분석 데이터를 종합하여 맞춤형 개선안을 작성합니다.</div>';
+		html += '</div>';
+		var targetId = document.getElementById('evalTargetSelect').value;
+		var pipelineId = document.getElementById('evalPipelineSelect').value;
+		if (targetId && pipelineId) {
+			loadStructuredRecommendations(targetId, pipelineId);
 		}
-		// Competitive comparison
-		if (rec.competitive_comparison) {
-			var cc = rec.competitive_comparison;
-			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">경쟁 비교</h3>';
-			if (typeof cc === 'string') {
-				html += '<div style="font-size:12px;color:var(--text-muted);">' + esc(cc) + '</div>';
-			} else if (cc.summary) {
-				html += '<div style="font-size:12px;color:var(--text-muted);">' + esc(cc.summary) + '</div>';
-			}
-			if (cc.gaps && cc.gaps.length > 0) {
-				html += '<div style="margin-top:8px;">';
-				cc.gaps.forEach(function(gap) { html += findingCard('🎯', gap.area || gap.title || '', gap.description || gap.detail || ''); });
-				html += '</div>';
-			}
-			html += '</div>';
-		}
-		// Roadmap (sprint grouping from eval_data)
+	}
+	// Fallback: show raw data in collapsible
+	var hasRawData = (rr && rr.recommendations) || (ed.improvements && ed.improvements.length > 0);
+	if (hasRawData) {
+		var rawHtml = '';
 		if (ed.improvements && ed.improvements.length > 0) {
-			var sprint1 = ed.improvements.filter(function(r) { return r.sprint === 1; });
-			var sprint2 = ed.improvements.filter(function(r) { return r.sprint === 2; });
-			var sprint3 = ed.improvements.filter(function(r) { return r.sprint === 3; });
-			var roadmapHtml = '';
-			roadmapHtml += renderSprintGroup('Sprint 1 — 즉시 실행', 'var(--danger)', sprint1);
-			roadmapHtml += renderSprintGroup('Sprint 2 — 1~3개월', 'var(--warning)', sprint2);
-			roadmapHtml += renderSprintGroup('Sprint 3 — 분기 내', 'var(--success)', sprint3);
-			if (roadmapHtml) html += collapsible('개선 로드맵 (eval_data)', roadmapHtml);
+			rawHtml += '<table class="eval-page-table"><thead><tr><th>#</th><th>항목</th><th>영향</th><th>난이도</th><th>영향 차원</th></tr></thead><tbody>';
+			for (var i = 0; i < ed.improvements.length; i++) {
+				var r = ed.improvements[i];
+				var impactBars = '';
+				for (var j = 0; j < 5; j++) impactBars += j < r.impact ? '\u2605' : '\u2606';
+				var diffLabel = r.difficulty <= 1 ? 'Easy' : r.difficulty <= 2 ? 'Medium' : r.difficulty <= 3 ? 'Hard' : 'Very Hard';
+				var diffColor = r.difficulty <= 1 ? 'var(--success)' : r.difficulty <= 2 ? 'var(--warning)' : 'var(--danger)';
+				rawHtml += '<tr><td><code>' + esc(r.id) + '</code></td>';
+				rawHtml += '<td><strong>' + esc(r.title) + '</strong></td>';
+				rawHtml += '<td style="color:var(--warning);">' + impactBars + '</td>';
+				rawHtml += '<td style="color:' + diffColor + ';font-weight:600;">' + diffLabel + '</td>';
+				rawHtml += '<td style="font-size:11px;">' + esc(r.affected_dimensions.join(', ')) + '</td></tr>';
+			}
+			rawHtml += '</tbody></table>';
 		}
-		return html;
+		if (rawHtml) html += collapsible('정적 분석 기반 원본 데이터', rawHtml);
 	}
-	if (!ed.improvements || ed.improvements.length === 0) return '<div class="empty">No recommendations generated.</div>';
-
-	html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🎯 개선 권고사항 (' + ed.improvements.length + '건)</h3>';
-	html += '<div style="overflow-x:auto;"><table class="eval-page-table"><thead><tr><th>#</th><th>항목</th><th>영향</th><th>난이도</th><th>Sprint</th><th>영향 차원</th></tr></thead><tbody>';
-	for (var i = 0; i < ed.improvements.length; i++) {
-		var r = ed.improvements[i];
-		var impactBars = '';
-		for (var j = 0; j < 5; j++) impactBars += j < r.impact ? '★' : '☆';
-		var diffLabel = r.difficulty <= 1 ? 'Easy' : r.difficulty <= 2 ? 'Medium' : r.difficulty <= 3 ? 'Hard' : 'Very Hard';
-		var diffColor = r.difficulty <= 1 ? 'var(--success)' : r.difficulty <= 2 ? 'var(--warning)' : 'var(--danger)';
-		var sprintLabel = r.sprint === 1 ? '즉시' : r.sprint === 2 ? '1~3개월' : '분기';
-		html += '<tr><td><code>' + esc(r.id) + '</code></td>';
-		html += '<td><strong>' + esc(r.title) + '</strong><div style="font-size:11px;color:var(--text-muted);margin-top:2px;">' + esc(r.description.slice(0, 100)) + '</div></td>';
-		html += '<td style="color:var(--warning);">' + impactBars + '</td>';
-		html += '<td style="color:' + diffColor + ';font-weight:600;">' + diffLabel + '</td>';
-		html += '<td>' + sprintLabel + '</td>';
-		html += '<td style="font-size:11px;">' + esc(r.affected_dimensions.join(', ')) + '</td></tr>';
-	}
-	html += '</tbody></table></div></div>';
 	return html;
+}
+
+function renderStructuredRecommendations(sr) {
+	var items = sr.items || [];
+	var html = '';
+	var priorityConfig = {
+		critical: { label: 'CRITICAL', color: '#EF4444', bg: 'rgba(239,68,68,0.08)', border: '#EF4444' },
+		high:     { label: 'HIGH',     color: '#F59E0B', bg: 'rgba(245,158,11,0.08)', border: '#F59E0B' },
+		medium:   { label: 'MEDIUM',   color: '#3B82F6', bg: 'rgba(59,130,246,0.08)', border: '#3B82F6' },
+		low:      { label: 'LOW',      color: '#10B981', bg: 'rgba(16,185,129,0.08)', border: '#10B981' }
+	};
+	for (var i = 0; i < items.length; i++) {
+		var item = items[i];
+		var pc = priorityConfig[item.priority] || priorityConfig.medium;
+		var effortLabel = { easy: '\uC27D\uC74C', medium: '\uBCF4\uD1B5', hard: '\uB09C\uC774\uB3C4 \uB192\uC74C' }[item.effort] || item.effort || '';
+		var effortColor = item.effort === 'easy' ? '#10B981' : item.effort === 'hard' ? '#EF4444' : '#F59E0B';
+		html += '<div class="card" style="border-left:4px solid ' + pc.border + ';background:' + pc.bg + ';margin-bottom:12px;">';
+		// Header: number + title + priority badge + effort
+		html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">';
+		html += '<span style="font-size:20px;font-weight:900;color:' + pc.color + ';width:28px;">' + (i + 1) + '</span>';
+		html += '<span style="font-size:15px;font-weight:700;flex:1;">' + esc(item.title || '') + '</span>';
+		html += '<span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800;background:' + pc.color + ';color:#fff;letter-spacing:0.5px;">' + pc.label + '</span>';
+		html += '<span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;border:1px solid ' + effortColor + ';color:' + effortColor + ';">' + effortLabel + '</span>';
+		html += '</div>';
+		// Body: 3-section grid
+		html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">';
+		// Rationale
+		html += '<div style="padding:10px 12px;background:var(--surface);border-radius:6px;">';
+		html += '<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">\uADFC\uAC70</div>';
+		html += '<div style="font-size:12px;line-height:1.6;color:var(--text);">' + esc(item.rationale || '') + '</div>';
+		html += '</div>';
+		// Action
+		html += '<div style="padding:10px 12px;background:var(--surface);border-radius:6px;">';
+		html += '<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">\uAC1C\uC120 \uBC29\uBC95</div>';
+		html += '<div style="font-size:12px;line-height:1.6;color:var(--text);">' + esc(item.action || '') + '</div>';
+		html += '</div>';
+		// Expected effect
+		html += '<div style="padding:10px 12px;background:var(--surface);border-radius:6px;">';
+		html += '<div style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">\uAE30\uB300 \uD6A8\uACFC</div>';
+		html += '<div style="font-size:12px;line-height:1.6;color:var(--text);">' + esc(item.expected_effect || '') + '</div>';
+		if (item.affected_dimensions && item.affected_dimensions.length > 0) {
+			html += '<div style="margin-top:6px;">';
+			for (var j = 0; j < item.affected_dimensions.length; j++) {
+				html += '<span style="display:inline-block;padding:1px 6px;margin-right:4px;border-radius:8px;font-size:10px;font-weight:600;background:rgba(59,130,246,0.15);color:#60A5FA;">' + esc(item.affected_dimensions[j]) + '</span>';
+			}
+			html += '</div>';
+		}
+		html += '</div>';
+		html += '</div></div>';
+	}
+	if (sr.model) {
+		html += '<div style="text-align:right;font-size:10px;color:var(--text-muted);margin-top:4px;">Generated by ' + esc(sr.model) + '</div>';
+	}
+	return html;
+}
+
+async function loadStructuredRecommendations(targetId, pipelineId) {
+	try {
+		var sr = await api('/api/targets/' + targetId + '/pipeline/' + pipelineId + '/recommendations');
+		if (sr.error || !sr.items) return;
+		// Cache into currentEvalData
+		if (currentEvalData) currentEvalData.structured_recommendations = sr;
+		var area = document.getElementById('recsLoadingArea');
+		if (area) {
+			area.outerHTML = renderStructuredRecommendations(sr);
+		}
+	} catch (e) {
+		var area = document.getElementById('recsLoadingArea');
+		if (area) area.outerHTML = '';
+	}
 }
 
 // ── Tab 8: Evidence ──────────────────────────────────

@@ -720,6 +720,149 @@ export async function runPipeline(
 				const report = builder.build();
 				dashboardHtml = generateDashboardHtml({ report });
 
+				// ── Generate Executive Summary & Structured Recommendations via LLM ──
+				let executiveSummary: Record<string, unknown> | null = null;
+				let structuredRecommendations: Record<string, unknown> | null = null;
+
+				if (analysisOutput) {
+					const dimSummary = currentDimensions
+						.map((d) => `${d.id} ${d.label}: ${d.score.toFixed(1)}/100`)
+						.join(", ");
+					const evalData = analysisOutput.eval_data as unknown as
+						| Record<string, unknown>
+						| undefined;
+					const rrOverview = (richReport as unknown as Record<string, unknown> | undefined)
+						?.overview as Record<string, unknown> | undefined;
+					const strengths = (rrOverview?.strengths ??
+						(evalData as Record<string, unknown>)?.strengths ??
+						[]) as Array<Record<string, unknown>>;
+					const weaknesses = (rrOverview?.weaknesses ??
+						(evalData as Record<string, unknown>)?.weaknesses ??
+						[]) as Array<Record<string, unknown>>;
+					const strengthsText = strengths
+						.map((s) => `- ${s.title ?? ""}: ${s.description ?? ""}`)
+						.join("\n");
+					const weaknessesText = weaknesses
+						.map((w) => `- ${w.title ?? ""}: ${w.description ?? ""}`)
+						.join("\n");
+
+					// Executive Summary
+					try {
+						const execRes = await trackedChatLLM({
+							prompt: `You are a senior GEO (Generative Engine Optimization) consultant writing an executive summary for a client report.
+
+Target: ${config.target_url}
+Site Type: ${analysisOutput.classification.site_type}
+Overall GEO Readiness Score: ${currentScore.toFixed(1)}/100 (Grade: ${currentGrade})
+
+Dimension Scores: ${dimSummary}
+
+Strengths:
+${strengthsText || "None identified"}
+
+Weaknesses:
+${weaknessesText || "None identified"}
+
+Generate a JSON response with these fields:
+1. "catchphrase": A single impactful Korean sentence (max 20 chars) that captures the site's GEO status. Like a consulting headline.
+2. "verdict": A 2-3 sentence Korean summary of the overall GEO readiness assessment.
+3. "top_priorities": Array of exactly 3 objects, each with "title" (short Korean, max 15 chars) and "description" (1-sentence Korean).
+4. "risk_level": One of "critical", "warning", "moderate", "good", "excellent".
+
+Be concise, professional, and actionable. Write in Korean. Return ONLY valid JSON.`,
+							temperature: 0.3,
+							json_mode: true,
+							max_tokens: 1000,
+						});
+						const cleaned = execRes.content
+							.replace(/```json\s*/g, "")
+							.replace(/```\s*/g, "")
+							.trim();
+						executiveSummary = {
+							...JSON.parse(cleaned),
+							score: currentScore,
+							grade: currentGrade,
+							site_type: analysisOutput.classification.site_type,
+							generated_at: new Date().toISOString(),
+							model: `${execRes.provider}/${execRes.model}`,
+						};
+					} catch {
+						// Non-fatal: executive summary is optional
+					}
+
+					// Structured Recommendations
+					try {
+						const rrRecs = (richReport as unknown as Record<string, unknown> | undefined)
+							?.recommendations as Record<string, unknown> | undefined;
+						const edImprovements = (evalData as Record<string, unknown>)?.improvements as
+							| Array<Record<string, unknown>>
+							| undefined;
+						let existingRecs = "";
+						if (rrRecs) {
+							const allRr = [
+								...((rrRecs.high_priority as Array<Record<string, unknown>>) ?? []),
+								...((rrRecs.medium_priority as Array<Record<string, unknown>>) ?? []),
+								...((rrRecs.low_priority as Array<Record<string, unknown>>) ?? []),
+							];
+							existingRecs = allRr
+								.map(
+									(r) =>
+										`[${r.priority ?? "medium"}] ${r.title ?? ""}: ${r.description ?? ""} (impact: ${r.impact ?? ""}, effort: ${r.effort ?? ""})`,
+								)
+								.join("\n");
+						}
+						if (edImprovements && edImprovements.length > 0) {
+							const edText = edImprovements
+								.map(
+									(r) =>
+										`[impact:${r.impact ?? "?"}/5, difficulty:${r.difficulty ?? "?"}] ${r.title ?? ""}: ${r.description ?? ""} (현재: ${r.current_state ?? ""}, 영향: ${Array.isArray(r.affected_dimensions) ? (r.affected_dimensions as string[]).join(",") : ""})`,
+								)
+								.join("\n");
+							existingRecs += existingRecs ? `\n${edText}` : edText;
+						}
+
+						const recRes = await trackedChatLLM({
+							prompt: `You are a senior GEO consultant. Based on the analysis data below, produce structured improvement recommendations in Korean.
+
+Target: ${config.target_url}
+Site Type: ${analysisOutput.classification.site_type}
+GEO Score: ${currentScore.toFixed(1)}/100 (${currentGrade})
+Dimensions: ${dimSummary}
+${strengthsText ? `강점: ${strengths.map((s) => s.title ?? "").join(", ")}` : ""}
+${weaknessesText ? `약점: ${weaknesses.map((w) => w.title ?? "").join(", ")}` : ""}
+
+Existing analysis recommendations:
+${existingRecs || "None"}
+
+Generate a JSON with:
+- "items": Array of 5-8 recommendation objects, ordered by priority (highest first). Each object must have:
+  - "priority": "critical" | "high" | "medium" | "low"
+  - "title": Short Korean title (max 25 chars)
+  - "rationale": 1-2 sentence Korean explanation of WHY this is a problem, citing specific data from the analysis.
+  - "action": 1-2 sentence Korean description of WHAT to do concretely.
+  - "expected_effect": 1 sentence Korean description of the expected improvement.
+  - "effort": "easy" | "medium" | "hard"
+  - "affected_dimensions": array of dimension IDs like ["S1","S2"]
+
+Rules: Every rationale MUST reference specific findings. Do NOT invent data. Write in Korean. Return ONLY valid JSON.`,
+							temperature: 0.3,
+							json_mode: true,
+							max_tokens: 2000,
+						});
+						const cleaned = recRes.content
+							.replace(/```json\s*/g, "")
+							.replace(/```\s*/g, "")
+							.trim();
+						structuredRecommendations = {
+							...JSON.parse(cleaned),
+							generated_at: new Date().toISOString(),
+							model: `${recRes.provider}/${recRes.model}`,
+						};
+					} catch {
+						// Non-fatal: structured recommendations are optional
+					}
+				}
+
 				try {
 					const archiveBuilder = new ArchiveBuilder(config.workspace_dir);
 					const origFiles = new Map<string, string>();
@@ -744,6 +887,8 @@ export async function runPipeline(
 					llm_models_used: Array.from(llmModelsUsed),
 					llm_errors: [...new Set(llmErrors)],
 					llm_call_log: llmCallLog,
+					executive_summary: executiveSummary,
+					structured_recommendations: structuredRecommendations,
 				};
 			},
 			(out) =>
