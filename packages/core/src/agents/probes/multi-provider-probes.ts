@@ -40,6 +40,8 @@ export interface MultiProviderProbeResult {
 	comparison: ThreeLayerResult;
 	/** 참여 프로바이더 목록 */
 	providers_used: string[];
+	/** 프로바이더별 에러 (초기화 실패, 프로브 전체 실패 등). key=provider_id */
+	provider_errors: Record<string, string>;
 	/** 실행 통계 */
 	stats: {
 		total_llm_calls: number;
@@ -90,14 +92,16 @@ export async function runMultiProviderProbes(
 
 	// ── Step 2: Build chatLLM per provider ──────────────────
 	const providerChatLLMs: Record<string, ChatLLMFn> = {};
+	const providerErrors: Record<string, string> = {};
 	for (const provider of config.providers) {
 		if (config.chatLLMOverrides?.[provider.provider_id]) {
 			providerChatLLMs[provider.provider_id] = config.chatLLMOverrides[provider.provider_id];
 		} else {
 			try {
 				providerChatLLMs[provider.provider_id] = createProviderChatLLM(provider);
-			} catch {
-				// Skip providers without valid API keys
+			} catch (err) {
+				providerErrors[provider.provider_id] =
+					`초기화 실패: ${err instanceof Error ? err.message : String(err)}`;
 			}
 		}
 	}
@@ -147,8 +151,18 @@ export async function runMultiProviderProbes(
 			} else {
 				webSearchResults.push(result.value);
 			}
+		} else {
+			// Rejected — 어떤 프로바이더가 실패했는지 기록
+			const isKnowledge = i < knowledgePromises.length;
+			const provider = isKnowledge ? activeProviders[i] : wsProviders[i - knowledgePromises.length];
+			const track = isKnowledge ? "knowledge" : "web_search";
+			const errMsg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+			const key = provider?.provider_id ?? `unknown-${i}`;
+			const prev = providerErrors[key];
+			providerErrors[key] = prev
+				? `${prev}; ${track} 프로브 실패: ${errMsg}`
+				: `${track} 프로브 실패: ${errMsg}`;
 		}
-		// Rejected promises are silently skipped (non-fatal)
 	}
 
 	if (knowledgeResults.length === 0) {
@@ -179,6 +193,7 @@ export async function runMultiProviderProbes(
 		web_search_results: webSearchResults,
 		comparison,
 		providers_used: activeProviders.map((p) => p.provider_id),
+		provider_errors: providerErrors,
 		stats: {
 			total_llm_calls: totalProbes + factJudgmentCalls + citationCalls + wsCitationCalls,
 			total_probes_run: totalProbes,

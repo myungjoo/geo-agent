@@ -353,10 +353,9 @@ export async function runPipeline(
 						);
 					}
 				} catch (probeErr) {
-					console.warn(
-						"⚠️ Synthetic Probes failed (non-fatal):",
-						probeErr instanceof Error ? probeErr.message : String(probeErr),
-					);
+					const probeErrMsg = `Synthetic Probes failed: ${probeErr instanceof Error ? probeErr.message : String(probeErr)}`;
+					console.warn(`⚠️ ${probeErrMsg}`);
+					llmErrors.push(probeErrMsg);
 				}
 
 				return analysisOutput;

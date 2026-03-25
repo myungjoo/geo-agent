@@ -425,11 +425,14 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 	}
 
 	let final_data: Record<string, unknown> | null = null;
+	const parseWarnings: string[] = [];
 	if (latestValidating?.result_full) {
 		try {
 			final_data = JSON.parse(latestValidating.result_full);
-		} catch {
-			// ignore parse error
+		} catch (err) {
+			const msg = `Validation result parse error: ${err instanceof Error ? err.message : String(err)}`;
+			console.warn(`⚠️ ${msg}`);
+			parseWarnings.push(msg);
 		}
 	}
 
@@ -447,8 +450,10 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 			const reportData = JSON.parse(reportingStage.result_full);
 			llmModelsUsed = reportData.llm_models_used ?? [];
 			llmErrors = reportData.llm_errors ?? [];
-		} catch {
-			/* ignore */
+		} catch (err) {
+			const msg = `Reporting stage parse error: ${err instanceof Error ? err.message : String(err)}`;
+			console.warn(`⚠️ ${msg}`);
+			parseWarnings.push(msg);
 		}
 	}
 	// Fallback: scan all stages for llm_call_log entries (for in-progress pipelines)
@@ -466,12 +471,17 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 				if (Array.isArray(rf.llm_models_used)) {
 					for (const m of rf.llm_models_used) modelSet.add(m);
 				}
-			} catch {
-				/* ignore */
+			} catch (err) {
+				const msg = `Stage ${s.stage} parse error: ${err instanceof Error ? err.message : String(err)}`;
+				console.warn(`⚠️ ${msg}`);
+				parseWarnings.push(msg);
 			}
 		}
 		llmModelsUsed = Array.from(modelSet);
 	}
+
+	// parseWarnings를 llmErrors에 합산하여 사용자에게 전달
+	const allErrors = [...llmErrors, ...parseWarnings];
 
 	return c.json({
 		initial_score: initialScore,
@@ -488,7 +498,7 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 		analysis_report: initial,
 		validation: final_data,
 		llm_models_used: llmModelsUsed,
-		llm_errors: llmErrors,
+		llm_errors: allErrors,
 		stages: stages.map((s) => ({
 			stage: s.stage,
 			status: s.status,

@@ -1940,7 +1940,23 @@ function renderProbesTab(data, rr) {
 			return richHtml;
 		}
 	}
-	return renderActualProbes(data) || '<div class="card"><div class="empty">Synthetic Probe 결과 없음</div></div>';
+	return renderActualProbes(data) || renderProbeEmptyState(data);
+}
+function renderProbeEmptyState(data) {
+	var hasLLMErrors = data.llm_errors && data.llm_errors.length > 0;
+	if (hasLLMErrors) {
+		var html = '<div class="card" style="padding:12px 16px;border:1px solid var(--danger);background:rgba(239,68,68,0.1);">';
+		html += '<div style="color:var(--danger);font-weight:600;margin-bottom:4px;">⚠️ Synthetic Probes 실행 실패</div>';
+		html += '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">LLM 호출 오류로 인해 프로브가 실행되지 않았습니다.</div>';
+		html += '<ul style="margin:0 0 0 16px;font-size:12px;">';
+		var probeErrors = data.llm_errors.filter(function(e) { return /probe|Probe/i.test(e); });
+		var errorsToShow = probeErrors.length > 0 ? probeErrors : data.llm_errors;
+		errorsToShow.slice(0, 3).forEach(function(e) { html += '<li>' + esc(e.slice(0, 200)) + '</li>'; });
+		if (errorsToShow.length > 3) html += '<li>... +' + (errorsToShow.length - 3) + ' more</li>';
+		html += '</ul></div>';
+		return html;
+	}
+	return '<div class="card"><div class="empty">Synthetic Probe 결과 없음</div></div>';
 }
 function renderActualProbes(data) {
 	var probes = data.synthetic_probes;
@@ -1983,6 +1999,9 @@ function renderActualProbes(data) {
 		html += '<td style="font-size:11px;">' + escHtml(p.model || '-') + '</td>';
 		html += '<td>' + (p.latency_ms || '-') + '</td>';
 		html += '</tr>';
+		if (p.error) {
+			html += '<tr><td colspan="8" style="padding:4px 12px;background:rgba(239,68,68,0.05);border-left:3px solid var(--danger);font-size:11px;color:var(--danger);">❌ ' + esc(p.error.slice(0, 300)) + '</td></tr>';
+		}
 	}
 	html += '</tbody></table></div>';
 
@@ -1995,7 +2014,10 @@ function renderActualProbes(data) {
 		html += '<summary style="padding:10px 14px;cursor:pointer;font-size:13px;"><span style="color:' + vCol + ';font-weight:600;">[' + pr.verdict + ']</span> ' + escHtml(pr.probe_id) + ' ' + escHtml(pr.probe_name) + '</summary>';
 		html += '<div style="padding:10px 14px;border-top:1px solid var(--border);">';
 		html += '<div style="margin-bottom:8px;"><strong style="font-size:12px;">질의:</strong><div style="background:var(--bg-primary);padding:8px;border-radius:4px;font-size:12px;margin-top:4px;">' + escHtml(pr.query) + '</div></div>';
-		html += '<div><strong style="font-size:12px;">응답:</strong><div style="background:var(--bg-primary);padding:8px;border-radius:4px;font-size:12px;margin-top:4px;max-height:200px;overflow-y:auto;white-space:pre-wrap;">' + escHtml(pr.response) + '</div></div>';
+		if (pr.error) {
+			html += '<div style="margin-bottom:8px;"><strong style="font-size:12px;color:var(--danger);">❌ 에러:</strong><div style="background:rgba(239,68,68,0.1);padding:8px;border-radius:4px;font-size:12px;margin-top:4px;color:var(--danger);">' + escHtml(pr.error) + '</div></div>';
+		}
+		html += '<div><strong style="font-size:12px;">응답:</strong><div style="background:var(--bg-primary);padding:8px;border-radius:4px;font-size:12px;margin-top:4px;max-height:200px;overflow-y:auto;white-space:pre-wrap;">' + escHtml(pr.response || '(응답 없음)') + '</div></div>';
 		html += '</div></details>';
 	}
 	html += '</div>';

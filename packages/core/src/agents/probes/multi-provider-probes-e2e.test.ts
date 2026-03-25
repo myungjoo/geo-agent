@@ -432,6 +432,9 @@ describe("E2E Mock Integration — Multi-Provider 3-Layer Probes", () => {
 			expect(result.comparison.web_search_summary).not.toBeNull();
 			expect(result.comparison.web_search_summary!.track).toBe("web_search");
 
+			// ── No provider errors ──
+			expect(Object.keys(result.provider_errors)).toHaveLength(0);
+
 			// ── Stats ──
 			expect(result.providers_used).toHaveLength(3);
 			expect(result.stats.total_probes_run).toBe(8 * 3 * 2); // 8 probes × 3 providers × 2 tracks
@@ -772,6 +775,52 @@ describe("E2E Mock Integration — Multi-Provider 3-Layer Probes", () => {
 
 			// Pipeline should still complete
 			expect(result.comparison.info_recognition_items.length).toBe(result.fact_set.facts.length);
+		});
+	});
+
+	describe("provider_errors collection", () => {
+		it("records provider_errors when provider initialization fails", async () => {
+			// Provider with missing API key → createProviderChatLLM will throw
+			const noKeyProvider: LLMProviderSettings = {
+				...makeProvider("anthropic", "claude-sonnet-4-6"),
+				api_key: "", // empty key → should fail initialization
+			};
+
+			const result = await runMultiProviderProbes({
+				context: realisticContext,
+				crawlData: realisticCrawlData,
+				evalData: realisticEvalData,
+				providers: [makeProvider("openai", "gpt-4o"), noKeyProvider],
+				judgeLLM: realisticJudgeLLM(),
+				chatLLMOverrides: {
+					openai: openaiMockLLM(),
+					// no override for anthropic → createProviderChatLLM with empty key
+				},
+				delayMs: 0,
+			});
+
+			// anthropic should have initialization error
+			expect(result.provider_errors.anthropic).toBeDefined();
+			expect(result.provider_errors.anthropic).toContain("초기화 실패");
+
+			// openai should work fine
+			expect(result.provider_errors.openai).toBeUndefined();
+			expect(result.providers_used).toContain("openai");
+			expect(result.providers_used).not.toContain("anthropic");
+		});
+
+		it("provider_errors is empty when all providers succeed", async () => {
+			const result = await runMultiProviderProbes({
+				context: realisticContext,
+				crawlData: realisticCrawlData,
+				evalData: realisticEvalData,
+				providers: [makeProvider("openai", "gpt-4o")],
+				judgeLLM: realisticJudgeLLM(),
+				chatLLMOverrides: { openai: openaiMockLLM() },
+				delayMs: 0,
+			});
+
+			expect(Object.keys(result.provider_errors)).toHaveLength(0);
 		});
 	});
 

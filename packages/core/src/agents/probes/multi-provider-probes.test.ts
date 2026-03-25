@@ -147,6 +147,9 @@ describe("multi-provider-probes", () => {
 			expect(result.providers_used).toContain("openai");
 			expect(result.providers_used).toContain("anthropic");
 
+			// No provider errors in success case
+			expect(Object.keys(result.provider_errors)).toHaveLength(0);
+
 			// Stats
 			expect(result.stats.total_probes_run).toBeGreaterThan(0);
 			expect(result.stats.duration_ms).toBeGreaterThanOrEqual(0);
