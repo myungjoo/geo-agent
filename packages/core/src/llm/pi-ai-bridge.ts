@@ -216,6 +216,15 @@ export async function piAiComplete(
 		.map((c) => c.text)
 		.join("");
 
+	// 4-D 원칙: 빈 응답 + errorMessage는 에러로 전파 (silent failure 금지)
+	if (!textContent && response.errorMessage) {
+		const errDetail =
+			typeof response.errorMessage === "string"
+				? response.errorMessage
+				: JSON.stringify(response.errorMessage);
+		throw new Error(`LLM API error (${model.provider}/${model.id}): ${errDetail}`);
+	}
+
 	const cost = calculateCost(model, response.usage);
 
 	return {
