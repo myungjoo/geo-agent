@@ -268,7 +268,7 @@ DELETE /api/targets/{id}                             # Target 삭제
 
 # ── Pipeline 실행 (Target 하위) ──
 GET    /api/targets/{id}/pipeline                    # 파이프라인 목록
-POST   /api/targets/{id}/pipeline                    # 파이프라인 생성 (?execute=true로 즉시 실행)
+POST   /api/targets/{id}/pipeline                    # 파이프라인 생성 (?execute=true&probe_mode=single|multi)
 GET    /api/targets/{id}/pipeline/latest             # 최신 파이프라인 조회
 GET    /api/targets/{id}/pipeline/{pid}              # 특정 파이프라인 조회
 DELETE /api/targets/{id}/pipeline/{pid}              # 파이프라인 삭제
@@ -367,7 +367,7 @@ GET    /health                                       # 헬스 체크
 > Web Search를 지원하지 않는 Provider/모델은 학습 데이터 기반으로 fallback하되,
 > 결과에 `web_search_used: false`를 명시하여 해석 시 구분한다.
 
-- **멀티 프로바이더 실행**: API Key가 설정된 **모든 활성 프로바이더**에 동일 프로브를 병렬 실행하고, 서비스별 결과를 개별 기록한다. 단일 프로바이더만 사용하지 않는다
+- **멀티 프로바이더 실행**: API Key가 설정된 **모든 활성 프로바이더**에 동일 프로브를 병렬 실행하고, 서비스별 결과를 개별 기록한다. Dashboard에서 `probe_mode`를 `single`(단일 프로바이더) 또는 `multi`(전체 활성 프로바이더 병렬, 3-레이어 비교) 중 선택 가능하며, 기본값은 `single`이다
 - **페이지 정보 추출 프로브**: 대상 페이지의 HTML 핵심 구조(JSON-LD + meta + heading + 본문 요약)를 LLM 프롬프트에 직접 포함하여, LLM이 주요 정보를 정확히 추출하는지 테스트
 - **Entity 프로브**: 브랜드/회사/Entity 이름으로 질의 (예: "삼성전자에 대해 알려줘"). 이때 대상 페이지의 HTML 요약을 함께 제공하여 LLM이 참조할 수 있도록 한다. 프로브 결과에서 **"제공된 HTML에서 인용한 정보"**와 **"LLM 자체 지식에서 온 정보"**를 구분 태깅하여, 최적화 전후 HTML 변경이 LLM 응답에 미치는 영향을 정밀 측정한다
 - 프로브는 사이트 종류별로 8건 이상 수행. 프롬프트는 실제 사용자가 해당 페이지에 관해 물어볼 만한 질문으로 구성
