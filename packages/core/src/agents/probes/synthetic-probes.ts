@@ -52,6 +52,8 @@ export interface SyntheticProbeResult {
 	latency_ms: number;
 	model: string;
 	provider: string;
+	/** 에러 메시지 (실패 시) */
+	error?: string;
 }
 
 export interface SyntheticProbeRunResult {
