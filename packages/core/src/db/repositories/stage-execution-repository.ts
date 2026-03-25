@@ -139,6 +139,27 @@ export class StageExecutionRepository {
 		return existing.length;
 	}
 
+	/**
+	 * result_full JSON에 키를 병합 (기존 데이터 유지). Executive summary 저장 등에 사용.
+	 */
+	async patchResultFull(id: string, patch: Record<string, unknown>): Promise<void> {
+		const existing = await this.findById(id);
+		if (!existing) return;
+		let current: Record<string, unknown> = {};
+		if (existing.result_full) {
+			try {
+				current = JSON.parse(existing.result_full);
+			} catch {
+				current = {};
+			}
+		}
+		const merged = { ...current, ...patch };
+		await this.db
+			.update(stageExecutions)
+			.set({ result_full: JSON.stringify(merged) })
+			.where(eq(stageExecutions.id, id));
+	}
+
 	private toModel(row: typeof stageExecutions.$inferSelect): StageExecution {
 		return {
 			id: row.id,

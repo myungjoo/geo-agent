@@ -504,6 +504,7 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 		multi_provider_probes: initial.multi_provider_probes ?? null,
 		probe_mode: initial.probe_mode ?? "single",
 		rich_report: initial.rich_report ?? null,
+		executive_summary: initial.executive_summary ?? null,
 		analysis_report: initial,
 		validation: final_data,
 		llm_models_used: llmModelsUsed,
@@ -515,6 +516,152 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 			duration_ms: s.duration_ms,
 		})),
 	});
+});
+
+// GET /api/targets/:id/pipeline/:pipelineId/executive-summary — LLM 기반 종합 평가 의견 (캐시 지원)
+pipelineRouter.get("/:id/pipeline/:pipelineId/executive-summary", async (c) => {
+	const stageRepo = getStageRepo();
+	const targetRepo = getTargetRepo();
+	const pipelineId = c.req.param("pipelineId");
+	const targetId = c.req.param("id");
+
+	// 1. Gather evaluation data
+	const stages = await stageRepo.findByPipelineId(pipelineId);
+	const analyzingStage = stages.find((s) => s.stage === "ANALYZING" && s.result_full);
+	if (!analyzingStage?.result_full) {
+		return c.json({ error: "No evaluation data available" }, 404);
+	}
+
+	let initial: Record<string, unknown>;
+	try {
+		initial = JSON.parse(analyzingStage.result_full);
+	} catch {
+		return c.json({ error: "Failed to parse evaluation data" }, 500);
+	}
+
+	// 2. Return cached summary if it exists
+	const cached = initial.executive_summary as Record<string, unknown> | undefined;
+	if (cached?.catchphrase) {
+		return c.json(cached);
+	}
+
+	// 3. Build LLM client
+	const workspaceDir = sharedSettings?.workspace_dir ?? "./run";
+	let client: GeoLLMClient;
+	try {
+		const configManager = new ProviderConfigManager(workspaceDir);
+		const providersWithKey = configManager.getEnabled().filter((p) => p.api_key);
+		if (providersWithKey.length === 0) {
+			return c.json({ error: "LLM API Key not configured" }, 400);
+		}
+		client = new GeoLLMClient(workspaceDir);
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		return c.json({ error: `LLM initialization failed: ${msg}` }, 500);
+	}
+
+	// 4. Build compact summary of evaluation data for LLM
+	const target = await targetRepo.findById(targetId);
+	const score = (initial.score as number) ?? 0;
+	const grade = (initial.grade as string) ?? "Unknown";
+	const siteType = (initial.site_type as string) ?? "unknown";
+	const dimensions =
+		(initial.dimensions as Array<{
+			id: string;
+			label: string;
+			score: number;
+			details: string[];
+		}>) ?? [];
+	const evalData = (initial.eval_data as Record<string, unknown>) ?? {};
+	const richReport = (initial.rich_report as Record<string, unknown>) ?? {};
+
+	const dimSummary = dimensions
+		.map(
+			(d) =>
+				`${d.id} ${d.label}: ${d.score.toFixed(1)}/100 (${d.details?.slice(0, 2).join("; ") ?? ""})`,
+		)
+		.join("\n");
+
+	const strengths =
+		((richReport as Record<string, unknown>)?.overview as Record<string, unknown>)?.strengths ??
+		(evalData as Record<string, unknown>)?.strengths ??
+		[];
+	const weaknesses =
+		((richReport as Record<string, unknown>)?.overview as Record<string, unknown>)?.weaknesses ??
+		(evalData as Record<string, unknown>)?.weaknesses ??
+		[];
+
+	const strengthsText = Array.isArray(strengths)
+		? (strengths as Array<{ title?: string; description?: string }>)
+				.map((s) => `- ${s.title ?? ""}: ${s.description ?? ""}`)
+				.join("\n")
+		: "";
+	const weaknessesText = Array.isArray(weaknesses)
+		? (weaknesses as Array<{ title?: string; description?: string }>)
+				.map((w) => `- ${w.title ?? ""}: ${w.description ?? ""}`)
+				.join("\n")
+		: "";
+
+	const prompt = `You are a senior GEO (Generative Engine Optimization) consultant writing an executive summary for a client report.
+
+Target: ${target?.name ?? "Unknown"} (${target?.url ?? ""})
+Site Type: ${siteType}
+Overall GEO Readiness Score: ${score.toFixed(1)}/100 (Grade: ${grade})
+
+Dimension Scores:
+${dimSummary}
+
+Strengths:
+${strengthsText || "None identified"}
+
+Weaknesses:
+${weaknessesText || "None identified"}
+
+Generate a JSON response with these fields:
+1. "catchphrase": A single impactful Korean sentence (max 20 chars) that captures the site's GEO status. Like a consulting headline. Examples: "구조는 탄탄, 콘텐츠는 미흡", "AI 시대 준비 완료", "기초부터 재점검 필요"
+2. "verdict": A 2-3 sentence Korean summary of the overall GEO readiness assessment. Be specific about what the score means in practice.
+3. "top_priorities": Array of exactly 3 objects, each with "title" (short Korean, max 15 chars) and "description" (1-sentence Korean explanation of why this matters and what to do). These should be the most impactful improvements ranked by priority.
+4. "risk_level": One of "critical", "warning", "moderate", "good", "excellent" based on overall readiness.
+
+Be concise, professional, and actionable. Write in Korean.
+Return ONLY valid JSON, no markdown fences.`;
+
+	try {
+		const response = await client.chat({
+			prompt,
+			temperature: 0.3,
+			json_mode: true,
+			max_tokens: 1000,
+		});
+
+		let parsed: Record<string, unknown>;
+		try {
+			const cleaned = response.content
+				.replace(/```json\s*/g, "")
+				.replace(/```\s*/g, "")
+				.trim();
+			parsed = JSON.parse(cleaned);
+		} catch {
+			return c.json({ error: "Failed to parse LLM response", raw: response.content }, 500);
+		}
+
+		const result = {
+			...parsed,
+			score,
+			grade,
+			site_type: siteType,
+			generated_at: new Date().toISOString(),
+			model: `${response.provider}/${response.model}`,
+		};
+
+		// 5. Save to ANALYZING stage result_full for future reuse
+		await stageRepo.patchResultFull(analyzingStage.id, { executive_summary: result });
+
+		return c.json(result);
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		return c.json({ error: `LLM call failed: ${msg}` }, 500);
+	}
 });
 
 // GET /api/targets/:id/pipeline/:pipelineId/llm-log — LLM 호출 전체 로그
