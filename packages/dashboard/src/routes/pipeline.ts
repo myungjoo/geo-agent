@@ -100,6 +100,9 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 	const repo = getRepo();
 	const targetId = c.req.param("id");
 	const shouldExecute = c.req.query("execute") === "true";
+	const probeMode = (c.req.query("probe_mode") === "multi" ? "multi" : "single") as
+		| "single"
+		| "multi";
 
 	if (shouldExecute) {
 		// Prevent double execution
@@ -154,10 +157,11 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 		// Build chatLLM dependency — LLM is REQUIRED (ARCHITECTURE.md 9-A.1)
 		const workspaceDir = sharedSettings?.workspace_dir ?? "./run";
 		let chatLLM: PipelineDeps["chatLLM"];
+		let providersWithKey: ReturnType<ProviderConfigManager["getEnabled"]> = [];
 		try {
 			const configManager = new ProviderConfigManager(workspaceDir);
 			const enabledProviders = configManager.getEnabled();
-			const providersWithKey = enabledProviders.filter((p) => p.api_key);
+			providersWithKey = enabledProviders.filter((p) => p.api_key);
 			if (providersWithKey.length === 0) {
 				// API Key 미설정 → 파이프라인 실행 거부
 				const errMsg =
@@ -210,6 +214,8 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 			registerStop: (stopFn) => {
 				pipelineStopFn = stopFn;
 			},
+			probe_mode: probeMode,
+			providers: probeMode === "multi" ? providersWithKey : undefined,
 		};
 
 		// LLM mode is always "llm" (chatLLM is required, ARCHITECTURE.md 9-A.1)
@@ -224,6 +230,7 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 			target_id: targetId,
 			pipeline_id: pipeline.pipeline_id,
 			llm_mode: llmMode,
+			probe_mode: probeMode,
 			configured_providers: configuredProviders,
 		});
 
@@ -494,6 +501,8 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 		multi_page: initial.multi_page ?? null,
 		eval_data: initial.eval_data ?? null,
 		synthetic_probes: initial.synthetic_probes ?? null,
+		multi_provider_probes: initial.multi_provider_probes ?? null,
+		probe_mode: initial.probe_mode ?? "single",
 		rich_report: initial.rich_report ?? null,
 		analysis_report: initial,
 		validation: final_data,

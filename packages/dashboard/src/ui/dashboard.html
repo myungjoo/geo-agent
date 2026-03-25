@@ -648,7 +648,10 @@ async function loadPipelines() {
 					</div>
 					<div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
 						<span class="stage-badge stage-${status.stage}">${status.stage}</span>
-						${isRunning ? '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();stopPipeline(\''+t.id+'\')">Stop</button>' : '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();startPipeline(\''+t.id+'\')">Re-run</button>'}
+						${isRunning ? '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();stopPipeline(\''+t.id+'\')">Stop</button>' : '<span class="probe-mode-group" style="display:inline-flex;border-radius:6px;overflow:hidden;border:1px solid var(--primary);">' +
+							'<button class="btn btn-primary btn-sm" style="border-radius:0;border:none;padding:4px 10px;" onclick="event.stopPropagation();startPipeline(\''+t.id+'\',\'single\')" title="Single provider probe">Single</button>' +
+							'<button class="btn btn-sm" style="border-radius:0;border:none;border-left:1px solid rgba(255,255,255,0.2);padding:4px 10px;background:var(--primary-dark,#1d4ed8);color:#fff;" onclick="event.stopPropagation();startPipeline(\''+t.id+'\',\'multi\')" title="Multi provider probe (all active providers)">Multi</button>' +
+						'</span>'}
 						${status.is_terminal ? '<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deletePipeline(\''+t.id+'\',\''+status.pipeline_id+'\',\''+esc(t.name)+'\')">🗑️</button>' : ''}
 					</div>
 				</div>
@@ -681,9 +684,12 @@ async function loadPipelines() {
 						<h2 style="font-size:15px;">${esc(t.name)}</h2>
 						<div style="font-size:12px;color:var(--text-muted);">${esc(t.url)}</div>
 					</div>
-					<div>
+					<div style="display:flex;gap:8px;align-items:center;">
 						<span class="badge badge-gray">No Pipeline</span>
-						<button class="btn btn-primary btn-sm" style="margin-left:8px;" onclick="startPipeline('${t.id}')">Start</button>
+						<span class="probe-mode-group" style="display:inline-flex;border-radius:6px;overflow:hidden;border:1px solid var(--primary);">
+							<button class="btn btn-primary btn-sm" style="border-radius:0;border:none;padding:4px 10px;" onclick="startPipeline('${t.id}','single')" title="Single provider probe">Single</button>
+							<button class="btn btn-sm" style="border-radius:0;border:none;border-left:1px solid rgba(255,255,255,0.2);padding:4px 10px;background:var(--primary-dark,#1d4ed8);color:#fff;" onclick="startPipeline('${t.id}','multi')" title="Multi provider probe (all active providers)">Multi</button>
+						</span>
 					</div>
 				</div>
 			</div>`;
@@ -709,8 +715,9 @@ function initSSE() {
 
 		sseSource.addEventListener('pipeline:started', function(e) {
 			var data = JSON.parse(e.data);
+			var probeLabel = data.probe_mode === 'multi' ? ' [Multi-Provider]' : ' [Single]';
 			var modeLabel = data.llm_mode === 'llm' ? 'LLM: ' + (data.configured_providers || []).join(', ') : '규칙 기반 (LLM 미설정)';
-			toast('Pipeline 시작 — ' + modeLabel, 'success');
+			toast('Pipeline 시작 — ' + modeLabel + probeLabel, 'success');
 			loadPipelines();
 		});
 
@@ -845,10 +852,12 @@ async function togglePipeline(card, targetId, pipelineId) {
 	}
 }
 
-async function startPipeline(targetId) {
+async function startPipeline(targetId, probeMode) {
+	probeMode = probeMode || 'single';
 	try {
-		await api('/api/targets/' + targetId + '/pipeline?execute=true', { method: 'POST' });
-		toast('Pipeline started — watching progress...');
+		await api('/api/targets/' + targetId + '/pipeline?execute=true&probe_mode=' + probeMode, { method: 'POST' });
+		var modeLabel = probeMode === 'multi' ? 'Multi-Provider' : 'Single-Provider';
+		toast('Pipeline started (' + modeLabel + ') — watching progress...');
 		// Immediately start auto-refresh and load pipelines
 		startPipelineAutoRefresh();
 		loadPipelines();
@@ -1940,7 +1949,87 @@ function renderProbesTab(data, rr) {
 			return richHtml;
 		}
 	}
-	return renderActualProbes(data) || renderProbeEmptyState(data);
+	var multiHtml = renderMultiProviderSummary(data);
+	var actualHtml = renderActualProbes(data);
+	if (multiHtml || actualHtml) {
+		return multiHtml + actualHtml;
+	}
+	return renderProbeEmptyState(data);
+}
+function renderMultiProviderSummary(data) {
+	var mp = data.multi_provider_probes;
+	if (!mp || !mp.comparison) return '';
+	var html = '<div class="card" style="padding:16px;margin-bottom:16px;border:1px solid var(--primary);background:rgba(99,102,241,0.05);">';
+	html += '<h3 style="font-size:14px;margin-bottom:12px;">Multi-Provider Probe Results</h3>';
+
+	// Provider comparison table
+	var breakdown = mp.comparison.llm_breakdown;
+	var providerIds = Object.keys(breakdown);
+	if (providerIds.length > 0) {
+		html += '<table class="eval-table"><thead><tr><th>Provider</th><th>Citation Rate</th><th>Citation Accuracy</th><th>Rank</th></tr></thead><tbody>';
+		providerIds.forEach(function(pid) {
+			var s = breakdown[pid];
+			html += '<tr>';
+			html += '<td><strong>' + esc(pid) + '</strong><div style="font-size:11px;color:var(--text-muted);">' + esc(s.llm_service) + '</div></td>';
+			html += '<td>' + s.citation_rate + '%</td>';
+			html += '<td>' + s.citation_accuracy + '%</td>';
+			html += '<td>' + (s.rank_position !== null ? '#' + s.rank_position : '-') + '</td>';
+			html += '</tr>';
+		});
+		html += '</tbody></table>';
+	}
+
+	// Layer summaries
+	var ks = mp.comparison.knowledge_summary;
+	if (ks) {
+		html += '<div style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">';
+		html += '<div style="text-align:center;padding:10px;background:var(--card-bg);border-radius:6px;border:1px solid var(--border);">';
+		html += '<div style="font-size:20px;font-weight:700;color:var(--primary);">' + Math.round(ks.avg_citation_rate * 100) + '%</div>';
+		html += '<div style="font-size:11px;color:var(--text-muted);">Avg Citation Rate</div></div>';
+		html += '<div style="text-align:center;padding:10px;background:var(--card-bg);border-radius:6px;border:1px solid var(--border);">';
+		html += '<div style="font-size:20px;font-weight:700;color:var(--primary);">' + Math.round(ks.avg_accuracy_rate * 100) + '%</div>';
+		html += '<div style="font-size:11px;color:var(--text-muted);">Avg Accuracy Rate</div></div>';
+		html += '<div style="text-align:center;padding:10px;background:var(--card-bg);border-radius:6px;border:1px solid var(--border);">';
+		html += '<div style="font-size:20px;font-weight:700;color:var(--primary);">' + mp.providers_used.length + '</div>';
+		html += '<div style="font-size:11px;color:var(--text-muted);">Providers Used</div></div>';
+		html += '<div style="text-align:center;padding:10px;background:var(--card-bg);border-radius:6px;border:1px solid var(--border);">';
+		html += '<div style="font-size:20px;font-weight:700;color:var(--primary);">' + mp.stats.total_probes_run + '</div>';
+		html += '<div style="font-size:11px;color:var(--text-muted);">Total Probes</div></div>';
+		html += '</div>';
+	}
+
+	// Provider errors
+	if (mp.provider_errors && Object.keys(mp.provider_errors).length > 0) {
+		html += '<div style="margin-top:12px;padding:10px;background:rgba(239,68,68,0.1);border-radius:6px;border:1px solid var(--danger);">';
+		html += '<div style="font-weight:600;color:var(--danger);font-size:12px;margin-bottom:4px;">Provider Errors</div>';
+		Object.keys(mp.provider_errors).forEach(function(pid) {
+			html += '<div style="font-size:11px;color:var(--text-muted);"><strong>' + esc(pid) + ':</strong> ' + esc(mp.provider_errors[pid]) + '</div>';
+		});
+		html += '</div>';
+	}
+
+	// Fact recognition items (collapsible)
+	var items = mp.comparison.info_recognition_items;
+	if (items && items.length > 0) {
+		var factHtml = '<table class="eval-table"><thead><tr><th>Fact</th><th>Category</th>';
+		mp.providers_used.forEach(function(pid) { factHtml += '<th>' + esc(pid) + '</th>'; });
+		factHtml += '</tr></thead><tbody>';
+		items.forEach(function(item) {
+			factHtml += '<tr>';
+			factHtml += '<td style="font-size:11px;">' + esc(item.fact_label || '') + '</td>';
+			factHtml += '<td style="font-size:11px;">' + esc(item.category || '') + '</td>';
+			item.per_llm.forEach(function(l) {
+				var accColor = l.accuracy === 'exact' ? '#22c55e' : l.accuracy === 'approximate' ? '#f59e0b' : l.accuracy === 'hallucinated' ? '#ef4444' : '#6b7280';
+				factHtml += '<td><span style="font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(0,0,0,0.1);color:' + accColor + ';font-weight:600;">' + esc(l.accuracy) + '</span></td>';
+			});
+			factHtml += '</tr>';
+		});
+		factHtml += '</tbody></table>';
+		html += collapsible('Fact Recognition Details (' + items.length + ' facts)', factHtml, true);
+	}
+
+	html += '</div>';
+	return html;
 }
 function renderProbeEmptyState(data) {
 	var hasLLMErrors = data.llm_errors && data.llm_errors.length > 0;

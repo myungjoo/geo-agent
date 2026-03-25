@@ -1,5 +1,6 @@
 import { CloneManager } from "../../clone/clone-manager.js";
 import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
+import type { LLMProviderSettings } from "../../llm/provider-config.js";
 /**
  * Pipeline Runner — Orchestrator에 모든 Agent를 등록하고 E2E 파이프라인 실행
  *
@@ -18,6 +19,11 @@ import { type AnalysisOutput, runAnalysis } from "../analysis/analysis-agent.js"
 import { resolveModel, runLLMAnalysis } from "../analysis/llm-analysis-agent.js";
 import type { RichAnalysisReport } from "../analysis/rich-analysis-schema.js";
 import { type OptimizationResult, runOptimization } from "../optimization/optimization-agent.js";
+import {
+	type MultiProviderProbeConfig,
+	type MultiProviderProbeResult,
+	runMultiProviderProbes,
+} from "../probes/multi-provider-probes.js";
 import {
 	type ProbeContext,
 	type SyntheticProbeRunResult,
@@ -64,6 +70,10 @@ export interface PipelineConfig {
 	stageCallbacks?: StageCallbacks;
 	/** 외부에서 stop 시그널을 보낼 수 있도록 stop 함수를 등록하는 콜백 */
 	registerStop?: (stopFn: () => void) => void;
+	/** 프로브 실행 모드: single(기존 단일 프로바이더) / multi(등록된 모든 프로바이더 병렬 실행) */
+	probe_mode?: "single" | "multi";
+	/** multi 모드에서 사용할 활성 프로바이더 목록 (probe_mode=multi 시 필수) */
+	providers?: LLMProviderSettings[];
 }
 
 export interface LLMCallLogEntry {
@@ -164,6 +174,7 @@ export async function runPipeline(
 	let initialScore = 0;
 	let cycleCount = 0;
 	let probeResults: SyntheticProbeRunResult | null = null;
+	let multiProbeResults: MultiProviderProbeResult | null = null;
 	let richReport: RichAnalysisReport | null = null;
 	const llmModelsUsed = new Set<string>();
 	const llmErrors: string[] = [];
@@ -323,34 +334,86 @@ export async function runPipeline(
 						prices: productPrices,
 						brand: brandName,
 					};
-					probeResults = await runProbes(
-						probeContext,
-						{ chatLLM: trackedChatLLM },
-						{ delayMs: 500 },
-					);
 
-					// Reflect probe results in GeoScore
-					if (probeResults) {
+					const probeMode = config.probe_mode ?? "single";
+
+					if (probeMode === "multi" && config.providers && config.providers.length > 0) {
+						// ── Multi-Provider 3-Layer Probes (A-0) ──
+						const multiConfig: MultiProviderProbeConfig = {
+							context: probeContext,
+							crawlData: analysisOutput.crawl_data,
+							evalData: {
+								product_info: analysisOutput.eval_data?.product_info ?? [],
+								marketing_claims: analysisOutput.eval_data?.marketing_claims ?? [],
+							},
+							providers: config.providers,
+							judgeLLM: trackedChatLLM,
+							delayMs: 500,
+						};
+						multiProbeResults = await runMultiProviderProbes(multiConfig);
+
+						// provider_errors가 있으면 llmErrors에 추가하여 사용자에게 전달
+						for (const [pid, errMsg] of Object.entries(multiProbeResults.provider_errors)) {
+							llmErrors.push(`[${pid}] ${errMsg}`);
+						}
+
+						// Multi-provider 결과를 GEO Score에 반영
+						const ks = multiProbeResults.comparison.knowledge_summary;
 						analysisOutput.report.current_geo_score.citation_rate = Math.round(
-							probeResults.summary.citation_rate * 100,
+							ks.avg_citation_rate * 100,
 						);
 						analysisOutput.report.current_geo_score.citation_accuracy = Math.round(
-							probeResults.summary.average_accuracy * 100,
+							ks.avg_accuracy_rate * 100,
 						);
+						// info_recognition: 팩트 인식률 기반
+						const totalFacts = multiProbeResults.comparison.info_recognition_items.length;
+						const recognizedFacts = multiProbeResults.comparison.info_recognition_items.filter(
+							(item) =>
+								item.llm_results.some(
+									(l: { accuracy: string }) =>
+										l.accuracy === "exact" || l.accuracy === "approximate",
+								),
+						).length;
 						analysisOutput.report.current_geo_score.info_recognition_score = Math.round(
-							((probeResults.summary.pass + probeResults.summary.partial * 0.5) /
-								Math.max(probeResults.summary.total, 1)) *
+							(recognizedFacts / Math.max(totalFacts, 1)) * 100,
+						);
+						// rank_position: citation + info recognition 가중 평균
+						analysisOutput.report.current_geo_score.rank_position = Math.round(
+							(ks.avg_citation_rate * 0.6 + (recognizedFacts / Math.max(totalFacts, 1)) * 0.4) *
 								100,
 						);
-						// rank_position: citation rate + info recognition 기반 추정 (0-100)
-						// 높은 citation + 높은 recognition = 높은 rank position
-						const citRate = probeResults.summary.citation_rate;
-						const infoRate =
-							(probeResults.summary.pass + probeResults.summary.partial * 0.5) /
-							Math.max(probeResults.summary.total, 1);
-						analysisOutput.report.current_geo_score.rank_position = Math.round(
-							(citRate * 0.6 + infoRate * 0.4) * 100,
+
+						// SyntheticProbeRunResult 호환 래퍼 (기존 UI 호환)
+						probeResults = convertMultiToSingleProbeResult(multiProbeResults);
+					} else {
+						// ── Single-Provider Probes (기존 동작) ──
+						probeResults = await runProbes(
+							probeContext,
+							{ chatLLM: trackedChatLLM },
+							{ delayMs: 500 },
 						);
+
+						// Reflect probe results in GeoScore
+						if (probeResults) {
+							analysisOutput.report.current_geo_score.citation_rate = Math.round(
+								probeResults.summary.citation_rate * 100,
+							);
+							analysisOutput.report.current_geo_score.citation_accuracy = Math.round(
+								probeResults.summary.average_accuracy * 100,
+							);
+							analysisOutput.report.current_geo_score.info_recognition_score = Math.round(
+								((probeResults.summary.pass + probeResults.summary.partial * 0.5) /
+									Math.max(probeResults.summary.total, 1)) *
+									100,
+							);
+							const citRate = probeResults.summary.citation_rate;
+							const infoRate =
+								(probeResults.summary.pass + probeResults.summary.partial * 0.5) /
+								Math.max(probeResults.summary.total, 1);
+							analysisOutput.report.current_geo_score.rank_position = Math.round(
+								(citRate * 0.6 + infoRate * 0.4) * 100,
+							);
+						}
 					}
 				} catch (probeErr) {
 					const probeErrMsg = `Synthetic Probes failed: ${probeErr instanceof Error ? probeErr.message : String(probeErr)}`;
@@ -395,6 +458,8 @@ export async function runPipeline(
 				eval_data: out.eval_data,
 				llm_assessment: out.llm_assessment,
 				synthetic_probes: probeResults,
+				multi_provider_probes: multiProbeResults,
+				probe_mode: config.probe_mode ?? "single",
 				rich_report: richReport,
 			}),
 		);
@@ -715,4 +780,67 @@ export async function runPipeline(
 			error: err instanceof Error ? err.message : String(err),
 		};
 	}
+}
+
+// ── Multi → Single probe result converter ────────────────────
+
+/**
+ * MultiProviderProbeResult를 SyntheticProbeRunResult 형식으로 변환.
+ * 기존 Dashboard UI가 synthetic_probes 필드로 프로브 결과를 렌더링하므로,
+ * multi-provider 결과를 기존 UI와 호환되도록 변환한다.
+ *
+ * 변환 규칙:
+ * - knowledge_results의 모든 프로바이더 프로브를 flat하게 합침
+ * - accuracy는 comparison.llm_breakdown에서 가져옴
+ * - citation은 comparison.knowledge_summary.citation_rates에서 가져옴
+ */
+function convertMultiToSingleProbeResult(multi: MultiProviderProbeResult): SyntheticProbeRunResult {
+	const ks = multi.comparison.knowledge_summary;
+	const probes: SyntheticProbeRunResult["probes"] = [];
+
+	for (const kr of multi.knowledge_results) {
+		const providerCitRate = ks.citation_rates[kr.provider_id] ?? 0;
+		const providerAccRate = ks.accuracy_rates[kr.provider_id] ?? 0;
+
+		for (const p of kr.probes) {
+			const cited = providerCitRate > 0.3;
+			const accuracy = providerAccRate;
+			let verdict: "PASS" | "PARTIAL" | "FAIL";
+			if (cited && accuracy >= 0.5) verdict = "PASS";
+			else if (cited || accuracy >= 0.3) verdict = "PARTIAL";
+			else verdict = "FAIL";
+
+			probes.push({
+				probe_id: `${kr.provider_id}/${p.probe_id}`,
+				probe_name: p.probe_id,
+				category: kr.track,
+				query: "",
+				response: p.response,
+				cited,
+				accuracy,
+				verdict,
+				latency_ms: p.latency_ms,
+				model: kr.model,
+				provider: kr.provider_id,
+				error: p.error,
+			});
+		}
+	}
+
+	const total = probes.length;
+	const pass = probes.filter((p) => p.verdict === "PASS").length;
+	const partial = probes.filter((p) => p.verdict === "PARTIAL").length;
+	const fail = probes.filter((p) => p.verdict === "FAIL").length;
+
+	return {
+		probes,
+		summary: {
+			total,
+			pass,
+			partial,
+			fail,
+			citation_rate: ks.avg_citation_rate,
+			average_accuracy: ks.avg_accuracy_rate,
+		},
+	};
 }
