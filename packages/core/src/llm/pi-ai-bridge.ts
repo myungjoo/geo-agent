@@ -52,42 +52,47 @@ export function piAiModelFromProvider(provider: LLMProviderSettings): Model<Api>
 		provider.api_base_url ??
 		(provider.provider_id === "perplexity" ? "https://api.perplexity.ai" : undefined);
 
+	// Try pi-ai's built-in registry first
+	let model: Model<Api> | undefined;
 	try {
-		const model = getModel(piProvider as any, provider.default_model as any);
+		model = getModel(piProvider as any, provider.default_model as any);
+	} catch {
+		// getModel threw — fall through to manual build
+	}
+
+	if (model) {
 		if (effectiveBaseUrl) {
 			return { ...model, baseUrl: effectiveBaseUrl };
 		}
 		return model;
-	} catch {
-		// Model not in pi-ai's registry — build a minimal Model object
-		const modelId = provider.default_model.toLowerCase();
-		let api: string;
-		if (piProvider === "anthropic") {
-			api = "anthropic-messages";
-		} else if (modelId.includes("codex")) {
-			api = "openai-codex-responses";
-		} else if (
-			modelId.startsWith("gpt-5") ||
-			modelId.startsWith("o3") ||
-			modelId.startsWith("o4")
-		) {
-			api = "openai-responses";
-		} else {
-			api = "openai-completions";
-		}
-		return {
-			id: provider.default_model,
-			name: provider.default_model,
-			api,
-			provider: piProvider,
-			baseUrl: effectiveBaseUrl ?? getDefaultBaseUrl(piProvider),
-			reasoning: false,
-			input: ["text"],
-			cost: { input: 0.002, output: 0.006, cacheRead: 0, cacheWrite: 0 },
-			contextWindow: 128000,
-			maxTokens: provider.max_tokens,
-		} as Model<Api>;
 	}
+
+	// Model not in pi-ai's registry — build a minimal Model object
+	const modelId = provider.default_model.toLowerCase();
+	let api: string;
+	if (piProvider === "google") {
+		api = "google-generative-ai";
+	} else if (piProvider === "anthropic") {
+		api = "anthropic-messages";
+	} else if (modelId.includes("codex")) {
+		api = "openai-codex-responses";
+	} else if (modelId.startsWith("gpt-5") || modelId.startsWith("o3") || modelId.startsWith("o4")) {
+		api = "openai-responses";
+	} else {
+		api = "openai-completions";
+	}
+	return {
+		id: provider.default_model,
+		name: provider.default_model,
+		api,
+		provider: piProvider,
+		baseUrl: effectiveBaseUrl ?? getDefaultBaseUrl(piProvider),
+		reasoning: false,
+		input: ["text"],
+		cost: { input: 0.002, output: 0.006, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 128000,
+		maxTokens: provider.max_tokens,
+	} as Model<Api>;
 }
 
 function getDefaultBaseUrl(provider: string): string {

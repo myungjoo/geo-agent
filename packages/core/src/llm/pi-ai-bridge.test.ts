@@ -50,6 +50,25 @@ describe("pi-ai-bridge", () => {
 			expect(model.provider).toBe("anthropic");
 		});
 
+		it("should use google-generative-ai API for google provider fallback models", () => {
+			const provider: LLMProviderSettings = {
+				provider_id: "google",
+				display_name: "Google",
+				enabled: true,
+				auth_method: "api_key",
+				api_key: "AIzaSy-test-12345",
+				default_model: "gemini-3.1-flash",
+				available_models: ["gemini-3.1-flash"],
+				max_tokens: 4096,
+				temperature: 0.3,
+				rate_limit_rpm: 60,
+			};
+
+			const model = piAiModelFromProvider(provider);
+			expect(model.provider).toBe("google");
+			expect(model.api).toBe("google-generative-ai");
+		});
+
 		it("should throw for unsupported provider", () => {
 			const provider: LLMProviderSettings = {
 				provider_id: "meta",
@@ -119,6 +138,89 @@ describe("pi-ai-bridge", () => {
 
 			const model = piAiModelFromProvider(provider);
 			expect(model.api).toBe("openai-responses");
+		});
+
+		// ── Fallback 안전성 테스트 (미등록 모델 → 유효한 Model 보장) ──
+
+		const VALID_API_SET = new Set([
+			"openai-completions",
+			"openai-responses",
+			"openai-codex-responses",
+			"azure-openai-responses",
+			"google-generative-ai",
+			"google-vertex",
+			"anthropic-messages",
+			"mistral-conversations",
+		]);
+
+		/**
+		 * 모든 PROVIDER_MAP 프로바이더에 대해 pi-ai 레지스트리에 없는 가상 모델을
+		 * 사용해도 유효한 Model 객체가 반환되는지 검증.
+		 * getModel()이 undefined를 반환하거나 예외를 던져도 fallback이 동작해야 한다.
+		 */
+		it.each([
+			{ provider_id: "openai", model: "gpt-99-future", expectedApi: "openai-completions" },
+			{ provider_id: "google", model: "gemini-99-future", expectedApi: "google-generative-ai" },
+			{ provider_id: "anthropic", model: "claude-99-future", expectedApi: "anthropic-messages" },
+			{ provider_id: "perplexity", model: "sonar-99-future", expectedApi: "openai-completions" },
+		])(
+			"fallback: $provider_id with unknown model '$model' → api=$expectedApi",
+			({ provider_id, model, expectedApi }) => {
+				const provider: LLMProviderSettings = {
+					provider_id,
+					display_name: provider_id,
+					enabled: true,
+					auth_method: "api_key",
+					api_key: "test-key",
+					default_model: model,
+					available_models: [model],
+					max_tokens: 4096,
+					temperature: 0.3,
+					rate_limit_rpm: 60,
+				};
+
+				const result = piAiModelFromProvider(provider);
+
+				// 핵심: model 객체가 존재하고 api 속성이 유효해야 함
+				expect(result).toBeTruthy();
+				expect(result.api).toBe(expectedApi);
+				expect(VALID_API_SET).toContain(result.api);
+				expect(result.id).toBe(model);
+				expect(result.baseUrl).toBeTruthy();
+			},
+		);
+
+		/**
+		 * 반환된 Model의 필수 필드가 모두 존재하는지 검증.
+		 * piAiComplete()에서 model.api, model.baseUrl 등에 접근하므로
+		 * undefined 필드가 있으면 런타임 크래시 발생.
+		 */
+		it.each([
+			{ provider_id: "openai", model: "unknown-openai-model" },
+			{ provider_id: "google", model: "unknown-google-model" },
+			{ provider_id: "anthropic", model: "unknown-anthropic-model" },
+			{ provider_id: "perplexity", model: "unknown-perplexity-model" },
+		])("fallback model for $provider_id has all required fields", ({ provider_id, model }) => {
+			const provider: LLMProviderSettings = {
+				provider_id,
+				display_name: provider_id,
+				enabled: true,
+				auth_method: "api_key",
+				api_key: "test-key",
+				default_model: model,
+				available_models: [model],
+				max_tokens: 4096,
+				temperature: 0.3,
+				rate_limit_rpm: 60,
+			};
+
+			const result = piAiModelFromProvider(provider);
+
+			expect(result.id).toBeTypeOf("string");
+			expect(result.api).toBeTypeOf("string");
+			expect(result.provider).toBeTypeOf("string");
+			expect(result.baseUrl).toBeTypeOf("string");
+			expect(result.baseUrl).toMatch(/^https?:\/\//);
 		});
 
 		it("should override baseUrl when api_base_url is set", () => {
