@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -202,6 +202,20 @@ export async function startServer(
 ): Promise<{ settings: AppSettings; server: ServerType }> {
 	const settings = loadSettings();
 	initWorkspace(settings);
+
+	// 워크스페이스 경로 및 커스텀 프롬프트 로딩 상태 출력
+	const promptsDir = join(settings.workspace_dir, "prompts");
+	let customPromptInfo = "커스텀 없음 (기본값 사용 중)";
+	try {
+		const files = readdirSync(promptsDir).filter((f) => f.endsWith(".json"));
+		if (files.length > 0) {
+			customPromptInfo = `커스텀 ${files.length}개 로드됨 (${files.join(", ")})`;
+		}
+	} catch {
+		// prompts 디렉토리가 아직 없는 경우 — initWorkspace가 생성함
+	}
+	console.log(`💾 Workspace: ${settings.workspace_dir}`);
+	console.log(`   Prompts: ${customPromptInfo}`);
 
 	// Initialize database and inject into routers
 	const db = createDatabase(settings);

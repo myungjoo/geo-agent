@@ -56,7 +56,14 @@ settingsRouter.put("/agents/prompts/:agent_id", async (c) => {
 		last_modified: new Date().toISOString(),
 	};
 
-	savePrompt(getWorkspaceDir(), config);
+	try {
+		savePrompt(getWorkspaceDir(), config);
+	} catch (err) {
+		return c.json(
+			{ error: "Failed to save prompt", message: err instanceof Error ? err.message : String(err) },
+			500,
+		);
+	}
 	return c.json(config);
 });
 

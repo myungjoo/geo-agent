@@ -35,10 +35,15 @@ export function loadPrompt(workspaceDir: string, agentId: AgentId): AgentPromptC
  */
 export function savePrompt(workspaceDir: string, config: AgentPromptConfig): void {
 	const promptDir = path.join(workspaceDir, "prompts");
-	fs.mkdirSync(promptDir, { recursive: true });
-
 	const filePath = path.join(promptDir, `${config.agent_id}.json`);
-	fs.writeFileSync(filePath, JSON.stringify(config, null, 2));
+	try {
+		fs.mkdirSync(promptDir, { recursive: true });
+		fs.writeFileSync(filePath, JSON.stringify(config, null, 2));
+	} catch (err) {
+		throw new Error(
+			`Failed to save prompt '${config.agent_id}' to ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+		);
+	}
 }
 
 /**

@@ -33,6 +33,8 @@ program
 		initWorkspace(settings);
 
 		console.log("🚀 Starting GEO Agent System...");
+		console.log(`💾 Workspace: ${settings.workspace_dir}`);
+		console.log("   (Agent Prompts는 이 경로에 저장됩니다. GEO_WORKSPACE 환경변수로 변경 가능)");
 		await startServer(port, hostname);
 		console.log(`📊 Dashboard: http://${hostname}:${port}/dashboard`);
 	});
