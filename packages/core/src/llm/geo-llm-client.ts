@@ -19,6 +19,7 @@ export const LLMRequestSchema = z.object({
 	max_tokens: z.number().int().positive().optional(),
 	temperature: z.number().min(0).max(2).optional(),
 	json_mode: z.boolean().default(false),
+	web_search: z.boolean().optional(),
 });
 export type LLMRequest = z.infer<typeof LLMRequestSchema>;
 
