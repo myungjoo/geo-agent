@@ -383,6 +383,10 @@ export async function runPipeline(
 								100,
 						);
 
+						// llm_breakdown: 프로바이더별 GEO 점수 상세를 GeoScore에 반영
+						analysisOutput.report.current_geo_score.llm_breakdown =
+							multiProbeResults.comparison.llm_breakdown;
+
 						// SyntheticProbeRunResult 호환 래퍼 (기존 UI 호환)
 						probeResults = convertMultiToSingleProbeResult(multiProbeResults);
 					} else {
