@@ -34,6 +34,7 @@ vi.mock("@mariozechner/pi-ai", () => {
 });
 
 import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
+import type { LLMProviderSettings } from "../../llm/provider-config.js";
 import { runAnalysis } from "../analysis/analysis-agent.js";
 import type { LLMAnalysisResult } from "../analysis/llm-analysis-agent.js";
 import type { RichAnalysisReport } from "../analysis/rich-analysis-schema.js";
@@ -621,5 +622,354 @@ describe("Pipeline Runner — resultFullFn regression", () => {
 		expect(full.llm_models_used).toBeInstanceOf(Array);
 		expect(full.llm_call_log).toBeInstanceOf(Array);
 		expect(full.llm_errors).toBeInstanceOf(Array);
+	});
+});
+
+// ── Q2: Single mode backward compatibility ──────────────
+
+describe("Pipeline Runner — Single mode backward compatibility", () => {
+	it("defaults to single mode when probe_mode is not set", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+		const { stageResults, callbacks } = makeStageTracker();
+
+		// No probe_mode set — should default to "single"
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			stageCallbacks: callbacks,
+		});
+
+		const result = await runPipeline(config, deps);
+		expect(result.success).toBe(true);
+
+		const analyzing = stageResults.find((s) => s.stage === "ANALYZING");
+		const full = analyzing?.resultFull as Record<string, unknown>;
+		expect(full.probe_mode).toBe("single");
+		expect(full.multi_provider_probes).toBeNull();
+		expect(full.synthetic_probes).toBeDefined();
+	});
+
+	it("single mode result structure unchanged from before PR", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+		const { stageResults, callbacks } = makeStageTracker();
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			probe_mode: "single",
+			stageCallbacks: callbacks,
+		});
+
+		const result = await runPipeline(config, deps);
+		expect(result.success).toBe(true);
+
+		const analyzing = stageResults.find((s) => s.stage === "ANALYZING");
+		const full = analyzing?.resultFull as Record<string, unknown>;
+
+		// Must have these fields (backward compatible)
+		expect(full).toHaveProperty("score");
+		expect(full).toHaveProperty("grade");
+		expect(full).toHaveProperty("site_type");
+		expect(full).toHaveProperty("dimensions");
+		expect(full).toHaveProperty("synthetic_probes");
+		expect(full).toHaveProperty("rich_report");
+		expect(full).toHaveProperty("eval_data");
+
+		// synthetic_probes structure
+		const probes = full.synthetic_probes as { probes: unknown[]; summary: Record<string, unknown> };
+		expect(probes.probes).toBeInstanceOf(Array);
+		expect(probes.summary).toHaveProperty("total");
+		expect(probes.summary).toHaveProperty("citation_rate");
+		expect(probes.summary).toHaveProperty("average_accuracy");
+	});
+});
+
+// ── Q3: Multi mode E2E tests ────────────────────────────
+
+function makeTestProvider(id: string): LLMProviderSettings {
+	return {
+		provider_id: id as any,
+		display_name: id,
+		enabled: true,
+		auth_method: "api_key",
+		api_key: `sk-${id}-test`,
+		default_model: `${id}-model`,
+		available_models: [`${id}-model`],
+		max_tokens: 4096,
+		temperature: 0.3,
+		rate_limit_rpm: 60,
+	};
+}
+
+describe("Pipeline Runner — Multi-Provider Probe Mode", () => {
+	it("runs multi-provider probes when probe_mode=multi with providers", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+		const { stageResults, callbacks } = makeStageTracker();
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			probe_mode: "multi",
+			providers: [makeTestProvider("openai"), makeTestProvider("anthropic")],
+			stageCallbacks: callbacks,
+		});
+
+		const result = await runPipeline(config, deps);
+		expect(result.success).toBe(true);
+
+		const analyzing = stageResults.find((s) => s.stage === "ANALYZING");
+		const full = analyzing?.resultFull as Record<string, unknown>;
+
+		// Multi mode fields
+		expect(full.probe_mode).toBe("multi");
+		expect(full.multi_provider_probes).toBeDefined();
+		expect(full.multi_provider_probes).not.toBeNull();
+
+		// Multi result structure
+		const mp = full.multi_provider_probes as {
+			providers_used: string[];
+			provider_errors: Record<string, string>;
+			comparison: { llm_breakdown: Record<string, unknown>; knowledge_summary: unknown };
+			stats: { total_probes_run: number };
+		};
+		expect(mp.providers_used).toContain("openai");
+		expect(mp.providers_used).toContain("anthropic");
+		expect(mp.stats.total_probes_run).toBeGreaterThan(0);
+
+		// Backward compatible: synthetic_probes still populated (converted)
+		expect(full.synthetic_probes).toBeDefined();
+		const probes = full.synthetic_probes as { probes: unknown[]; summary: { total: number } };
+		expect(probes.summary.total).toBeGreaterThan(0);
+	});
+
+	it("falls back to single mode when probe_mode=multi but providers is empty", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+		const { stageResults, callbacks } = makeStageTracker();
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			probe_mode: "multi",
+			providers: [], // empty → should fallback to single
+			stageCallbacks: callbacks,
+		});
+
+		const result = await runPipeline(config, deps);
+		expect(result.success).toBe(true);
+
+		const analyzing = stageResults.find((s) => s.stage === "ANALYZING");
+		const full = analyzing?.resultFull as Record<string, unknown>;
+
+		// Should fall back to single mode (no multi results)
+		expect(full.multi_provider_probes).toBeNull();
+		expect(full.synthetic_probes).toBeDefined();
+	});
+
+	it("falls back to single mode when probe_mode=multi but providers is undefined", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+		const { stageResults, callbacks } = makeStageTracker();
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			probe_mode: "multi",
+			// providers not set → should fallback to single
+			stageCallbacks: callbacks,
+		});
+
+		const result = await runPipeline(config, deps);
+		expect(result.success).toBe(true);
+
+		const analyzing = stageResults.find((s) => s.stage === "ANALYZING");
+		const full = analyzing?.resultFull as Record<string, unknown>;
+		expect(full.multi_provider_probes).toBeNull();
+	});
+
+	it("multi mode populates llm_breakdown in GEO score", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+		const { stageResults, callbacks } = makeStageTracker();
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			probe_mode: "multi",
+			providers: [makeTestProvider("openai")],
+			stageCallbacks: callbacks,
+		});
+
+		const result = await runPipeline(config, deps);
+		expect(result.success).toBe(true);
+
+		const analyzing = stageResults.find((s) => s.stage === "ANALYZING");
+		const full = analyzing?.resultFull as Record<string, unknown>;
+		const mp = full.multi_provider_probes as {
+			comparison: {
+				llm_breakdown: Record<string, { citation_rate: number; citation_accuracy: number }>;
+			};
+		};
+
+		// llm_breakdown should have the provider
+		expect(mp.comparison.llm_breakdown).toHaveProperty("openai");
+		expect(mp.comparison.llm_breakdown.openai.citation_rate).toBeGreaterThanOrEqual(0);
+		expect(mp.comparison.llm_breakdown.openai.citation_accuracy).toBeGreaterThanOrEqual(0);
+	});
+
+	it("multi mode records provider_errors for failed provider init", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+		const { stageResults, callbacks } = makeStageTracker();
+
+		const failProvider = makeTestProvider("badprovider");
+		failProvider.api_key = ""; // empty key → init failure
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			probe_mode: "multi",
+			providers: [makeTestProvider("openai"), failProvider],
+			stageCallbacks: callbacks,
+		});
+
+		const result = await runPipeline(config, deps);
+		expect(result.success).toBe(true);
+
+		const analyzing = stageResults.find((s) => s.stage === "ANALYZING");
+		const full = analyzing?.resultFull as Record<string, unknown>;
+		const mp = full.multi_provider_probes as { provider_errors: Record<string, string> };
+
+		// badprovider should have initialization error
+		expect(mp.provider_errors.badprovider).toBeDefined();
+		expect(mp.provider_errors.badprovider).toContain("초기화 실패");
+
+		// Error should also be in llm_errors
+		expect(result.llm_errors.some((e) => e.includes("badprovider"))).toBe(true);
+	});
+
+	it("multi mode with all providers failing init falls back gracefully", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+
+		const failProvider1 = makeTestProvider("bad1");
+		failProvider1.api_key = "";
+		const failProvider2 = makeTestProvider("bad2");
+		failProvider2.api_key = "";
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			probe_mode: "multi",
+			providers: [failProvider1, failProvider2],
+		});
+
+		const result = await runPipeline(config, deps);
+		// Pipeline should still succeed — probe failure is non-fatal
+		expect(result.success).toBe(true);
+		// But should record the error
+		expect(result.llm_errors.length).toBeGreaterThan(0);
+	});
+});
+
+// ── Q4: API/Web UI 통합 테스트 케이스 ────────────────────
+
+describe("Pipeline Runner — API compatibility", () => {
+	it("PipelineResult includes all required fields for API response", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+		const config = makeConfig({ target_score: 60, max_cycles: 1 });
+
+		const result = await runPipeline(config, deps);
+
+		// API contract fields
+		expect(result).toHaveProperty("success");
+		expect(result).toHaveProperty("final_score");
+		expect(result).toHaveProperty("initial_score");
+		expect(result).toHaveProperty("delta");
+		expect(result).toHaveProperty("cycles_completed");
+		expect(result).toHaveProperty("llm_models_used");
+		expect(result).toHaveProperty("llm_errors");
+		expect(result).toHaveProperty("llm_call_log");
+
+		expect(typeof result.success).toBe("boolean");
+		expect(typeof result.final_score).toBe("number");
+		expect(typeof result.initial_score).toBe("number");
+		expect(typeof result.delta).toBe("number");
+		expect(Array.isArray(result.llm_models_used)).toBe(true);
+		expect(Array.isArray(result.llm_errors)).toBe(true);
+		expect(Array.isArray(result.llm_call_log)).toBe(true);
+	});
+
+	it("result_full for ANALYZING includes probe_mode field", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+		const { stageResults, callbacks } = makeStageTracker();
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			stageCallbacks: callbacks,
+		});
+
+		await runPipeline(config, deps);
+
+		const analyzing = stageResults.find((s) => s.stage === "ANALYZING");
+		const full = analyzing?.resultFull as Record<string, unknown>;
+
+		// Evaluation endpoint depends on these fields
+		expect(full).toHaveProperty("probe_mode");
+		expect(full).toHaveProperty("multi_provider_probes");
+		expect(full).toHaveProperty("synthetic_probes");
+	});
+
+	it("convertMultiToSingleProbeResult produces valid SyntheticProbeRunResult", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM();
+		const { stageResults, callbacks } = makeStageTracker();
+
+		const config = makeConfig({
+			target_score: 60,
+			max_cycles: 1,
+			probe_mode: "multi",
+			providers: [makeTestProvider("openai")],
+			stageCallbacks: callbacks,
+		});
+
+		await runPipeline(config, deps);
+
+		const analyzing = stageResults.find((s) => s.stage === "ANALYZING");
+		const full = analyzing?.resultFull as Record<string, unknown>;
+		const probes = full.synthetic_probes as {
+			probes: Array<{ probe_id: string; verdict: string; provider: string; error?: string }>;
+			summary: {
+				total: number;
+				pass: number;
+				partial: number;
+				fail: number;
+				citation_rate: number;
+				average_accuracy: number;
+			};
+		};
+
+		// Each probe must have required fields
+		for (const p of probes.probes) {
+			expect(p.probe_id).toBeTruthy();
+			expect(["PASS", "PARTIAL", "FAIL"]).toContain(p.verdict);
+			expect(p.provider).toBeTruthy();
+		}
+
+		// Summary must have correct counts
+		expect(probes.summary.total).toBe(probes.probes.length);
+		expect(probes.summary.pass + probes.summary.partial + probes.summary.fail).toBe(
+			probes.summary.total,
+		);
+		expect(probes.summary.citation_rate).toBeGreaterThanOrEqual(0);
+		expect(probes.summary.citation_rate).toBeLessThanOrEqual(1);
+		expect(probes.summary.average_accuracy).toBeGreaterThanOrEqual(0);
+		expect(probes.summary.average_accuracy).toBeLessThanOrEqual(1);
 	});
 });

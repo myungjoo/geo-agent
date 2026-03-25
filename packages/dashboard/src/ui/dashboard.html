@@ -2430,6 +2430,8 @@ function renderRawDataTab(data) {
 	if (data.analysis_report) html += collapsible('Analysis Report (ANALYZING result_full)', jsonBlock(data.analysis_report));
 	if (data.validation) html += collapsible('Validation Report (VALIDATING result_full)', jsonBlock(data.validation));
 	if (data.synthetic_probes) html += collapsible('Synthetic Probes', jsonBlock(data.synthetic_probes));
+	if (data.multi_provider_probes) html += collapsible('Multi-Provider Probes (A-0)', jsonBlock(data.multi_provider_probes));
+	if (data.probe_mode) html += collapsible('Probe Mode', jsonBlock({ probe_mode: data.probe_mode }));
 	if (data.eval_data) html += collapsible('Eval Data (정적 추출)', jsonBlock(data.eval_data));
 	if (data.dimensions) html += collapsible('Dimensions', jsonBlock(data.dimensions));
 
