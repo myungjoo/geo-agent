@@ -180,6 +180,28 @@ describe("provider-probe-runner", () => {
 		});
 	});
 
+	describe("runProbesForProvider — LLM API error propagation", () => {
+		it("captures LLM API error message (e.g. model not found) in probe error field", async () => {
+			const chatLLM: ChatLLMFn = async () => {
+				throw new Error(
+					'LLM API error (google/gemini-3.1-flash): {"error":{"message":"models/gemini-3.1-flash is not found","code":404,"status":"NOT_FOUND"}}',
+				);
+			};
+
+			const result = await runProbesForProvider(
+				defaultContext,
+				{ provider: mockProvider, track: "knowledge" },
+				{ chatLLM },
+				{ probeIds: ["P-01"], delayMs: 0 },
+			);
+
+			expect(result.probes).toHaveLength(1);
+			expect(result.probes[0].error).toContain("gemini-3.1-flash");
+			expect(result.probes[0].error).toContain("not found");
+			expect(result.probes[0].response).toBe("");
+		});
+	});
+
 	describe("supportsWebSearch", () => {
 		it("returns true for providers with web search", () => {
 			expect(supportsWebSearch("openai")).toBe(true);
