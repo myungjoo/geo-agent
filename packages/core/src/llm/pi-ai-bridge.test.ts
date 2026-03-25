@@ -184,6 +184,67 @@ describe("pi-ai-bridge", () => {
 			injectWebSearchPayload(p, "openai-responses");
 			expect(p.tools).toEqual([...existing, { type: "web_search_preview" }]);
 		});
+
+		it("should inject for google-vertex (same as google-generative-ai)", () => {
+			const p: Record<string, unknown> = {};
+			injectWebSearchPayload(p, "google-vertex");
+			expect(p.tools).toEqual([{ google_search_retrieval: {} }]);
+		});
+
+		it("should inject for openai-codex-responses", () => {
+			const p: Record<string, unknown> = {};
+			injectWebSearchPayload(p, "openai-codex-responses");
+			expect(p.tools).toEqual([{ type: "web_search_preview" }]);
+		});
+	});
+
+	describe("json_mode + web_search combination", () => {
+		// Verify both flags can coexist in onPayload without conflict
+		it("json_mode and web_search should both inject into same payload (openai-responses)", () => {
+			// Simulate what piAiComplete does when both flags are set
+			const p: Record<string, unknown> = {};
+			const api = "openai-responses";
+
+			// json_mode injection
+			p.text = { format: { type: "json_object" } };
+
+			// web_search injection
+			injectWebSearchPayload(p, api);
+
+			// Both should coexist
+			expect(p.text).toEqual({ format: { type: "json_object" } });
+			expect(p.tools).toEqual([{ type: "web_search_preview" }]);
+		});
+
+		it("json_mode and web_search should both inject into same payload (google)", () => {
+			const p: Record<string, unknown> = {};
+			const api = "google-generative-ai";
+
+			// json_mode injection
+			const gc = {} as Record<string, unknown>;
+			gc.responseMimeType = "application/json";
+			p.generationConfig = gc;
+
+			// web_search injection
+			injectWebSearchPayload(p, api);
+
+			// Both should coexist
+			expect((p.generationConfig as Record<string, unknown>).responseMimeType).toBe(
+				"application/json",
+			);
+			expect(p.tools).toEqual([{ google_search_retrieval: {} }]);
+		});
+
+		it("json_mode and web_search should both inject into same payload (anthropic)", () => {
+			const p: Record<string, unknown> = {};
+			const api = "anthropic-messages";
+
+			// json_mode: anthropic has no native json_mode, only prompt-based
+			// web_search injection
+			injectWebSearchPayload(p, api);
+
+			expect(p.tools).toEqual([{ type: "web_search_20250305", name: "web_search", max_uses: 3 }]);
+		});
 	});
 
 	describe("piAiAgentLoop", () => {
