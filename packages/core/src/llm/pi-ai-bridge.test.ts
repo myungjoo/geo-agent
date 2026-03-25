@@ -1,6 +1,11 @@
 import { type Tool, Type } from "@mariozechner/pi-ai";
 import { describe, expect, it, vi } from "vitest";
-import { type AgentLoopResult, piAiAgentLoop, piAiModelFromProvider } from "./pi-ai-bridge.js";
+import {
+	type AgentLoopResult,
+	injectWebSearchPayload,
+	piAiAgentLoop,
+	piAiModelFromProvider,
+} from "./pi-ai-bridge.js";
 import type { LLMProviderSettings } from "./provider-config.js";
 
 describe("pi-ai-bridge", () => {
@@ -133,6 +138,51 @@ describe("pi-ai-bridge", () => {
 
 			const model = piAiModelFromProvider(provider);
 			expect(model.baseUrl).toBe("https://custom.api.com/v1");
+		});
+	});
+
+	describe("injectWebSearchPayload", () => {
+		it("should inject web_search_preview for openai-responses", () => {
+			const p: Record<string, unknown> = {};
+			injectWebSearchPayload(p, "openai-responses");
+			expect(p.tools).toEqual([{ type: "web_search_preview" }]);
+		});
+
+		it("should inject web_search_preview for azure-openai-responses", () => {
+			const p: Record<string, unknown> = {};
+			injectWebSearchPayload(p, "azure-openai-responses");
+			expect(p.tools).toEqual([{ type: "web_search_preview" }]);
+		});
+
+		it("should inject web_search_preview for openai-completions", () => {
+			const p: Record<string, unknown> = {};
+			injectWebSearchPayload(p, "openai-completions");
+			expect(p.tools).toEqual([{ type: "web_search_preview" }]);
+		});
+
+		it("should inject google_search_retrieval for google-generative-ai", () => {
+			const p: Record<string, unknown> = {};
+			injectWebSearchPayload(p, "google-generative-ai");
+			expect(p.tools).toEqual([{ google_search_retrieval: {} }]);
+		});
+
+		it("should inject web_search_20250305 for anthropic-messages", () => {
+			const p: Record<string, unknown> = {};
+			injectWebSearchPayload(p, "anthropic-messages");
+			expect(p.tools).toEqual([{ type: "web_search_20250305", name: "web_search", max_uses: 3 }]);
+		});
+
+		it("should not inject anything for unknown/perplexity APIs", () => {
+			const p: Record<string, unknown> = {};
+			injectWebSearchPayload(p, "some-unknown-api");
+			expect(p.tools).toBeUndefined();
+		});
+
+		it("should append to existing tools array", () => {
+			const existing = [{ type: "function", function: { name: "test" } }];
+			const p: Record<string, unknown> = { tools: [...existing] };
+			injectWebSearchPayload(p, "openai-responses");
+			expect(p.tools).toEqual([...existing, { type: "web_search_preview" }]);
 		});
 	});
 
