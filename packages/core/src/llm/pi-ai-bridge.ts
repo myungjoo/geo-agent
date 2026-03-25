@@ -103,6 +103,43 @@ function getDefaultBaseUrl(provider: string): string {
 	}
 }
 
+// ── Web Search Payload Injection ─────────────────────────────
+
+/**
+ * Injects web search tool configuration into the raw API payload.
+ * Each provider has its own format for enabling web search.
+ *
+ * - OpenAI Responses / Azure: `tools` array with `{ type: "web_search_preview" }`
+ * - OpenAI Completions: `tools` array with `{ type: "web_search_preview" }`
+ * - Google: `tools` array with `{ google_search_retrieval: {} }`
+ * - Anthropic: `tools` array with `{ type: "web_search_20250305", name: "web_search", max_uses: 3 }`
+ * - Perplexity: inherently uses web search, no injection needed
+ */
+export function injectWebSearchPayload(p: Record<string, unknown>, api: string): void {
+	if (
+		api === "openai-responses" ||
+		api === "openai-codex-responses" ||
+		api === "azure-openai-responses"
+	) {
+		const tools = (p.tools ?? []) as unknown[];
+		tools.push({ type: "web_search_preview" });
+		p.tools = tools;
+	} else if (api === "openai-completions" || api === "mistral-conversations") {
+		const tools = (p.tools ?? []) as unknown[];
+		tools.push({ type: "web_search_preview" });
+		p.tools = tools;
+	} else if (api === "google-generative-ai" || api === "google-vertex") {
+		const tools = (p.tools ?? []) as unknown[];
+		tools.push({ google_search_retrieval: {} });
+		p.tools = tools;
+	} else if (api === "anthropic-messages") {
+		const tools = (p.tools ?? []) as unknown[];
+		tools.push({ type: "web_search_20250305", name: "web_search", max_uses: 3 });
+		p.tools = tools;
+	}
+	// Perplexity (openai-completions with perplexity baseUrl): web search is default, no injection
+}
+
 // ── Single-turn Completion ──────────────────────────────────
 
 /**
@@ -127,28 +164,36 @@ export async function piAiComplete(
 		messages,
 	};
 
-	// json_mode: inject response_format / text.format into the raw API payload
-	const onPayload = request.json_mode
+	// Build onPayload: inject json_mode and/or web_search into raw API payload
+	const needsPayloadHook = request.json_mode || request.web_search;
+	const onPayload = needsPayloadHook
 		? (payload: unknown) => {
 				const p = payload as Record<string, unknown>;
 				const api = model.api;
-				if (api === "openai-completions" || api === "mistral-conversations") {
-					// OpenAI chat/completions format
-					p.response_format = { type: "json_object" };
-				} else if (
-					api === "openai-responses" ||
-					api === "openai-codex-responses" ||
-					api === "azure-openai-responses"
-				) {
-					// OpenAI Responses API format
-					p.text = { format: { type: "json_object" } };
-				} else if (api === "google-generative-ai" || api === "google-vertex") {
-					// Google: inject into generationConfig
-					const gc = (p.generationConfig ?? {}) as Record<string, unknown>;
-					gc.responseMimeType = "application/json";
-					p.generationConfig = gc;
+
+				// ── json_mode ───────────────────────────────────────
+				if (request.json_mode) {
+					if (api === "openai-completions" || api === "mistral-conversations") {
+						p.response_format = { type: "json_object" };
+					} else if (
+						api === "openai-responses" ||
+						api === "openai-codex-responses" ||
+						api === "azure-openai-responses"
+					) {
+						p.text = { format: { type: "json_object" } };
+					} else if (api === "google-generative-ai" || api === "google-vertex") {
+						const gc = (p.generationConfig ?? {}) as Record<string, unknown>;
+						gc.responseMimeType = "application/json";
+						p.generationConfig = gc;
+					}
+					// Anthropic: no native json_mode — handled via prompt instructions
 				}
-				// Anthropic: no native json_mode — handled via prompt instructions
+
+				// ── web_search ──────────────────────────────────────
+				if (request.web_search) {
+					injectWebSearchPayload(p, api);
+				}
+
 				return p;
 			}
 		: undefined;
