@@ -57,8 +57,8 @@ describe("pi-ai-bridge", () => {
 				enabled: true,
 				auth_method: "api_key",
 				api_key: "AIzaSy-test-12345",
-				default_model: "gemini-3.1-flash",
-				available_models: ["gemini-3.1-flash"],
+				default_model: "gemini-99-future",
+				available_models: ["gemini-99-future"],
 				max_tokens: 4096,
 				temperature: 0.3,
 				rate_limit_rpm: 60,
@@ -67,6 +67,24 @@ describe("pi-ai-bridge", () => {
 			const model = piAiModelFromProvider(provider);
 			expect(model.provider).toBe("google");
 			expect(model.api).toBe("google-generative-ai");
+		});
+
+		it("should use /v1beta baseUrl for google provider fallback models", () => {
+			const provider: LLMProviderSettings = {
+				provider_id: "google",
+				display_name: "Google",
+				enabled: true,
+				auth_method: "api_key",
+				api_key: "AIzaSy-test-12345",
+				default_model: "gemini-99-future",
+				available_models: ["gemini-99-future"],
+				max_tokens: 4096,
+				temperature: 0.3,
+				rate_limit_rpm: 60,
+			};
+
+			const model = piAiModelFromProvider(provider);
+			expect(model.baseUrl).toBe("https://generativelanguage.googleapis.com/v1beta");
 		});
 
 		it("should throw for unsupported provider", () => {
