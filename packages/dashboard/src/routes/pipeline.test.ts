@@ -1005,3 +1005,176 @@ describe("Evaluation API — synthetic_probes", () => {
 		expect(evalBody.synthetic_probes).toBeNull();
 	});
 });
+
+// ══════════════════════════════════════════════════════════════
+// Evaluation API — multi_provider_probes & probe_mode fields
+// ══════════════════════════════════════════════════════════════
+
+describe("Evaluation API — multi_provider_probes & probe_mode", () => {
+	it("returns multi_provider_probes and probe_mode in evaluation response", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "ANALYZING", 0, "test");
+		const data = {
+			score: 70,
+			grade: "Good",
+			site_type: "manufacturer",
+			dimensions: [],
+			probe_mode: "multi",
+			synthetic_probes: {
+				probes: [],
+				summary: { total: 0, pass: 0, partial: 0, fail: 0, citation_rate: 0, average_accuracy: 0 },
+			},
+			multi_provider_probes: {
+				providers_used: ["openai", "anthropic"],
+				provider_errors: {},
+				comparison: {
+					llm_breakdown: {
+						openai: {
+							llm_service: "openai",
+							citation_rate: 60,
+							citation_accuracy: 70,
+							rank_position: 1,
+						},
+						anthropic: {
+							llm_service: "anthropic",
+							citation_rate: 40,
+							citation_accuracy: 55,
+							rank_position: 2,
+						},
+					},
+					knowledge_summary: {
+						track: "knowledge",
+						citation_rates: { openai: 0.6, anthropic: 0.4 },
+						accuracy_rates: { openai: 0.7, anthropic: 0.55 },
+						avg_citation_rate: 0.5,
+						avg_accuracy_rate: 0.625,
+					},
+					web_search_summary: null,
+					info_recognition_items: [],
+				},
+				stats: { total_llm_calls: 20, total_probes_run: 16, duration_ms: 5000 },
+			},
+		};
+		await stageRepo.complete(exec.id, "Score: 70", data);
+
+		const evalRes = await app.request(
+			`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/evaluation`,
+		);
+		expect(evalRes.status).toBe(200);
+
+		const evalBody = await evalRes.json();
+
+		// multi_provider_probes must be present
+		expect(evalBody.multi_provider_probes).toBeDefined();
+		expect(evalBody.multi_provider_probes).not.toBeNull();
+		expect(evalBody.multi_provider_probes.providers_used).toEqual(["openai", "anthropic"]);
+		expect(evalBody.multi_provider_probes.comparison.llm_breakdown.openai.citation_rate).toBe(60);
+
+		// probe_mode must be present
+		expect(evalBody.probe_mode).toBe("multi");
+	});
+
+	it("returns null multi_provider_probes and 'single' probe_mode when not set", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "ANALYZING", 0, "test");
+		await stageRepo.complete(exec.id, "Score: 50", {
+			score: 50,
+			grade: "Needs Improvement",
+			site_type: "generic",
+			dimensions: [],
+		});
+
+		const evalRes = await app.request(
+			`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/evaluation`,
+		);
+		expect(evalRes.status).toBe(200);
+		const evalBody = await evalRes.json();
+
+		expect(evalBody.multi_provider_probes).toBeNull();
+		expect(evalBody.probe_mode).toBe("single");
+	});
+
+	it("evaluation llm_errors includes parseWarnings when stage data is corrupted", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		const stageRepo = new StageExecutionRepository(db);
+		// Create ANALYZING with valid data
+		const analyzingExec = await stageRepo.create(pipeline.pipeline_id, "ANALYZING", 0, "test");
+		await stageRepo.complete(analyzingExec.id, "Score: 50", {
+			score: 50,
+			grade: "OK",
+			site_type: "generic",
+			dimensions: [],
+		});
+
+		// Create REPORTING with corrupted result_full (invalid JSON stored directly)
+		const reportingExec = await stageRepo.create(pipeline.pipeline_id, "REPORTING", 0, "test");
+		// Store invalid JSON by directly using the DB
+		const { createClient } = await import("@libsql/client");
+		const client = createClient({ url: `file:${path.join(testDir, "data", "geo-agent.db")}` });
+		await client.execute({
+			sql: "UPDATE stage_executions SET status = 'completed', result_full = ? WHERE id = ?",
+			args: ["{invalid json###", reportingExec.id],
+		});
+		client.close();
+
+		const evalRes = await app.request(
+			`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/evaluation`,
+		);
+		expect(evalRes.status).toBe(200);
+		const evalBody = await evalRes.json();
+
+		// parseWarnings should be merged into llm_errors
+		expect(evalBody.llm_errors.length).toBeGreaterThan(0);
+		expect(evalBody.llm_errors.some((e: string) => e.includes("parse error"))).toBe(true);
+	});
+});
+
+// ══════════════════════════════════════════════════════════════
+// POST pipeline — probe_mode query parameter
+// ══════════════════════════════════════════════════════════════
+
+describe("POST pipeline — probe_mode query parameter", () => {
+	it("accepts probe_mode=single without execute", async () => {
+		const targetId = await getTargetId();
+		const res = await app.request(`/api/targets/${targetId}/pipeline?probe_mode=single`, {
+			method: "POST",
+		});
+		// Without execute=true, just creates pipeline (no execution)
+		expect(res.status).toBe(201);
+	});
+
+	it("accepts probe_mode=multi without execute", async () => {
+		const targetId = await getTargetId();
+		const res = await app.request(`/api/targets/${targetId}/pipeline?probe_mode=multi`, {
+			method: "POST",
+		});
+		expect(res.status).toBe(201);
+	});
+
+	it("defaults to single when probe_mode is absent", async () => {
+		const targetId = await getTargetId();
+		const res = await app.request(`/api/targets/${targetId}/pipeline`, { method: "POST" });
+		expect(res.status).toBe(201);
+		// No error — probe_mode defaults to "single" internally
+	});
+
+	it("defaults to single when probe_mode has invalid value", async () => {
+		const targetId = await getTargetId();
+		const res = await app.request(`/api/targets/${targetId}/pipeline?probe_mode=invalid`, {
+			method: "POST",
+		});
+		expect(res.status).toBe(201);
+		// Invalid value should default to "single" (not error)
+	});
+});

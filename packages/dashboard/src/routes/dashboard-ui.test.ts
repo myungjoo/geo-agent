@@ -108,6 +108,72 @@ describe("Root endpoint", () => {
 	});
 });
 
+describe("Dashboard — Multi-Provider Probe UI elements", () => {
+	it("contains renderMultiProviderSummary function", async () => {
+		const res = await app.request("/dashboard");
+		const html = await res.text();
+		expect(html).toContain("function renderMultiProviderSummary(data)");
+	});
+
+	it("contains renderProbeEmptyState function", async () => {
+		const res = await app.request("/dashboard");
+		const html = await res.text();
+		expect(html).toContain("function renderProbeEmptyState(data)");
+	});
+
+	it("contains Single/Multi probe mode buttons", async () => {
+		const res = await app.request("/dashboard");
+		const html = await res.text();
+		expect(html).toContain("probe-mode-group");
+		expect(html).toContain("startPipeline(");
+		expect(html).toContain("'single'");
+		expect(html).toContain("'multi'");
+	});
+
+	it("startPipeline function accepts probeMode parameter", async () => {
+		const res = await app.request("/dashboard");
+		const html = await res.text();
+		expect(html).toContain("function startPipeline(targetId, probeMode)");
+		expect(html).toContain("probeMode || 'single'");
+		expect(html).toContain("probe_mode=");
+	});
+
+	it("contains multi_provider_probes rendering in raw data tab", async () => {
+		const res = await app.request("/dashboard");
+		const html = await res.text();
+		expect(html).toContain("data.multi_provider_probes");
+		expect(html).toContain("Multi-Provider Probes (A-0)");
+	});
+
+	it("contains provider_errors display section", async () => {
+		const res = await app.request("/dashboard");
+		const html = await res.text();
+		expect(html).toContain("mp.provider_errors");
+		expect(html).toContain("Provider Errors");
+	});
+
+	it("renderProbeEmptyState shows LLM error details when available", async () => {
+		const res = await app.request("/dashboard");
+		const html = await res.text();
+		expect(html).toContain("Synthetic Probes 실행 실패");
+		expect(html).toContain("LLM 호출 오류로 인해 프로브가 실행되지 않았습니다");
+	});
+
+	it("renderProbeEmptyState shows generic message when no errors", async () => {
+		const res = await app.request("/dashboard");
+		const html = await res.text();
+		expect(html).toContain("Synthetic Probe 결과 없음");
+	});
+
+	it("probe table supports error field display", async () => {
+		const res = await app.request("/dashboard");
+		const html = await res.text();
+		// Individual probe error row
+		expect(html).toContain("p.error");
+		expect(html).toContain('colspan="8"');
+	});
+});
+
 describe("Dashboard HTML resilience", () => {
 	it("GET /dashboard returns valid HTML even when loaded from dist or src", async () => {
 		const res = await app.request("/dashboard");
