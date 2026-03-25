@@ -714,7 +714,7 @@ export function createAnalysisToolHandlers(
 				brand: params.site_name,
 			};
 
-			const result = await runProbes(context, { chatLLM: deps.chatLLM });
+			const result = await runProbes(context, { chatLLM: deps.chatLLM }, { web_search: true });
 			state.probeResults = result;
 			return JSON.stringify({
 				summary: result.summary,

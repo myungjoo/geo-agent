@@ -269,6 +269,8 @@ export async function runProbes(
 		probeIds?: string[];
 		/** 프로브 간 딜레이 ms (rate limit 방지, 기본: 1000) */
 		delayMs?: number;
+		/** 웹 검색 활성화 여부 (기본: false) */
+		web_search?: boolean;
 	},
 ): Promise<SyntheticProbeRunResult> {
 	const probesToRun = options?.probeIds
@@ -289,6 +291,7 @@ export async function runProbes(
 				max_tokens: 500,
 				temperature: 0.3,
 				json_mode: false,
+				web_search: options?.web_search ? true : undefined,
 			});
 
 			const cited = await checkCitation(

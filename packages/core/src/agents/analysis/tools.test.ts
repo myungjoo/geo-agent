@@ -221,6 +221,59 @@ describe("createAnalysisToolHandlers", () => {
 			// This test verifies the type contract at runtime
 			expect(mockDeps.chatLLM).toBeDefined();
 		});
+
+		it("should pass web_search: true to chatLLM during probe execution", async () => {
+			const capturedRequests: any[] = [];
+			const probeChatLLM = vi.fn().mockImplementation(async (req: any) => {
+				capturedRequests.push(req);
+				if (req.json_mode === true) {
+					const sysInst = req.system_instruction || "";
+					if (sysInst.includes("accuracy evaluation") || req.prompt?.includes("accuracy")) {
+						return {
+							content: JSON.stringify({ accuracy: 0.7, reasoning: "mock" }),
+							model: "gpt-4o",
+							provider: "openai",
+							usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+							latency_ms: 100,
+							cost_usd: 0.001,
+						};
+					}
+					return {
+						content: JSON.stringify({ cited: true, reasoning: "mock" }),
+						model: "gpt-4o",
+						provider: "openai",
+						usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+						latency_ms: 100,
+						cost_usd: 0.001,
+					};
+				}
+				return {
+					content: "Samsung Galaxy S25 Ultra는 삼성의 최신 스마트폰입니다.",
+					model: "gpt-4o",
+					provider: "openai",
+					usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+					latency_ms: 100,
+					cost_usd: 0.001,
+				};
+			});
+
+			const probeDeps: AnalysisToolDeps = { ...mockDeps, chatLLM: probeChatLLM };
+			const state = createAnalysisToolState();
+			const handlers = createAnalysisToolHandlers(probeDeps, state);
+
+			await handlers.run_synthetic_probes({
+				site_name: "Samsung",
+				topics: ["스마트폰"],
+				products: ["Galaxy S25 Ultra"],
+			});
+
+			// The first chatLLM call is the probe query — it must have web_search: true
+			const probeQueryCalls = capturedRequests.filter((r) => r.json_mode !== true);
+			expect(probeQueryCalls.length).toBeGreaterThan(0);
+			for (const call of probeQueryCalls) {
+				expect(call.web_search).toBe(true);
+			}
+		});
 	});
 
 	describe("analyze_brand_message handler", () => {
