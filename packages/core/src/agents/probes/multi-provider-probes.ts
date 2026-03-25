@@ -94,6 +94,17 @@ export async function runMultiProviderProbes(
 	const providerChatLLMs: Record<string, ChatLLMFn> = {};
 	const providerErrors: Record<string, string> = {};
 	for (const provider of config.providers) {
+		// default_model이 available_models에 없으면 available_models[0]으로 보정
+		if (
+			provider.available_models.length > 0 &&
+			!provider.available_models.includes(provider.default_model)
+		) {
+			const fallbackModel = provider.available_models[0];
+			providerErrors[provider.provider_id] =
+				`경고: default_model "${provider.default_model}"이(가) available_models에 없음 → "${fallbackModel}"로 대체`;
+			provider.default_model = fallbackModel;
+		}
+
 		if (config.chatLLMOverrides?.[provider.provider_id]) {
 			providerChatLLMs[provider.provider_id] = config.chatLLMOverrides[provider.provider_id];
 		} else {

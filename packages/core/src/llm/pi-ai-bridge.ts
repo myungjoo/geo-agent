@@ -102,7 +102,7 @@ function getDefaultBaseUrl(provider: string): string {
 		case "anthropic":
 			return "https://api.anthropic.com";
 		case "google":
-			return "https://generativelanguage.googleapis.com";
+			return "https://generativelanguage.googleapis.com/v1beta";
 		default:
 			return "";
 	}
