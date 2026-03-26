@@ -19,6 +19,7 @@ export const LLMRequestSchema = z.object({
 	max_tokens: z.number().int().positive().optional(),
 	temperature: z.number().min(0).max(2).optional(),
 	json_mode: z.boolean().default(false),
+	/** 웹 검색 활성화 여부 — 프로바이더별 web_search 도구 주입에 사용 */
 	web_search: z.boolean().optional(),
 });
 export type LLMRequest = z.infer<typeof LLMRequestSchema>;
