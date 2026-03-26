@@ -278,6 +278,40 @@ describe("extractProductInfo", () => {
 		const result = extractProductInfo(data);
 		expect(result.specs_in_html.length).toBeGreaterThan(0);
 	});
+
+	it("does NOT use page title as product_name when no product signals exist (Bug 2 regression)", () => {
+		// Simulates samsung.com homepage: no Product schema, no specs, no prices
+		const data = makeCrawlData({
+			title: "Samsung 대한민국 | 모바일 | TV | 가전 | IT",
+			html: "<html><head><title>Samsung 대한민국 | 모바일 | TV | 가전 | IT</title></head><body><h1>Welcome</h1><p>Browse our products.</p></body></html>",
+			json_ld: [{ "@type": "WebSite", name: "Samsung Korea" }],
+		});
+		const result = extractProductInfo(data);
+		// product_name should be null when there are no product signals
+		expect(result.product_name).toBeNull();
+	});
+
+	it("uses page title as product_name when product signals (prices/specs) exist", () => {
+		// Page has prices extracted from HTML, so title fallback is acceptable
+		const data = makeCrawlData({
+			title: "Galaxy S25 Ultra",
+			html: '<html><body><h1>Galaxy S25 Ultra</h1><p>Price: $1,299.99</p><p>Camera: 200 MP</p></body></html>',
+			json_ld: [], // no Product schema
+		});
+		const result = extractProductInfo(data);
+		// title is used because there are price signals in HTML
+		expect(result.product_name).toBe("Galaxy S25 Ultra");
+		expect(result.prices.length).toBeGreaterThan(0);
+	});
+
+	it("prefers JSON-LD product name over page title", () => {
+		const data = makeCrawlData({
+			title: "Some Page Title",
+			json_ld: [{ "@type": "Product", name: "Widget Pro" }],
+		});
+		const result = extractProductInfo(data);
+		expect(result.product_name).toBe("Widget Pro");
+	});
 });
 
 // ── extractMarketingClaims ──────────────────────────────

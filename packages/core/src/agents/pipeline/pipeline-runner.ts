@@ -987,6 +987,7 @@ Rules: Reference the actual evidence provided. Do NOT invent findings. Write in 
  */
 function convertMultiToSingleProbeResult(multi: MultiProviderProbeResult): SyntheticProbeRunResult {
 	const ks = multi.comparison.knowledge_summary;
+	const perProbeAcc = multi.comparison.per_probe_accuracy;
 	const probes: SyntheticProbeRunResult["probes"] = [];
 
 	for (const kr of multi.knowledge_results) {
@@ -995,7 +996,9 @@ function convertMultiToSingleProbeResult(multi: MultiProviderProbeResult): Synth
 
 		for (const p of kr.probes) {
 			const cited = providerCitRate > 0.3;
-			const accuracy = providerAccRate;
+			// Use per-probe accuracy if available, otherwise fall back to provider average
+			const probeKey = `${kr.provider_id}/${p.probe_id}`;
+			const accuracy = perProbeAcc[probeKey] ?? providerAccRate;
 			let verdict: "PASS" | "PARTIAL" | "FAIL";
 			if (cited && accuracy >= 0.5) verdict = "PASS";
 			else if (cited || accuracy >= 0.3) verdict = "PARTIAL";

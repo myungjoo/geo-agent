@@ -123,7 +123,7 @@ describe("LLMProviderSettingsSchema", () => {
 		const settings = LLMProviderSettingsSchema.parse({
 			provider_id: "google",
 			display_name: "Google AI",
-			default_model: "gemini-2.0-flash",
+			default_model: "gemini-2.5-flash",
 			auth_method: "oauth",
 		});
 		expect(settings.auth_method).toBe("oauth");

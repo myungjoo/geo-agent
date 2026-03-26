@@ -192,7 +192,7 @@ function googleMockLLM(): ChatLLMFn {
 				`I don't have specific pricing information. ` +
 				"The phone has advanced camera capabilities.",
 			"google",
-			"gemini-2.0-flash",
+			"gemini-2.5-flash",
 		),
 	);
 }
@@ -333,7 +333,7 @@ describe("E2E Mock Integration — Multi-Provider 3-Layer Probes", () => {
 				providers: [
 					makeProvider("openai", "gpt-4o"),
 					makeProvider("anthropic", "claude-sonnet-4-6"),
-					makeProvider("google", "gemini-2.0-flash"),
+					makeProvider("google", "gemini-2.5-flash"),
 				],
 				judgeLLM: realisticJudgeLLM(),
 				chatLLMOverrides: {
@@ -450,7 +450,7 @@ describe("E2E Mock Integration — Multi-Provider 3-Layer Probes", () => {
 				providers: [
 					makeProvider("openai", "gpt-4o"),
 					makeProvider("anthropic", "claude-sonnet-4-6"),
-					makeProvider("google", "gemini-2.0-flash"),
+					makeProvider("google", "gemini-2.5-flash"),
 					makeProvider("meta", "llama-3.3-70b"),
 				],
 				judgeLLM: realisticJudgeLLM(),
@@ -821,6 +821,59 @@ describe("E2E Mock Integration — Multi-Provider 3-Layer Probes", () => {
 			});
 
 			expect(Object.keys(result.provider_errors)).toHaveLength(0);
+		});
+	});
+
+	describe("per_probe_accuracy — 프로브별 개별 accuracy (Bug 1 회귀 방지)", () => {
+		it("per_probe_accuracy should differentiate probes, not assign identical values", async () => {
+			const result = await runMultiProviderProbes({
+				context: realisticContext,
+				crawlData: realisticCrawlData,
+				evalData: realisticEvalData,
+				providers: [makeProvider("openai", "gpt-4o")],
+				judgeLLM: realisticJudgeLLM(),
+				chatLLMOverrides: { openai: openaiMockLLM() },
+				delayMs: 0,
+			});
+
+			const perProbe = result.comparison.per_probe_accuracy;
+			expect(Object.keys(perProbe).length).toBeGreaterThan(0);
+
+			// All keys should be in the format "provider_id/probe_id"
+			for (const key of Object.keys(perProbe)) {
+				expect(key).toMatch(/^[^/]+\/P-\d+$/);
+			}
+
+			// Values should be between 0 and 1
+			for (const val of Object.values(perProbe)) {
+				expect(val).toBeGreaterThanOrEqual(0);
+				expect(val).toBeLessThanOrEqual(1);
+			}
+		});
+
+		it("per_probe_accuracy should exist for each provider when multiple providers used", async () => {
+			const result = await runMultiProviderProbes({
+				context: realisticContext,
+				crawlData: realisticCrawlData,
+				evalData: realisticEvalData,
+				providers: [
+					makeProvider("openai", "gpt-4o"),
+					makeProvider("anthropic", "claude-sonnet-4-6"),
+				],
+				judgeLLM: realisticJudgeLLM(),
+				chatLLMOverrides: {
+					openai: openaiMockLLM(),
+					anthropic: anthropicMockLLM(),
+				},
+				delayMs: 0,
+			});
+
+			const perProbe = result.comparison.per_probe_accuracy;
+			const openaiKeys = Object.keys(perProbe).filter((k) => k.startsWith("openai/"));
+			const anthropicKeys = Object.keys(perProbe).filter((k) => k.startsWith("anthropic/"));
+
+			expect(openaiKeys.length).toBeGreaterThan(0);
+			expect(anthropicKeys.length).toBeGreaterThan(0);
 		});
 	});
 

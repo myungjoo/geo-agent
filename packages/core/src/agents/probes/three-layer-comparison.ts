@@ -30,6 +30,12 @@ export interface ThreeLayerResult {
 	knowledge_summary: LayerSummary;
 	/** L0 vs L1 비교 요약 (web search 결과가 있을 때만) */
 	web_search_summary: LayerSummary | null;
+	/**
+	 * 프로브별 accuracy 점수.
+	 * Key: `${provider_id}/${probe_id}` → accuracy score (0~1).
+	 * convertMultiToSingleProbeResult가 개별 프로브에 고유 accuracy를 부여하기 위해 사용.
+	 */
+	per_probe_accuracy: Record<string, number>;
 }
 
 export interface LayerSummary {
@@ -209,12 +215,17 @@ Respond with JSON: { "citations": { "provider_id": { "cited_count": N, "total": 
 
 // ── Three-Layer Comparison ──────────────────────────────────
 
+interface BestResponseMatch {
+	response: string;
+	probe_id: string;
+}
+
 /**
  * Find the best matching probe response for a fact from a provider's results.
  * Simple heuristic: pick the response that contains the most keywords from the fact.
  */
-function findBestResponse(fact: Fact, probes: SingleProbeResult[]): string {
-	if (probes.length === 0) return "";
+function findBestResponse(fact: Fact, probes: SingleProbeResult[]): BestResponseMatch {
+	if (probes.length === 0) return { response: "", probe_id: "" };
 
 	const keywords = fact.expected_value
 		.toLowerCase()
@@ -222,7 +233,7 @@ function findBestResponse(fact: Fact, probes: SingleProbeResult[]): string {
 		.filter((w) => w.length > 2);
 
 	if (keywords.length === 0) {
-		return probes[0].response;
+		return { response: probes[0].response, probe_id: probes[0].probe_id };
 	}
 
 	let best = probes[0];
@@ -237,7 +248,7 @@ function findBestResponse(fact: Fact, probes: SingleProbeResult[]): string {
 		}
 	}
 
-	return best.response;
+	return { response: best.response, probe_id: best.probe_id };
 }
 
 /**
@@ -256,18 +267,37 @@ export async function compareThreeLayers(
 ): Promise<ThreeLayerResult> {
 	// ── Step 1: Judge facts (L0 vs L2) ──────────────────────
 	const infoItems: InfoRecognitionItem[] = [];
+	// Track per-probe accuracy: accumulate accuracy scores per (provider, probe_id)
+	const probeAccAcc: Record<string, { sum: number; count: number }> = {};
 
 	for (const fact of factSet.facts) {
 		// For each fact, find best matching response from each provider
-		const providerResponses = knowledgeResults.map((pr) => ({
-			provider_id: pr.provider_id,
-			response: findBestResponse(
+		const matchedProbes: Array<{ provider_id: string; probe_id: string }> = [];
+		const providerResponses = knowledgeResults.map((pr) => {
+			const match = findBestResponse(
 				fact,
 				pr.probes.filter((p) => !p.error),
-			),
-		}));
+			);
+			matchedProbes.push({ provider_id: pr.provider_id, probe_id: match.probe_id });
+			return {
+				provider_id: pr.provider_id,
+				response: match.response,
+			};
+		});
 
 		const judgments = await judgeFact(fact, providerResponses, judgeLLM);
+
+		// Record per-probe accuracy from fact judgments
+		for (let ji = 0; ji < judgments.length; ji++) {
+			const j = judgments[ji];
+			const mp = matchedProbes[ji];
+			if (mp.probe_id) {
+				const key = `${j.provider_id}/${mp.probe_id}`;
+				if (!probeAccAcc[key]) probeAccAcc[key] = { sum: 0, count: 0 };
+				probeAccAcc[key].sum += ACCURACY_SCORES[j.accuracy];
+				probeAccAcc[key].count += 1;
+			}
+		}
 
 		const llmResults: InfoRecognitionPerLLM[] = judgments.map((j) => ({
 			llm_service: j.provider_id,
@@ -366,11 +396,18 @@ export async function compareThreeLayers(
 		};
 	}
 
+	// ── Build per-probe accuracy map ───────────────────────
+	const perProbeAccuracy: Record<string, number> = {};
+	for (const [key, acc] of Object.entries(probeAccAcc)) {
+		perProbeAccuracy[key] = acc.count > 0 ? Math.round((acc.sum / acc.count) * 100) / 100 : 0;
+	}
+
 	return {
 		info_recognition_items: infoItems,
 		llm_breakdown: llmBreakdown,
 		knowledge_summary: knowledgeSummary,
 		web_search_summary: webSearchSummary,
+		per_probe_accuracy: perProbeAccuracy,
 	};
 }
 

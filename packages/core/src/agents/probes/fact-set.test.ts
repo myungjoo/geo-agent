@@ -301,6 +301,77 @@ describe("fact-set", () => {
 		});
 	});
 
+	describe("buildFactSet — page title as product_name regression (Bug 2)", () => {
+		it("does NOT create product facts from page titles without product signals", () => {
+			// Simulates samsung.com: pages with no Product schema, no prices, no specs
+			const evalData: FactExtractionInput = {
+				product_info: [
+					{
+						page_url: "https://samsung.com/sec/",
+						filename: "sec.html",
+						info: {
+							product_name: null, // no product signals → null
+							prices: [],
+							specs_in_html: [],
+							specs_in_schema: [],
+							has_aggregate_rating: false,
+							rating_value: null,
+							review_count: null,
+						},
+					},
+					{
+						page_url: "https://samsung.com/sec/sustainability/",
+						filename: "sustainability.html",
+						info: {
+							product_name: null,
+							prices: [],
+							specs_in_html: [],
+							specs_in_schema: [],
+							has_aggregate_rating: false,
+							rating_value: null,
+							review_count: null,
+						},
+					},
+				],
+				marketing_claims: [],
+			};
+
+			const result = buildFactSet(makeCrawlData(), evalData);
+
+			// No PRODUCT_DETAIL facts from page titles
+			const productFacts = result.facts.filter((f) => f.category === "PRODUCT_DETAIL");
+			expect(productFacts).toHaveLength(0);
+		});
+
+		it("creates product facts when product_name is a real product", () => {
+			const evalData: FactExtractionInput = {
+				product_info: [
+					{
+						page_url: "https://samsung.com/galaxy-s25/",
+						filename: "galaxy-s25.html",
+						info: {
+							product_name: "Galaxy S25 Ultra",
+							prices: ["$1,299.99"],
+							specs_in_html: ["200 MP"],
+							specs_in_schema: [],
+							has_aggregate_rating: false,
+							rating_value: null,
+							review_count: null,
+						},
+					},
+				],
+				marketing_claims: [],
+			};
+
+			const result = buildFactSet(makeCrawlData(), evalData);
+
+			const productFacts = result.facts.filter(
+				(f) => f.category === "PRODUCT_DETAIL" && f.expected_value === "Galaxy S25 Ultra",
+			);
+			expect(productFacts).toHaveLength(1);
+		});
+	});
+
 	describe("buildFactSet — fact_id uniqueness", () => {
 		it("generates unique fact_ids", () => {
 			const crawl = makeCrawlData({

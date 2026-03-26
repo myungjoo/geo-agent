@@ -490,8 +490,14 @@ export function extractProductInfo(crawlData: CrawlData): ExtractedProductInfo {
 		}
 	}
 
+	// Only fall back to page title as product_name if the page has product signals
+	// (prices, specs, ratings). Without signals, page titles like
+	// "Samsung 대한민국 | 모바일 | TV | 가전 | IT" pollute the FactSet.
+	const hasProductSignals =
+		prices.length > 0 || specsInHtml.length > 0 || specsInSchema.length > 0 || hasAggregateRating;
+
 	return {
-		product_name: productName || crawlData.title || null,
+		product_name: productName || (hasProductSignals ? crawlData.title : null) || null,
 		prices: [...new Set(prices)].slice(0, 10),
 		specs_in_html: [...new Set(specsInHtml)].slice(0, 15),
 		specs_in_schema: specsInSchema,
