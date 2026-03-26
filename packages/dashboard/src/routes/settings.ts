@@ -2,6 +2,8 @@ import {
 	type AgentId,
 	AgentIdSchema,
 	LLMProviderIdSchema,
+	PromptCategorySchema,
+	PromptConfigManager,
 	ProviderConfigManager,
 	loadSettings,
 } from "@geo-agent/core";
@@ -94,6 +96,66 @@ settingsRouter.get("/agents/prompts/:agent_id/default", (c) => {
 		return c.json({ error: "Invalid agent ID" }, 400);
 	}
 	return c.json({ ...defaults, last_modified: "default" });
+});
+
+// ── Unified Prompt Configs (All Categories) ──────────────
+
+// GET /api/settings/prompt-configs — All configs grouped by category
+settingsRouter.get("/prompt-configs", (c) => {
+	const manager = new PromptConfigManager(getWorkspaceDir());
+	return c.json(manager.loadGrouped());
+});
+
+// GET /api/settings/prompt-configs/:id — Single config
+settingsRouter.get("/prompt-configs/:id{.+}", (c) => {
+	const id = c.req.param("id");
+	try {
+		const manager = new PromptConfigManager(getWorkspaceDir());
+		return c.json(manager.load(id));
+	} catch {
+		return c.json({ error: `Unknown prompt config ID: ${id}` }, 400);
+	}
+});
+
+// PUT /api/settings/prompt-configs/:id — Update prompt config
+settingsRouter.put("/prompt-configs/:id{.+}", async (c) => {
+	const id = c.req.param("id");
+	try {
+		const body = await c.req.json();
+		const manager = new PromptConfigManager(getWorkspaceDir());
+		const updated = manager.save({ ...body, id });
+		return c.json(updated);
+	} catch (err) {
+		return c.json({ error: (err as Error).message }, 400);
+	}
+});
+
+// POST /api/settings/prompt-configs/:id/reset — Reset single
+settingsRouter.post("/prompt-configs/:id{.+}/reset", (c) => {
+	const id = c.req.param("id");
+	try {
+		const manager = new PromptConfigManager(getWorkspaceDir());
+		return c.json(manager.reset(id));
+	} catch {
+		return c.json({ error: `Unknown prompt config ID: ${id}` }, 400);
+	}
+});
+
+// POST /api/settings/prompt-configs-reset-category/:category — Reset category
+settingsRouter.post("/prompt-configs-reset-category/:category", (c) => {
+	const category = c.req.param("category");
+	const parsed = PromptCategorySchema.safeParse(category);
+	if (!parsed.success) {
+		return c.json({ error: "Invalid category" }, 400);
+	}
+	const manager = new PromptConfigManager(getWorkspaceDir());
+	return c.json(manager.resetCategory(parsed.data));
+});
+
+// POST /api/settings/prompt-configs-reset-all — Reset all
+settingsRouter.post("/prompt-configs-reset-all", (c) => {
+	const manager = new PromptConfigManager(getWorkspaceDir());
+	return c.json(manager.resetAll());
 });
 
 // ── LLM Providers ─────────────────────────────────────────

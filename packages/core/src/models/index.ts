@@ -27,6 +27,7 @@ export * from "./semantic-change-record.js";
 
 // Agent Configuration
 export * from "./agent-prompt-config.js";
+export * from "./prompt-config.js";
 
 // Pipeline & Error Handling
 export * from "./pipeline-state.js";

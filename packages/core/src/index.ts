@@ -42,3 +42,7 @@ export * from "./agents/index.js";
 // Evaluation Templates
 export * from "./prompts/evaluation-templates/index.js";
 export * from "./prompts/template-engine.js";
+
+// Prompt Config
+export { PromptConfigManager, resolvePrompt } from "./prompts/prompt-config-manager.js";
+export { getPromptDefaults } from "./prompts/prompt-defaults.js";

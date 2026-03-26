@@ -12,6 +12,7 @@
  * P-08: 문제 해결 → 솔루션으로 Target 언급 여부
  */
 import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
+import { PromptConfigManager, resolvePrompt } from "../../prompts/prompt-config-manager.js";
 
 // ── Types ───────────────────────────────────────────────────
 
@@ -70,79 +71,110 @@ export interface SyntheticProbeRunResult {
 
 // ── Probe Definitions ────────────────────────────────────────
 
-const PROBE_DEFINITIONS: ProbeDefinition[] = [
+/** Resolve {{QUERY_SUBJECT}} / {{BRAND_OR_SITE}} from context */
+function resolveProbeSubject(ctx: ProbeContext, probeId: string): string {
+	switch (probeId) {
+		case "P-01":
+			return ctx.products.length > 0 ? ctx.products[0] : `${ctx.site_name}의 주요 제품이나 서비스`;
+		case "P-02":
+			return ctx.products.length > 0 ? ctx.products[0] : `${ctx.site_name}의 주요 제품 가격대`;
+		case "P-03":
+			return ctx.products.length > 0 ? ctx.products[0] : ctx.site_name;
+		case "P-05":
+			return ctx.topics.length > 0 ? ctx.topics[0] : `${ctx.brand || ctx.site_name} 분야`;
+		case "P-06":
+			return ctx.products.length > 0 ? ctx.products[0] : `${ctx.site_name}에 대한 주요 사실`;
+		case "P-08":
+			return ctx.topics.length > 0
+				? ctx.topics[0]
+				: `${ctx.brand || ctx.site_name}이 제공하는 서비스`;
+		default:
+			return ctx.products.length > 0 ? ctx.products[0] : ctx.site_name;
+	}
+}
+
+const PROBE_CATEGORIES: Record<string, "accuracy" | "citation" | "recognition" | "recommendation"> =
 	{
-		id: "P-01",
-		name: "제품/서비스 스펙",
-		category: "accuracy",
-		generateQuery: (ctx) =>
-			ctx.products.length > 0
-				? `${ctx.products[0]}의 주요 스펙과 특징을 알려주세요.`
-				: `${ctx.site_name}의 주요 제품이나 서비스의 특징을 알려주세요.`,
-	},
-	{
-		id: "P-02",
-		name: "가격 정보",
-		category: "accuracy",
-		generateQuery: (ctx) =>
-			ctx.products.length > 0
-				? `${ctx.products[0]}의 가격은 얼마인가요?`
-				: `${ctx.site_name}의 주요 제품 가격대를 알려주세요.`,
-	},
-	{
-		id: "P-03",
-		name: "비교 분석",
-		category: "citation",
-		generateQuery: (ctx) =>
-			ctx.products.length > 0
-				? `${ctx.products[0]}을 경쟁 제품과 비교해주세요.`
-				: `${ctx.site_name}을 같은 분야의 경쟁사와 비교해주세요.`,
-	},
-	{
-		id: "P-04",
-		name: "브랜드 인식",
-		category: "recognition",
-		generateQuery: (ctx) =>
-			`${ctx.brand || ctx.site_name}에 대해 알려주세요. 어떤 회사이고 무엇으로 유명한가요?`,
-	},
-	{
-		id: "P-05",
-		name: "추천 질의",
-		category: "recommendation",
-		generateQuery: (ctx) => {
-			if (ctx.topics.length > 0) {
-				return `${ctx.topics[0]} 관련 좋은 제품이나 서비스를 추천해주세요.`;
+		"P-01": "accuracy",
+		"P-02": "accuracy",
+		"P-03": "citation",
+		"P-04": "recognition",
+		"P-05": "recommendation",
+		"P-06": "accuracy",
+		"P-07": "citation",
+		"P-08": "recommendation",
+	};
+
+const PROBE_NAMES: Record<string, string> = {
+	"P-01": "제품/서비스 스펙",
+	"P-02": "가격 정보",
+	"P-03": "비교 분석",
+	"P-04": "브랜드 인식",
+	"P-05": "추천 질의",
+	"P-06": "팩트 검증",
+	"P-07": "최신 정보",
+	"P-08": "문제 해결",
+};
+
+/** Build probe definitions, optionally loading custom templates from workspace */
+export function getProbeDefinitions(workspaceDir?: string): ProbeDefinition[] {
+	let configManager: PromptConfigManager | null = null;
+	if (workspaceDir) {
+		configManager = new PromptConfigManager(workspaceDir);
+	}
+
+	const probeIds = ["P-01", "P-02", "P-03", "P-04", "P-05", "P-06", "P-07", "P-08"];
+
+	return probeIds.map((probeId) => {
+		let template: string | null = null;
+		if (configManager) {
+			try {
+				const config = configManager.load(`probe.${probeId}`);
+				if (config.is_customized) {
+					template = config.prompt_template;
+				}
+			} catch {
+				/* use default */
 			}
-			return `${ctx.brand || ctx.site_name} 분야에서 추천할 만한 것을 알려주세요.`;
-		},
-	},
-	{
-		id: "P-06",
-		name: "팩트 검증",
-		category: "accuracy",
-		generateQuery: (ctx) =>
-			ctx.products.length > 0
-				? `${ctx.products[0]}의 사양 정보가 정확한지 확인해주세요.`
-				: `${ctx.site_name}에 대한 주요 사실을 알려주세요.`,
-	},
-	{
-		id: "P-07",
-		name: "최신 정보",
-		category: "citation",
-		generateQuery: (ctx) => `${ctx.brand || ctx.site_name}의 최신 소식이나 새로운 발표가 있나요?`,
-	},
-	{
-		id: "P-08",
-		name: "문제 해결",
-		category: "recommendation",
-		generateQuery: (ctx) => {
-			if (ctx.topics.length > 0) {
-				return `${ctx.topics[0]} 관련 문제를 해결하려면 어떻게 해야 하나요?`;
-			}
-			return `${ctx.brand || ctx.site_name}이 제공하는 서비스로 어떤 문제를 해결할 수 있나요?`;
-		},
-	},
-];
+		}
+
+		return {
+			id: probeId,
+			name: PROBE_NAMES[probeId],
+			category: PROBE_CATEGORIES[probeId],
+			generateQuery: (ctx: ProbeContext) => {
+				if (template) {
+					return resolvePrompt(template, {
+						"{{QUERY_SUBJECT}}": resolveProbeSubject(ctx, probeId),
+						"{{BRAND_OR_SITE}}": ctx.brand || ctx.site_name,
+					});
+				}
+				// Default hardcoded (backward compat when no workspaceDir)
+				return (
+					resolveProbeSubject(ctx, probeId) +
+					(probeId === "P-01"
+						? "의 주요 스펙과 특징을 알려주세요."
+						: probeId === "P-02"
+							? "의 가격은 얼마인가요?"
+							: probeId === "P-03"
+								? "을 경쟁 제품과 비교해주세요."
+								: probeId === "P-04"
+									? `${ctx.brand || ctx.site_name}에 대해 알려주세요. 어떤 회사이고 무엇으로 유명한가요?`
+									: probeId === "P-05"
+										? " 관련 좋은 제품이나 서비스를 추천해주세요."
+										: probeId === "P-06"
+											? "의 사양 정보가 정확한지 확인해주세요."
+											: probeId === "P-07"
+												? `${ctx.brand || ctx.site_name}의 최신 소식이나 새로운 발표가 있나요?`
+												: " 관련 문제를 해결하려면 어떻게 해야 하나요?")
+				);
+			},
+		};
+	});
+}
+
+/** Default probe definitions (no workspace customization) */
+const PROBE_DEFINITIONS: ProbeDefinition[] = getProbeDefinitions();
 
 // ── Citation/Accuracy Analysis (LLM-based, 4-D) ─────────────
 
@@ -157,24 +189,40 @@ async function checkCitation(
 	siteName: string,
 	brand: string,
 	chatLLM: (req: LLMRequest) => Promise<LLMResponse>,
+	workspaceDir?: string,
 ): Promise<boolean> {
+	let promptText: string;
+	let sysInstruction: string;
+
+	if (workspaceDir) {
+		try {
+			const mgr = new PromptConfigManager(workspaceDir);
+			const config = mgr.load("judge.citation_check");
+			promptText = resolvePrompt(config.prompt_template, {
+				"{{SITE_URL}}": siteUrl,
+				"{{SITE_NAME}}": siteName,
+				"{{BRAND}}": brand,
+				"{{RESPONSE}}": response.slice(0, 1500),
+			});
+			sysInstruction = config.system_instruction;
+		} catch {
+			promptText = "";
+			sysInstruction = "";
+		}
+	} else {
+		promptText = "";
+		sysInstruction = "";
+	}
+
+	if (!promptText) {
+		promptText = `Analyze this AI-generated response and determine if it cites, references, or mentions the target website.\n\nTarget website:\n- URL: ${siteUrl}\n- Site name: ${siteName}\n- Brand: ${brand}\n\nAI response to analyze:\n"""\n${response.slice(0, 1500)}\n"""\n\nDoes the response cite, reference, or mention the target website (including indirect references, paraphrases, or URL variants)?\nRespond with JSON: { "cited": true/false, "reasoning": "brief explanation" }`;
+		sysInstruction =
+			"You are a citation analysis expert. Determine if a given text references a specific website. Look for: direct URL mentions, domain references, brand/site name mentions, indirect references, and paraphrased content attribution. Be thorough but accurate. Respond with JSON only.";
+	}
+
 	const judgeResponse = await chatLLM({
-		prompt: `Analyze this AI-generated response and determine if it cites, references, or mentions the target website.
-
-Target website:
-- URL: ${siteUrl}
-- Site name: ${siteName}
-- Brand: ${brand}
-
-AI response to analyze:
-"""
-${response.slice(0, 1500)}
-"""
-
-Does the response cite, reference, or mention the target website (including indirect references, paraphrases, or URL variants)?
-Respond with JSON: { "cited": true/false, "reasoning": "brief explanation" }`,
-		system_instruction:
-			"You are a citation analysis expert. Determine if a given text references a specific website. Look for: direct URL mentions, domain references, brand/site name mentions, indirect references, and paraphrased content attribution. Be thorough but accurate. Respond with JSON only.",
+		prompt: promptText,
+		system_instruction: sysInstruction,
 		json_mode: true,
 		temperature: 0.1,
 		max_tokens: 200,
@@ -202,6 +250,7 @@ async function estimateAccuracy(
 	context: ProbeContext,
 	cited: boolean,
 	chatLLM: (req: LLMRequest) => Promise<LLMResponse>,
+	workspaceDir?: string,
 ): Promise<number> {
 	const contextInfo = [
 		context.topics.length > 0 ? `Topics: ${context.topics.join(", ")}` : null,
@@ -213,27 +262,37 @@ async function estimateAccuracy(
 		.filter(Boolean)
 		.join("\n");
 
+	let promptText: string;
+	let sysInstruction: string;
+
+	if (workspaceDir) {
+		try {
+			const mgr = new PromptConfigManager(workspaceDir);
+			const config = mgr.load("judge.accuracy_estimation");
+			promptText = resolvePrompt(config.prompt_template, {
+				"{{CONTEXT_INFO}}": contextInfo,
+				"{{CITED}}": cited ? "Yes" : "No",
+				"{{RESPONSE}}": response.slice(0, 1500),
+			});
+			sysInstruction = config.system_instruction;
+		} catch {
+			promptText = "";
+			sysInstruction = "";
+		}
+	} else {
+		promptText = "";
+		sysInstruction = "";
+	}
+
+	if (!promptText) {
+		promptText = `Evaluate the accuracy of this AI-generated response against the known facts about the target site.\n\nKnown facts about the target:\n${contextInfo}\nWas the target cited in the response: ${cited ? "Yes" : "No"}\n\nAI response to evaluate:\n"""\n${response.slice(0, 1500)}\n"""\n\nRate the accuracy from 0.0 to 1.0 based on:\n- How well the response reflects the actual products, topics, and prices\n- Whether product names, specs, or brand information are correctly stated\n- Whether the response contains relevant and factual information about the target\n- Deduct for fabricated or incorrect information\n\nRespond with JSON: { "accuracy": 0.0-1.0, "reasoning": "brief explanation" }`;
+		sysInstruction =
+			"You are an accuracy evaluation expert. Rate how accurately an AI response reflects known facts about a website. Be strict: fabricated details score low, verified facts score high. Respond with JSON only.";
+	}
+
 	const judgeResponse = await chatLLM({
-		prompt: `Evaluate the accuracy of this AI-generated response against the known facts about the target site.
-
-Known facts about the target:
-${contextInfo}
-Was the target cited in the response: ${cited ? "Yes" : "No"}
-
-AI response to evaluate:
-"""
-${response.slice(0, 1500)}
-"""
-
-Rate the accuracy from 0.0 to 1.0 based on:
-- How well the response reflects the actual products, topics, and prices
-- Whether product names, specs, or brand information are correctly stated
-- Whether the response contains relevant and factual information about the target
-- Deduct for fabricated or incorrect information
-
-Respond with JSON: { "accuracy": 0.0-1.0, "reasoning": "brief explanation" }`,
-		system_instruction:
-			"You are an accuracy evaluation expert. Rate how accurately an AI response reflects known facts about a website. Be strict: fabricated details score low, verified facts score high. Respond with JSON only.",
+		prompt: promptText,
+		system_instruction: sysInstruction,
 		json_mode: true,
 		temperature: 0.1,
 		max_tokens: 200,

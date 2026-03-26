@@ -369,6 +369,22 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 .eval-tab-btn:hover { color: var(--text); background: var(--surface2); }
 .eval-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
 /* Collapsible sections */
+/* Prompt Config: category group */
+.pc-category { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; }
+.pc-category-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; cursor: pointer; font-size: 14px; font-weight: 600; background: var(--surface2); border-radius: var(--radius); list-style: none; }
+.pc-category-header::-webkit-details-marker { display: none; }
+.pc-category-header > span::before { content: '\25B6'; font-size: 10px; margin-right: 8px; display: inline-block; transition: transform 0.2s; }
+.pc-category[open] > .pc-category-header > span::before { transform: rotate(90deg); }
+.pc-category-body { padding: 4px 8px 8px 8px; }
+/* Prompt Config: individual item */
+.pc-item { margin-bottom: 2px; border-radius: var(--radius); }
+.pc-item > summary { display: flex; align-items: center; gap: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; border-radius: var(--radius); list-style: none; }
+.pc-item > summary::-webkit-details-marker { display: none; }
+.pc-item > summary:hover { background: var(--surface2); }
+.pc-item-name { flex: 1; font-weight: 500; }
+.pc-item-badges { display: flex; align-items: center; gap: 4px; }
+.pc-item-preview { padding: 4px 12px 8px 12px; font-size: 11px; color: var(--text-muted); font-family: monospace; white-space: pre-wrap; max-height: 80px; overflow: hidden; line-height: 1.4; }
+
 details.collapsible { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; }
 details.collapsible > summary { padding: 12px 16px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-muted); background: var(--surface2); border-radius: var(--radius); list-style: none; display: flex; align-items: center; gap: 8px; }
 details.collapsible > summary::before { content: '\25B6'; font-size: 10px; transition: transform 0.2s; }
@@ -407,7 +423,7 @@ details.collapsible > .collapsible-content { padding: 16px; }
 <div class="nav">
 	<button class="active" data-tab="targets">Targets</button>
 	<button data-tab="pipelines">Pipelines</button>
-	<button data-tab="prompts">Agent Prompts</button>
+	<button data-tab="prompts">Prompts</button>
 	<button data-tab="evaluation">Evaluation</button>
 	<button data-tab="llm">LLM Providers</button>
 </div>
@@ -432,13 +448,13 @@ details.collapsible > .collapsible-content { padding: 16px; }
 		<div id="pipelinesContent"></div>
 	</div>
 
-	<!-- Agent Prompts Tab -->
+	<!-- All Prompts & Templates Tab -->
 	<div id="tab-prompts" class="hidden">
 		<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-			<h2 style="font-size:18px;">Agent Prompts</h2>
-			<button class="btn btn-ghost" onclick="resetAllPrompts()">Reset All</button>
+			<h2 style="font-size:18px;">All Prompts & Templates</h2>
+			<button class="btn btn-ghost" onclick="resetAllPromptConfigs()">Reset All</button>
 		</div>
-		<div id="promptsContent"></div>
+		<div id="promptConfigsContent"></div>
 	</div>
 
 	<!-- Evaluation Tab -->
@@ -514,7 +530,7 @@ details.collapsible > .collapsible-content { padding: 16px; }
 	</div>
 </div>
 
-<!-- Edit Prompt Modal -->
+<!-- Edit Prompt Modal (legacy) -->
 <div id="promptModal" class="modal-overlay hidden">
 	<div class="modal">
 		<h2 id="promptModalTitle">Edit Prompt</h2>
@@ -527,6 +543,31 @@ details.collapsible > .collapsible-content { padding: 16px; }
 			<button class="btn btn-ghost" onclick="closeModal('promptModal')">Cancel</button>
 			<button class="btn btn-danger" onclick="resetPrompt()" style="margin-right:auto;">Reset to Default</button>
 			<button class="btn btn-primary" onclick="savePrompt()">Save</button>
+		</div>
+	</div>
+</div>
+
+<!-- Edit Prompt Config Modal (unified) -->
+<div id="pcModal" class="modal-overlay hidden">
+	<div class="modal" style="max-width:820px;width:90vw;">
+		<h2 id="pcModalTitle" style="font-size:16px;">Edit Prompt</h2>
+		<input type="hidden" id="pcEditId">
+		<div class="form-group">
+			<label style="font-weight:600;">Prompt Template</label>
+			<textarea id="pcPromptTemplate" rows="14" style="font-family:monospace;font-size:12px;"></textarea>
+		</div>
+		<div class="form-group">
+			<label style="font-weight:600;">System Instruction</label>
+			<textarea id="pcSystemInstruction" rows="6" style="font-family:monospace;font-size:12px;"></textarea>
+		</div>
+		<details style="margin-bottom:12px;">
+			<summary style="cursor:pointer;font-size:12px;color:var(--text-muted);font-weight:600;">Template Variables Reference</summary>
+			<div id="pcVarsRef" style="font-size:11px;padding:8px;background:var(--surface2);border-radius:var(--radius);margin-top:4px;max-height:120px;overflow:auto;"></div>
+		</details>
+		<div class="actions">
+			<button class="btn btn-ghost" onclick="closeModal('pcModal')">Cancel</button>
+			<button class="btn btn-danger" onclick="resetPromptConfig()" style="margin-right:auto;">Reset to Default</button>
+			<button class="btn btn-primary" onclick="savePromptConfig()">Save</button>
 		</div>
 	</div>
 </div>
@@ -569,6 +610,7 @@ details.collapsible > .collapsible-content { padding: 16px; }
 const API = window.location.origin;
 let targets = [];
 let prompts = [];
+let promptConfigGroups = [];
 let providers = [];
 
 // ── Redeploy ─────────────────────────────────────────
@@ -602,7 +644,7 @@ function switchTab(tabName) {
 	window.location.hash = tabName;
 	if (tabName === 'targets') loadTargets();
 	if (tabName === 'pipelines') loadPipelines();
-	if (tabName === 'prompts') loadPrompts();
+	if (tabName === 'prompts') loadPromptConfigs();
 	if (tabName === 'llm') loadLLMProviders();
 	if (tabName === 'evaluation') initEvalTab();
 }
@@ -3524,69 +3566,136 @@ function toggleLLMDetail(row) {
 	}
 }
 
-// ── Agent Prompts ────────────────────────────────────
+// ── Agent Prompts (legacy — kept for backward compat) ──
 async function loadPrompts() {
 	try {
 		prompts = await api('/api/settings/agents/prompts');
 		renderPrompts();
 	} catch (e) { toast(e.message, 'error'); }
 }
+function renderPrompts() {}
+function editPrompt(agentId) {}
+async function savePrompt() {}
+async function resetPrompt() {}
+async function resetAllPrompts() {}
 
-function renderPrompts() {
-	const container = document.getElementById('promptsContent');
-	container.innerHTML = prompts.map(p => `<div class="card">
-		<div style="display:flex;justify-content:space-between;align-items:center;">
-			<div>
-				<h2>${esc(p.agent_id)}</h2>
-				<div style="font-size:12px;color:var(--text-muted);">
-					${p.is_customized ? '<span class="badge badge-yellow">Customized</span>' : '<span class="badge badge-gray">Default</span>'}
-					${p.last_modified ? ' | Last modified: ' + new Date(p.last_modified).toLocaleString() : ''}
-				</div>
-			</div>
-			<button class="btn btn-ghost btn-sm" onclick="editPrompt('${p.agent_id}')">Edit</button>
-		</div>
-		<div style="margin-top:8px;font-size:12px;color:var(--text-muted);white-space:pre-wrap;max-height:60px;overflow:hidden;">${esc((p.system_instruction||'').slice(0,200))}...</div>
-	</div>`).join('');
-}
-
-function editPrompt(agentId) {
-	const p = prompts.find(x => x.agent_id === agentId);
-	if (!p) return;
-	document.getElementById('promptModalTitle').textContent = 'Edit: ' + agentId;
-	document.getElementById('promptEditId').value = agentId;
-	document.getElementById('promptText').value = p.system_instruction || '';
-	document.getElementById('promptModal').classList.remove('hidden');
-}
-
-async function savePrompt() {
-	const agentId = document.getElementById('promptEditId').value;
+// ── Unified Prompt Configs (All Categories) ──────────
+async function loadPromptConfigs() {
 	try {
-		await api('/api/settings/agents/prompts/' + agentId, {
+		promptConfigGroups = await api('/api/settings/prompt-configs');
+		renderPromptConfigs();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+function renderPromptConfigs() {
+	const container = document.getElementById('promptConfigsContent');
+	if (!container || !promptConfigGroups.length) {
+		if (container) container.innerHTML = '<div class="empty">No prompt configurations found.</div>';
+		return;
+	}
+
+	container.innerHTML = promptConfigGroups.map(group => {
+		const customCount = group.items.filter(i => i.is_customized).length;
+		const badge = customCount > 0 ? ' <span class="badge badge-yellow">' + customCount + ' customized</span>' : '';
+
+		const itemsHtml = group.items.map(item => {
+			const preview = esc((item.prompt_template || item.system_instruction || '').slice(0, 150));
+			const itemBadge = item.is_customized
+				? '<span class="badge badge-yellow">Customized</span>'
+				: '<span class="badge badge-gray">Default</span>';
+			const modified = item.last_modified && item.is_customized
+				? '<span style="font-size:11px;color:var(--text-muted);margin-left:8px;">' + new Date(item.last_modified).toLocaleString() + '</span>'
+				: '';
+
+			return '<details class="pc-item">' +
+				'<summary>' +
+					'<span class="pc-item-name">' + esc(item.display_name) + '</span>' +
+					'<span class="pc-item-badges">' + itemBadge + modified + '</span>' +
+					'<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();editPromptConfig(\'' + esc(item.id) + '\')">Edit</button>' +
+				'</summary>' +
+				'<div class="pc-item-preview">' + preview + (preview.length >= 150 ? '...' : '') + '</div>' +
+			'</details>';
+		}).join('');
+
+		return '<details class="pc-category" open>' +
+			'<summary class="pc-category-header">' +
+				'<span>' + group.icon + ' ' + esc(group.label) + ' <span class="badge badge-gray">' + group.items.length + '</span>' + badge + '</span>' +
+				'<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();resetPromptCategory(\'' + group.category + '\')">Reset Category</button>' +
+			'</summary>' +
+			'<div class="pc-category-body">' + itemsHtml + '</div>' +
+		'</details>';
+	}).join('');
+}
+
+function editPromptConfig(id) {
+	let item = null;
+	for (const g of promptConfigGroups) {
+		item = g.items.find(i => i.id === id);
+		if (item) break;
+	}
+	if (!item) return;
+
+	document.getElementById('pcModalTitle').textContent = item.display_name;
+	document.getElementById('pcEditId').value = id;
+	document.getElementById('pcPromptTemplate').value = item.prompt_template || '';
+	document.getElementById('pcSystemInstruction').value = item.system_instruction || '';
+
+	const varsRef = document.getElementById('pcVarsRef');
+	if (item.variables && item.variables.length > 0) {
+		varsRef.innerHTML = '<table style="width:100%;border-collapse:collapse;">' +
+			item.variables.map(v =>
+				'<tr><td style="padding:2px 8px;font-family:monospace;color:var(--primary);white-space:nowrap;">' + esc(v.name) + '</td>' +
+				'<td style="padding:2px 8px;">' + esc(v.description) + '</td></tr>'
+			).join('') + '</table>';
+	} else {
+		varsRef.innerHTML = '<span style="color:var(--text-muted);">No template variables</span>';
+	}
+
+	document.getElementById('pcModal').classList.remove('hidden');
+}
+
+async function savePromptConfig() {
+	const id = document.getElementById('pcEditId').value;
+	try {
+		await api('/api/settings/prompt-configs/' + id, {
 			method: 'PUT',
-			body: { system_instruction: document.getElementById('promptText').value },
+			body: {
+				prompt_template: document.getElementById('pcPromptTemplate').value,
+				system_instruction: document.getElementById('pcSystemInstruction').value,
+			},
 		});
 		toast('Prompt saved');
-		closeModal('promptModal');
-		loadPrompts();
+		closeModal('pcModal');
+		loadPromptConfigs();
 	} catch (e) { toast(e.message, 'error'); }
 }
 
-async function resetPrompt() {
-	const agentId = document.getElementById('promptEditId').value;
+async function resetPromptConfig() {
+	const id = document.getElementById('pcEditId').value;
+	if (!confirm('Reset this prompt to default?')) return;
 	try {
-		await api('/api/settings/agents/prompts/' + agentId + '/reset', { method: 'POST' });
+		await api('/api/settings/prompt-configs/' + id + '/reset', { method: 'POST' });
 		toast('Prompt reset to default');
-		closeModal('promptModal');
-		loadPrompts();
+		closeModal('pcModal');
+		loadPromptConfigs();
 	} catch (e) { toast(e.message, 'error'); }
 }
 
-async function resetAllPrompts() {
-	if (!confirm('Reset all agent prompts to defaults?')) return;
+async function resetPromptCategory(category) {
+	if (!confirm('Reset all prompts in this category to defaults?')) return;
 	try {
-		await api('/api/settings/agents/prompts/reset-all', { method: 'POST' });
+		await api('/api/settings/prompt-configs-reset-category/' + category, { method: 'POST' });
+		toast('Category reset to defaults');
+		loadPromptConfigs();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+async function resetAllPromptConfigs() {
+	if (!confirm('Reset ALL prompts and templates to defaults?')) return;
+	try {
+		await api('/api/settings/prompt-configs-reset-all', { method: 'POST' });
 		toast('All prompts reset');
-		loadPrompts();
+		loadPromptConfigs();
 	} catch (e) { toast(e.message, 'error'); }
 }
 
