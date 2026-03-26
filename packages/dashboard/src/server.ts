@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { exec, execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -90,6 +90,49 @@ app.post("/api/shutdown", (c) => {
 	// Schedule shutdown after response is sent
 	setTimeout(() => process.exit(0), 500);
 	return c.json({ status: "shutting_down" });
+});
+
+// ── Redeploy endpoint — pull latest code and restart ─────────
+let redeployInProgress = false;
+
+app.get("/api/redeploy/status", (c) => {
+	return c.json({ in_progress: redeployInProgress });
+});
+
+app.post("/api/redeploy", async (c) => {
+	if (redeployInProgress) {
+		return c.json({ error: "Redeploy already in progress" }, 409);
+	}
+	redeployInProgress = true;
+	broadcastSSE("redeploy", { status: "started" });
+
+	const repoDir = process.cwd();
+	const appName = process.env.PM2_APP_NAME || "geo-dashboard";
+
+	// Run deploy steps in background so the response returns immediately
+	const script = [
+		`cd "${repoDir}"`,
+		"git fetch origin main",
+		"git reset --hard origin/main",
+		"npm ci",
+		"npm run build",
+		`pm2 reload ${appName}`,
+	].join(" && ");
+
+	exec(script, { timeout: 300_000 }, (error, stdout, stderr) => {
+		redeployInProgress = false;
+		if (error) {
+			console.error("❌ Redeploy failed:", error.message);
+			console.error(stderr);
+			broadcastSSE("redeploy", { status: "failed", error: error.message, stderr });
+		} else {
+			console.log("✅ Redeploy complete");
+			console.log(stdout);
+			broadcastSSE("redeploy", { status: "completed", stdout });
+		}
+	});
+
+	return c.json({ status: "started", message: "Redeploy initiated. Server will restart shortly." });
 });
 
 // SSE endpoint — real-time pipeline events
