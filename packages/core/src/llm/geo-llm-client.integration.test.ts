@@ -94,7 +94,7 @@ describe("GeoLLMClient — real API integration", () => {
 
 			const response = await client.chat({
 				prompt: "Say hello in one word.",
-				max_tokens: 10,
+				max_tokens: 16,
 				temperature: 0,
 				json_mode: false,
 			});

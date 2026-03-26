@@ -393,6 +393,14 @@ details.collapsible > .collapsible-content { padding: 16px; }
 	<h1>GEO Agent Dashboard</h1>
 	<div style="display:flex;align-items:center;gap:12px;">
 		<span id="versionInfo" style="font-size:10px;color:var(--text-muted);font-family:monospace;"></span>
+		<button id="redeployBtn" onclick="handleRedeploy()" style="
+			padding:6px 14px;font-size:12px;font-weight:600;
+			background:var(--accent, #2563eb);color:#fff;border:none;border-radius:6px;
+			cursor:pointer;display:flex;align-items:center;gap:6px;
+			transition:opacity 0.2s;
+		" title="Pull latest code and restart server">
+			&#x21bb; Redeploy
+		</button>
 		<div class="status" id="connectionStatus">Connecting...</div>
 	</div>
 </div>
@@ -562,6 +570,26 @@ const API = window.location.origin;
 let targets = [];
 let prompts = [];
 let providers = [];
+
+// ── Redeploy ─────────────────────────────────────────
+async function handleRedeploy() {
+	if (!confirm('Pull latest code from main and restart the server?\n\nThe page will reload automatically after redeploy.')) return;
+	var btn = document.getElementById('redeployBtn');
+	btn.disabled = true;
+	btn.style.opacity = '0.6';
+	btn.innerHTML = '&#x23F3; Deploying...';
+	try {
+		var res = await fetch(API + '/api/redeploy', { method: 'POST' });
+		var data = await res.json();
+		if (!res.ok) { alert('Redeploy failed: ' + (data.error || res.statusText)); resetRedeployBtn(); return; }
+	} catch (e) { alert('Redeploy request failed: ' + e.message); resetRedeployBtn(); return; }
+}
+function resetRedeployBtn() {
+	var btn = document.getElementById('redeployBtn');
+	btn.disabled = false;
+	btn.style.opacity = '1';
+	btn.innerHTML = '&#x21bb; Redeploy';
+}
 
 // ── Navigation (with URL hash persistence) ──────────
 function switchTab(tabName) {
@@ -928,6 +956,17 @@ function initSSE() {
 			var errMsg = '⚠️ LLM errors (' + data.errors.length + '): ' + data.errors[0].slice(0, 100);
 			if (data.errors.length > 1) errMsg += ' (+' + (data.errors.length - 1) + ' more)';
 			toast(errMsg, 8000);
+		});
+
+		sseSource.addEventListener('redeploy', function(e) {
+			var data = JSON.parse(e.data);
+			if (data.status === 'completed') {
+				toast('Redeploy complete! Reloading...', 'success');
+				setTimeout(function() { window.location.reload(); }, 2000);
+			} else if (data.status === 'failed') {
+				toast('Redeploy failed: ' + (data.error || 'Unknown error'), 'error');
+				resetRedeployBtn();
+			}
 		});
 
 		sseSource.onerror = function() {
