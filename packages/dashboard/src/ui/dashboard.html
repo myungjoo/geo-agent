@@ -2010,125 +2010,237 @@ function renderProductsTab(data, ed, rr) {
 }
 
 // ── Tab 5: Brand ─────────────────────────────────────
+function brandSentimentPill(sentiment) {
+	var labels = { very_positive: '\uB9E4\uC6B0 \uAE0D\uC815', positive: '\uAE0D\uC815', neutral: '\uC911\uB9BD', negative: '\uBD80\uC815' };
+	var cls = (sentiment === 'very_positive' || sentiment === 'positive') ? 'pill-green' : sentiment === 'negative' ? 'pill-red' : 'pill-yellow';
+	return '<span class="pill ' + cls + '">' + (labels[sentiment] || sentiment || '-') + '</span>';
+}
+function brandVerifyPill(verifiability) {
+	var labels = { verifiable: '\uD329\uD2B8 \u2705', factual: '\uC0AC\uC2E4 \uAE30\uBC18', partial: '\uBD80\uBD84 \uAC80\uC99D', claim_no_source: '\uC8FC\uC7A5 (\uC18C\uC2A4 \uC5C6\uC74C)', unverifiable: '\uADFC\uAC70 \uBBF8\uC81C\uC2DC', emotional: '\uAC10\uC131\uC801' };
+	var cls = (verifiability === 'verifiable' || verifiability === 'factual') ? 'pill-green' : (verifiability === 'partial' || verifiability === 'emotional') ? 'pill-blue' : (verifiability === 'claim_no_source' || verifiability === 'unverifiable') ? 'pill-red' : 'pill-yellow';
+	return '<span class="pill ' + cls + '">' + (labels[verifiability] || verifiability || '-') + '</span>';
+}
+
 function renderBrandTab(data, ed, rr) {
 	var html = '';
-	// Rich report brand
-	if (rr && rr.brand) {
-		var rb = rr.brand;
-		if (rb.dimensions && rb.dimensions.length > 0) {
-			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">💬 브랜드 차원 분석 (LLM)</h3>';
-			for (var i = 0; i < rb.dimensions.length; i++) {
-				var bd = rb.dimensions[i];
-				var bdScore = bd.score || bd.value || 0;
-				html += '<div class="eval-dim-bar"><div class="bar-header"><span>' + esc(bd.name || bd.dimension || '') + '</span><span style="color:' + scoreColor(bdScore) + ';font-weight:600;">' + bdScore + '</span></div>';
-				html += '<div class="bar-track"><div class="bar-fill" style="width:' + bdScore + '%;background:' + scoreColor(bdScore) + ';"></div></div>';
-				if (bd.description) html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">' + esc(bd.description) + '</div>';
-				html += '</div>';
-			}
+	// Merge claims: prefer rr, fallback ed
+	var claims = (rr && rr.brand && rr.brand.claims) ? rr.brand.claims : [];
+	var edClaims = ed.marketing_claims || [];
+	var allClaims = claims.length > 0 ? claims : edClaims;
+	var brandDims = (rr && rr.brand && rr.brand.dimensions) ? rr.brand.dimensions : [];
+
+	if (allClaims.length === 0 && brandDims.length === 0) {
+		return '<div class="card" style="border:1px solid rgba(245,158,11,0.3);background:rgba(245,158,11,0.05);padding:24px;text-align:center;">' +
+			'<div style="font-size:14px;font-weight:700;color:var(--warning);margin-bottom:8px;">\uBE0C\uB79C\uB4DC \uBA54\uC2DC\uC9C0 \uBBF8\uAC10\uC9C0</div>' +
+			'<div style="font-size:12px;color:var(--text-muted);line-height:1.6;">\uD0C0\uAC9F \uC0AC\uC774\uD2B8\uC5D0\uC11C \uBA85\uC2DC\uC801\uC778 \uB9C8\uCF00\uD305 \uD074\uB808\uC784\uC774\uB098 \uBE0C\uB79C\uB4DC \uBA54\uC2DC\uC9C0\uAC00 \uAC10\uC9C0\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.<br>' +
+			'LLM\uC774 \uC774 \uC0AC\uC774\uD2B8\uC758 \uBE0C\uB79C\uB4DC \uC815\uCCB4\uC131\uC744 \uD30C\uC545\uD558\uAE30 \uC5B4\uB824\uC6B8 \uC218 \uC788\uC2B5\uB2C8\uB2E4.</div></div>';
+	}
+
+	// ── Summary Stats ──
+	var verified = allClaims.filter(function(c) { return c.has_source || c.verifiability === 'verifiable' || c.verifiability === 'factual'; }).length;
+	var unverified = allClaims.filter(function(c) { return c.verifiability === 'unverifiable' || c.verifiability === 'claim_no_source'; }).length;
+	var total = allClaims.length;
+	var trustScore = total > 0 ? Math.round((verified / total) * 100) : 0;
+	var trustColor = scoreColor(trustScore);
+
+	html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">';
+	html += '<div class="score-card-geo" style="text-align:center;padding:16px;"><div style="position:absolute;bottom:0;left:0;height:3px;width:100%;background:' + trustColor + ';"></div>';
+	html += '<div style="font-size:28px;font-weight:900;color:' + trustColor + ';">' + trustScore + '%</div>';
+	html += '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">\uD074\uB808\uC784 \uC2E0\uB8B0\uB3C4</div></div>';
+	html += '<div class="score-card-geo" style="text-align:center;padding:16px;"><div style="position:absolute;bottom:0;left:0;height:3px;width:100%;background:var(--text);"></div>';
+	html += '<div style="font-size:28px;font-weight:900;">' + total + '</div>';
+	html += '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">\uCD1D \uD074\uB808\uC784</div></div>';
+	html += '<div class="score-card-geo" style="text-align:center;padding:16px;"><div style="position:absolute;bottom:0;left:0;height:3px;width:100%;background:var(--success);"></div>';
+	html += '<div style="font-size:28px;font-weight:900;color:var(--success);">' + verified + '</div>';
+	html += '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">\uAC80\uC99D \uAC00\uB2A5</div></div>';
+	html += '<div class="score-card-geo" style="text-align:center;padding:16px;"><div style="position:absolute;bottom:0;left:0;height:3px;width:100%;background:var(--danger);"></div>';
+	html += '<div style="font-size:28px;font-weight:900;color:var(--danger);">' + unverified + '</div>';
+	html += '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">\uADFC\uAC70 \uBBF8\uC81C\uC2DC</div></div>';
+	html += '</div>';
+
+	// ── 2-column: Brand Dimensions + Claims Table ──
+	html += '<div class="eval-grid-2">';
+
+	// Left: Brand Dimensions
+	html += '<div class="card">';
+	html += '<div class="eval-section-title"><div class="dot"></div> \uBE0C\uB79C\uB4DC \uBA54\uC2DC\uC9C0 LLM \uC778\uC2DD\uB3C4</div>';
+	if (brandDims.length > 0) {
+		for (var i = 0; i < brandDims.length; i++) {
+			var bd = brandDims[i];
+			var bdScore = bd.score || bd.value || 0;
+			var bdc = scoreColor(bdScore);
+			html += '<div style="margin-bottom:12px;">';
+			html += '<div style="display:flex;justify-content:space-between;margin-bottom:3px;">';
+			html += '<span style="font-size:12px;color:var(--text);">' + esc(bd.name || bd.label || bd.dimension || '') + '</span>';
+			html += '<span style="font-size:13px;font-weight:700;color:' + bdc + ';">' + bdScore + '/100</span>';
+			html += '</div>';
+			html += '<div class="bar-track" style="height:8px;"><div class="bar-fill" style="width:' + bdScore + '%;background:' + bdc + ';"></div></div>';
+			if (bd.description) html += '<div style="font-size:11px;color:var(--text-muted);margin-top:3px;line-height:1.4;">' + esc(bd.description) + '</div>';
 			html += '</div>';
 		}
-		if (rb.claims && rb.claims.length > 0) {
-			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">Marketing Claims (LLM 분석)</h3>';
-			html += '<table class="eval-page-table"><thead><tr><th>Claim</th><th>Sentiment</th><th>Verifiability</th><th>Source</th></tr></thead><tbody>';
-			for (var i = 0; i < rb.claims.length; i++) {
-				var cl = rb.claims[i];
-				var sColor = cl.sentiment === 'positive' ? 'var(--success)' : cl.sentiment === 'negative' ? 'var(--danger)' : 'var(--text-muted)';
-				var vColor = (cl.verifiability === 'verifiable' || cl.verifiability === 'factual') ? 'var(--success)' : cl.verifiability === 'partial' ? 'var(--warning)' : 'var(--danger)';
-				html += '<tr><td style="font-size:12px;max-width:300px;">' + esc(cl.text || cl.claim || '') + '</td>';
-				html += '<td style="color:' + sColor + ';">' + esc(cl.sentiment || '-') + '</td>';
-				html += '<td style="color:' + vColor + ';font-weight:600;">' + esc(cl.verifiability || '-') + '</td>';
-				html += '<td>' + (cl.has_source || cl.source ? '✅' : '❌') + '</td></tr>';
-			}
-			html += '</tbody></table></div>';
+	} else {
+		// Fallback: generate from ed claims summary
+		html += '<div style="font-size:12px;color:var(--text-muted);padding:16px;text-align:center;">\uBE0C\uB79C\uB4DC \uCC28\uC6D0 \uB370\uC774\uD130 \uC5C6\uC74C.<br>\uB9C8\uCF00\uD305 \uD074\uB808\uC784 \uBD84\uC11D\uC744 \uCC38\uACE0\uD558\uC138\uC694.</div>';
+	}
+	html += '</div>';
+
+	// Right: Claims Table
+	html += '<div class="card">';
+	html += '<div class="eval-section-title"><div class="dot"></div> LLM\uC774 \uC778\uC2DD\uD558\uB294 \uBE0C\uB79C\uB4DC \uBA54\uC2DC\uC9C0</div>';
+	if (allClaims.length > 0) {
+		html += '<div style="overflow-x:auto;"><table class="geo-table-pro"><thead><tr>';
+		html += '<th>\uBA54\uC2DC\uC9C0</th><th>\uC704\uCE58</th><th>\uAE0D\uC815\uB3C4</th><th>\uAC80\uC99D\uC131</th>';
+		html += '</tr></thead><tbody>';
+		for (var i = 0; i < allClaims.length; i++) {
+			var cl = allClaims[i];
+			var clText = cl.text || cl.message || cl.claim || '';
+			var clLoc = cl.location || cl.source_page || '-';
+			if (clLoc.length > 30) clLoc = '...' + clLoc.slice(-27);
+			html += '<tr>';
+			html += '<td style="font-size:12px;max-width:280px;">\u201C' + esc(clText) + '\u201D</td>';
+			html += '<td style="font-size:11px;color:var(--text-muted);">' + esc(clLoc) + '</td>';
+			html += '<td>' + brandSentimentPill(cl.sentiment || '') + '</td>';
+			html += '<td>' + brandVerifyPill(cl.verifiability || '') + '</td>';
+			html += '</tr>';
 		}
-		if (ed.marketing_claims && ed.marketing_claims.length > 0) html += collapsible('정적 추출 데이터 (eval_data)', renderEvalBrand(ed));
-		return html;
+		html += '</tbody></table></div>';
+	} else {
+		html += '<div style="font-size:12px;color:var(--text-muted);padding:16px;text-align:center;">\uAC10\uC9C0\uB41C \uD074\uB808\uC784 \uC5C6\uC74C</div>';
 	}
-	if (!ed.marketing_claims || ed.marketing_claims.length === 0) return '<div class="empty">No marketing claims found. The site may use minimal marketing language.</div>';
+	html += '</div>';
 
-	html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">💬 마케팅 클레임 & 검증 가능성 분석</h3>';
-	html += '<div style="overflow-x:auto;"><table class="eval-page-table"><thead><tr><th>클레임</th><th>위치</th><th>출처</th><th>검증성</th></tr></thead><tbody>';
-	for (var i = 0; i < ed.marketing_claims.length; i++) {
-		var cl = ed.marketing_claims[i];
-		var vColor = cl.verifiability === 'verifiable' || cl.verifiability === 'factual' ? 'var(--success)' : cl.verifiability === 'partial' ? 'var(--warning)' : 'var(--danger)';
-		var vLabel = cl.verifiability === 'verifiable' ? '검증 가능' : cl.verifiability === 'factual' ? '사실 기반' : cl.verifiability === 'partial' ? '부분 검증' : '검증 불가';
-		var locShort = cl.location ? (cl.location.length > 40 ? '...' + cl.location.slice(-35) : cl.location) : '-';
-		html += '<tr><td style="font-size:12px;max-width:350px;">' + esc(cl.text) + '</td>';
-		html += '<td style="font-size:11px;color:var(--text-muted);font-family:monospace;">' + esc(locShort) + '</td>';
-		html += '<td>' + (cl.has_source ? '✅' : '❌') + '</td>';
-		html += '<td style="color:' + vColor + ';font-weight:600;">' + vLabel + '</td></tr>';
-	}
-	html += '</tbody></table></div>';
+	html += '</div>'; // close eval-grid-2
 
-	// Summary stats
-	var verified = ed.marketing_claims.filter(function(c) { return c.has_source; }).length;
-	var total = ed.marketing_claims.length;
-	html += '<div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">';
-	html += '<div style="padding:10px;background:var(--surface2);border-radius:6px;text-align:center;"><div style="font-size:20px;font-weight:700;">' + total + '</div><div style="font-size:11px;color:var(--text-muted);">총 클레임</div></div>';
-	html += '<div style="padding:10px;background:var(--surface2);border-radius:6px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--success);">' + verified + '</div><div style="font-size:11px;color:var(--text-muted);">출처 있음</div></div>';
-	html += '<div style="padding:10px;background:var(--surface2);border-radius:6px;text-align:center;"><div style="font-size:20px;font-weight:700;color:var(--danger);">' + (total - verified) + '</div><div style="font-size:11px;color:var(--text-muted);">출처 없음</div></div>';
+	// ── Explanation Footer ──
+	html += '<div style="padding:12px;background:rgba(47,128,237,0.05);border-radius:8px;border:1px solid rgba(47,128,237,0.1);">';
+	html += '<div style="font-size:11px;color:var(--text-muted);line-height:1.6;">';
+	html += '<strong style="color:var(--text);">\uD074\uB808\uC784 \uC2E0\uB8B0\uB3C4</strong> \u2014 \uB9C8\uCF00\uD305 \uBB38\uAD6C \uC911 \uCD9C\uCC98/\uADFC\uAC70\uAC00 \uC788\uB294 \uBE44\uC728. LLM\uC740 \uAC80\uC99D \uAC00\uB2A5\uD55C \uD329\uD2B8\uB97C \uC6B0\uC120 \uC778\uC6A9\uD558\uBA70, \uADFC\uAC70 \uC5C6\uB294 \uC8FC\uC7A5\uC740 \uD560\uB8E8\uC2DC\uB124\uC774\uC158 \uB9AC\uC2A4\uD06C\uAC00 \uB429\uB2C8\uB2E4.<br>';
+	html += '<strong style="color:var(--text);">\uAE0D\uC815\uB3C4</strong> \u2014 \uBA54\uC2DC\uC9C0\uC758 \uAC10\uC131\uC801 \uD1A4. LLM\uC774 \uBE0C\uB79C\uB4DC\uB97C \uC5B8\uAE09\uD560 \uB54C \uC774 \uD1A4\uC744 \uBC18\uC601\uD569\uB2C8\uB2E4.';
 	html += '</div></div>';
+
 	return html;
 }
 
 // ── Tab 6: Pages ─────────────────────────────────────
+function pageStatusPill(score) {
+	if (score >= 80) return '<span class="pill pill-green">\uC6B0\uC218</span>';
+	if (score >= 60) return '<span class="pill pill-blue">\uC591\uD638</span>';
+	if (score >= 40) return '<span class="pill pill-yellow">\uAC1C\uC120 \uD544\uC694</span>';
+	return '<span class="pill pill-red">\uC2EC\uAC01</span>';
+}
+function pageTagPill(tag) {
+	var label = typeof tag === 'string' ? tag : (tag.label || tag.name || '');
+	var type = typeof tag === 'object' ? (tag.type || 'neutral') : 'neutral';
+	var cls = type === 'good' ? 'pill-green' : type === 'bad' ? 'pill-red' : 'pill-blue';
+	return '<span class="pill ' + cls + '" style="font-size:9px;">' + esc(label) + '</span>';
+}
+
 function renderPagesTab(data, rr) {
 	var html = '';
-	// Rich report pages
-	if (rr && rr.pages && rr.pages.pages && rr.pages.pages.length > 0) {
-		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🔍 페이지별 분석 (LLM)</h3>';
-		html += '<table class="eval-page-table"><thead><tr><th>URL</th><th>Title</th><th>Score</th><th>Tags</th></tr></thead><tbody>';
-		for (var i = 0; i < rr.pages.pages.length; i++) {
-			var pg = rr.pages.pages[i];
-			var pgScore = pg.score || 0;
-			var urlShort = (pg.url || '').length > 50 ? '...' + (pg.url || '').slice(-45) : (pg.url || '-');
-			html += '<tr><td style="font-family:monospace;font-size:11px;">' + esc(urlShort) + '</td>';
-			html += '<td style="font-size:12px;">' + esc(pg.title || '-') + '</td>';
-			html += '<td style="color:' + scoreColor(pgScore) + ';font-weight:600;">' + pgScore + '</td>';
-			html += '<td style="font-size:11px;">';
-			if (pg.tags && pg.tags.length > 0) {
-				pg.tags.forEach(function(t) {
-					var tColor = t === 'good' ? 'rgba(16,185,129,0.15)' : t === 'bad' ? 'rgba(239,68,68,0.15)' : 'rgba(156,163,175,0.15)';
-					var tText = t === 'good' ? 'var(--success)' : t === 'bad' ? 'var(--danger)' : 'var(--text-muted)';
-					html += '<span style="display:inline-block;padding:1px 6px;margin:1px;border-radius:3px;background:' + tColor + ';color:' + tText + ';font-size:10px;">' + esc(typeof t === 'string' ? t : t.name || '') + '</span>';
-				});
-			}
-			html += '</td></tr>';
-		}
-		html += '</tbody></table></div>';
-		if (pg && pg.description) {
-			html += collapsible('Page Descriptions', (function() {
-				var h = '';
-				for (var i = 0; i < rr.pages.pages.length; i++) {
-					var pg2 = rr.pages.pages[i];
-					if (pg2.description) h += '<div style="margin-bottom:8px;padding:8px;background:var(--surface2);border-radius:6px;"><strong style="font-size:12px;">' + esc(pg2.url || '') + '</strong><div style="font-size:12px;color:var(--text-muted);margin-top:4px;">' + esc(pg2.description) + '</div></div>';
-				}
-				return h || '<div>No descriptions</div>';
-			})());
-		}
-	}
-	if (!data.multi_page || !data.multi_page.pages || data.multi_page.pages.length === 0) {
-		if (html) return html; // rich report had data
-		return '<div class="empty">Multi-page analysis not available. Only single-page analysis was performed.</div>';
-	}
 	var mp = data.multi_page;
-	html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🔍 페이지별 GEO 점수 (' + mp.page_count + ' pages)</h3>';
-	html += '<div style="text-align:center;padding:16px;margin-bottom:12px;"><div style="font-size:36px;font-weight:800;color:' + scoreColor(mp.aggregate_score) + ';">' + mp.aggregate_score.toFixed(1) + '</div>';
-	html += '<div style="font-size:13px;color:var(--text-muted);">가중 집계 점수 (' + esc(mp.aggregate_grade) + ')</div></div>';
-	html += '<div style="overflow-x:auto;"><table class="eval-page-table"><thead><tr><th>Page URL</th><th>Score</th><th>Grade</th><th>상태</th></tr></thead><tbody>';
-	for (var i = 0; i < mp.pages.length; i++) {
-		var p = mp.pages[i];
-		var pc = scoreColor(p.score);
-		var urlShort = p.url ? (p.url.length > 60 ? '...' + p.url.slice(-55) : p.url) : p.filename;
-		var tag = p.score >= 80 ? '<span style="font-size:11px;padding:2px 6px;background:rgba(16,185,129,0.15);color:var(--success);border-radius:3px;">Good</span>' :
-				p.score >= 55 ? '<span style="font-size:11px;padding:2px 6px;background:rgba(245,158,11,0.15);color:var(--warning);border-radius:3px;">Needs Work</span>' :
-				'<span style="font-size:11px;padding:2px 6px;background:rgba(239,68,68,0.15);color:var(--danger);border-radius:3px;">Critical</span>';
-		html += '<tr><td style="font-family:monospace;font-size:12px;">' + esc(urlShort) + '</td>';
-		html += '<td style="font-weight:700;color:' + pc + ';">' + p.score.toFixed(1) + '</td>';
-		html += '<td>' + esc(p.grade) + '</td>';
-		html += '<td>' + tag + '</td></tr>';
+	var rrPages = (rr && rr.pages && rr.pages.pages) ? rr.pages.pages : [];
+	var hasMultiPage = mp && mp.pages && mp.pages.length > 0;
+	var hasRichPages = rrPages.length > 0;
+
+	if (!hasMultiPage && !hasRichPages) {
+		return '<div class="card" style="border:1px solid rgba(245,158,11,0.3);background:rgba(245,158,11,0.05);padding:24px;text-align:center;">' +
+			'<div style="font-size:14px;font-weight:700;color:var(--warning);margin-bottom:8px;">\uB2E8\uC77C \uD398\uC774\uC9C0 \uBD84\uC11D\uB9CC \uC218\uD589\uB428</div>' +
+			'<div style="font-size:12px;color:var(--text-muted);line-height:1.6;">\uD604\uC7AC \uD30C\uC774\uD504\uB77C\uC778\uC5D0\uC11C\uB294 \uD648\uD398\uC774\uC9C0\uB9CC \uBD84\uC11D\uB418\uC5C8\uC2B5\uB2C8\uB2E4.<br>' +
+			'\uC81C\uC870\uC0AC(manufacturer) \uC0AC\uC774\uD2B8 \uD0C0\uC785\uC73C\uB85C \uBD84\uB958\uB418\uBA74 \uCD5C\uB300 20\uD398\uC774\uC9C0\uAE4C\uC9C0 \uC790\uB3D9 \uD06C\uB864\uB9C1\uD569\uB2C8\uB2E4.</div></div>';
 	}
-	html += '</tbody></table></div></div>';
+
+	// ── Aggregate Score Banner ──
+	if (hasMultiPage) {
+		var aggScore = mp.aggregate_score;
+		var aggColor = scoreColor(aggScore);
+		html += '<div class="card" style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;">';
+		html += '<div style="text-align:center;flex-shrink:0;">';
+		html += '<div style="font-size:42px;font-weight:900;color:' + aggColor + ';">' + aggScore.toFixed(1) + '</div>';
+		html += '<div style="font-size:11px;color:var(--text-muted);">\uAC00\uC911 \uC9D1\uACC4 \uC810\uC218</div></div>';
+		html += '<div style="flex:1;min-width:200px;">';
+		html += '<div style="font-size:14px;font-weight:700;margin-bottom:4px;">' + esc(mp.aggregate_grade) + ' \u00B7 ' + mp.page_count + '\uAC1C \uD398\uC774\uC9C0 \uBD84\uC11D</div>';
+		html += '<div style="font-size:12px;color:var(--text-muted);line-height:1.6;">\uD648\uD398\uC774\uC9C0\uB294 2\uBC30 \uAC00\uC911\uCE58\uB85C \uC9D1\uACC4\uB418\uBA70, \uD558\uC704 \uD398\uC774\uC9C0\uB4E4\uC758 \uD3C9\uADE0 \uC810\uC218\uC640 \uD568\uAED8 \uC0B0\uCD9C\uB429\uB2C8\uB2E4.</div>';
+		html += '</div>';
+		// Dimension averages
+		if (mp.per_dimension_averages) {
+			html += '<div style="display:flex;gap:6px;flex-shrink:0;">';
+			var dimAvgs = typeof mp.per_dimension_averages === 'object' && !Array.isArray(mp.per_dimension_averages)
+				? Object.keys(mp.per_dimension_averages).map(function(k) { return { id: k, avg_score: mp.per_dimension_averages[k] }; })
+				: (Array.isArray(mp.per_dimension_averages) ? mp.per_dimension_averages : []);
+			for (var di = 0; di < dimAvgs.length; di++) {
+				var da = dimAvgs[di];
+				var daScore = da.avg_score || da.score || 0;
+				html += '<div style="text-align:center;width:40px;">';
+				html += '<div style="font-size:14px;font-weight:800;color:' + scoreColor(daScore) + ';">' + Math.round(daScore) + '</div>';
+				html += '<div style="font-size:9px;color:var(--text-muted);">' + esc(da.id || da.label || '') + '</div></div>';
+			}
+			html += '</div>';
+		}
+		html += '</div>';
+	}
+
+	// ── Page Cards (samsung style) ──
+	html += '<div class="card">';
+	html += '<div class="eval-section-title"><div class="dot"></div> \uD398\uC774\uC9C0\uBCC4 GEO \uBD84\uC11D</div>';
+
+	// Merge: use multi_page scores as base, enrich with rr descriptions/tags
+	var pages = [];
+	if (hasMultiPage) {
+		for (var i = 0; i < mp.pages.length; i++) {
+			var p = mp.pages[i];
+			var rrMatch = rrPages.find(function(rp) { return rp.url && p.url && (rp.url.indexOf(p.url) >= 0 || p.url.indexOf(rp.url) >= 0); });
+			pages.push({
+				url: p.url || p.filename || '',
+				title: rrMatch ? (rrMatch.title || '') : '',
+				score: p.score,
+				grade: p.grade || '',
+				description: rrMatch ? (rrMatch.description || '') : '',
+				tags: rrMatch ? (rrMatch.tags || []) : []
+			});
+		}
+	} else if (hasRichPages) {
+		for (var i = 0; i < rrPages.length; i++) {
+			var rp = rrPages[i];
+			pages.push({
+				url: rp.url || '',
+				title: rp.title || '',
+				score: rp.score || 0,
+				grade: '',
+				description: rp.description || '',
+				tags: rp.tags || []
+			});
+		}
+	}
+
+	for (var i = 0; i < pages.length; i++) {
+		var pg = pages[i];
+		var pgc = scoreColor(pg.score);
+		var urlShort = pg.url.length > 70 ? '...' + pg.url.slice(-65) : pg.url;
+		html += '<div style="padding:16px;margin-bottom:12px;background:var(--surface2);border-radius:var(--radius);border-left:4px solid ' + pgc + ';">';
+		// Header: URL + Score bar
+		html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">';
+		html += '<code style="font-size:12px;color:var(--accent);font-weight:600;">' + esc(urlShort) + '</code>';
+		html += '<div style="display:flex;align-items:center;gap:8px;">';
+		html += '<div class="bar-track" style="width:100px;height:8px;"><div class="bar-fill" style="width:' + pg.score + '%;background:' + pgc + ';"></div></div>';
+		html += '<span style="font-size:20px;font-weight:900;color:' + pgc + ';min-width:36px;text-align:right;">' + Math.round(pg.score) + '</span>';
+		html += pageStatusPill(pg.score);
+		html += '</div></div>';
+		// Description
+		if (pg.description) {
+			html += '<div style="font-size:12px;color:var(--text-muted);line-height:1.6;margin-bottom:8px;">' + esc(pg.description) + '</div>';
+		}
+		// Tags
+		if (pg.tags && pg.tags.length > 0) {
+			html += '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
+			for (var ti = 0; ti < pg.tags.length; ti++) {
+				html += pageTagPill(pg.tags[ti]);
+			}
+			html += '</div>';
+		}
+		html += '</div>';
+	}
+	html += '</div>';
+
 	return html;
 }
 
@@ -2249,159 +2361,444 @@ async function loadStructuredRecommendations(targetId, pipelineId) {
 // ── Tab 8: Evidence ──────────────────────────────────
 function renderEvidenceTab(data, ed, rr) {
 	var html = '';
-	// Rich report evidence
-	if (rr && rr.evidence) {
-		var rev = rr.evidence;
-		// Evidence sections
-		if (rev.sections && rev.sections.length > 0) {
-			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🔬 실증 분석 섹션 (LLM)</h3>';
-			for (var i = 0; i < rev.sections.length; i++) {
-				var sec = rev.sections[i];
-				var secTitle = sec.title || sec.category || ('Section ' + (i + 1));
-				var secContent = sec.content || sec.text || sec.description || '';
-				html += collapsible(secTitle, '<div style="font-size:12px;color:var(--text-muted);line-height:1.6;white-space:pre-wrap;">' + esc(secContent) + '</div>', i === 0);
+	var rev = (rr && rr.evidence) ? rr.evidence : null;
+	var hasAnyData = rev || ed.schema_coverage || ed.js_dependency || (ed.product_info && ed.product_info.length > 0);
+	if (!hasAnyData) return '<div class="card" style="padding:24px;text-align:center;color:var(--text-muted);">\uC2E4\uC99D \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>';
+
+	// ── 1. llms.txt / robots.txt \uC2E4\uCE21 ──
+	if (ed.llms_txt || (ed.bot_policies && ed.bot_policies.length > 0)) {
+		html += '<div class="eval-section-title"><div class="dot"></div> llms.txt \uBC0F robots.txt \uC2E4\uCE21 \uC99D\uAC70</div>';
+		html += '<div class="eval-grid-2">';
+		// llms.txt status
+		html += '<div class="card" style="background:#0A0E1A;">';
+		html += '<div style="font-size:11px;font-weight:700;color:' + (ed.llms_txt && ed.llms_txt.exists ? 'var(--success)' : 'var(--danger)') + ';text-transform:uppercase;margin-bottom:10px;">' + (ed.llms_txt && ed.llms_txt.exists ? '\u2705 llms.txt \uC751\uB2F5 \uD655\uC778' : '\uD83D\uDD34 llms.txt HTTP 404 \uC751\uB2F5') + '</div>';
+		html += '<div style="background:#0D0D0D;border:1px solid var(--border);border-radius:8px;padding:14px;font-family:monospace;font-size:12px;line-height:1.8;">';
+		html += '<span style="color:var(--danger);">GET</span> <span style="color:var(--accent);">' + esc((data.analysis_report && data.analysis_report.url ? data.analysis_report.url : '') + '/llms.txt') + '</span><br>';
+		html += '<span style="color:var(--text-muted);">\u2192 HTTP ' + (ed.llms_txt && ed.llms_txt.exists ? '200 OK' : '404 Not Found') + '</span>';
+		html += '</div>';
+		if (ed.llms_txt && ed.llms_txt.content_preview) {
+			html += '<div style="margin-top:10px;background:#0D0D0D;border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:12px;font-family:monospace;font-size:11px;color:var(--text-muted);white-space:pre-wrap;max-height:150px;overflow:auto;">' + esc(ed.llms_txt.content_preview) + '</div>';
+		}
+		html += '</div>';
+		// robots.txt AI section
+		html += '<div class="card" style="background:#0A0E1A;">';
+		html += '<div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;margin-bottom:10px;">robots.txt AI \uBD07 \uC139\uC158 \uC6D0\uBB38</div>';
+		html += '<div style="background:#0D0D0D;border:1px solid var(--border);border-radius:8px;padding:14px;font-family:monospace;font-size:11px;line-height:1.8;max-height:250px;overflow:auto;">';
+		if (ed.bot_policies && ed.bot_policies.length > 0) {
+			for (var bi = 0; bi < ed.bot_policies.length; bi++) {
+				var bot = ed.bot_policies[bi];
+				var botColor = bot.status === 'allowed' ? 'var(--success)' : bot.status === 'blocked' ? 'var(--danger)' : bot.status === 'partial' ? 'var(--warning)' : 'var(--text-muted)';
+				html += '<span style="color:' + botColor + ';">User-agent: ' + esc(bot.bot_name) + '</span> <span style="color:var(--text-muted);">(' + esc(bot.service) + ')</span><br>';
+			}
+			if (ed.blocked_paths && ed.blocked_paths.length > 0) {
+				html += '<br>';
+				for (var pi = 0; pi < Math.min(ed.blocked_paths.length, 5); pi++) {
+					html += '<span style="color:var(--danger);">Disallow: ' + esc(ed.blocked_paths[pi]) + '</span><br>';
+				}
+				if (ed.blocked_paths.length > 5) html += '<span style="color:var(--text-muted);">\u2026 +' + (ed.blocked_paths.length - 5) + ' more</span><br>';
+			}
+		} else {
+			html += '<span style="color:var(--text-muted);">robots.txt \uB370\uC774\uD130 \uC5C6\uC74C</span>';
+		}
+		html += '</div></div>';
+		html += '</div>';
+	}
+
+	// ── 2. Schema \uAD6C\uD604 \uD604\uD669 \uBE44\uAD50 ──
+	if (ed.schema_coverage && ed.schema_coverage.length > 0) {
+		var implemented = ed.schema_coverage.filter(function(s) { return s.present; });
+		var missing = ed.schema_coverage.filter(function(s) { return !s.present; });
+		html += '<div class="eval-section-title"><div class="dot"></div> JSON-LD Schema \uAD6C\uD604 \uD604\uD669 (\uC2E4\uCE21)</div>';
+		html += '<div class="card">';
+		html += '<div style="overflow-x:auto;"><table class="geo-table-pro"><thead><tr>';
+		html += '<th>Schema \uD0C0\uC785</th><th>\uAD6C\uD604</th><th>\uD488\uC9C8</th><th>\uC0C1\uC138</th>';
+		html += '</tr></thead><tbody>';
+		for (var i = 0; i < ed.schema_coverage.length; i++) {
+			var sc = ed.schema_coverage[i];
+			var critical = ['Product', 'Offer', 'AggregateRating', 'BreadcrumbList', 'FAQPage'].indexOf(sc.schema_type) >= 0;
+			var rowBg = sc.present ? '' : (critical ? 'background:rgba(239,68,68,0.04);' : '');
+			html += '<tr style="' + rowBg + '">';
+			html += '<td><strong>' + esc(sc.schema_type) + '</strong>' + (critical ? ' <span style="font-size:9px;color:var(--warning);">(\uD575\uC2EC)</span>' : '') + '</td>';
+			html += '<td>' + (sc.present ? '<span class="pill pill-green">\u2705 \uAD6C\uD604</span>' : '<span class="pill pill-red">\u274C \uBBF8\uAD6C\uD604</span>') + '</td>';
+			html += '<td>' + (sc.present ? '<span class="pill pill-' + (sc.quality === 'excellent' || sc.quality === 'good' ? 'green' : sc.quality === 'partial' ? 'yellow' : 'red') + '">' + esc(sc.quality) + '</span>' : '<span style="color:var(--text-muted);">\u2014</span>') + '</td>';
+			html += '<td style="font-size:11px;color:var(--text-muted);">' + esc(sc.details || '') + '</td>';
+			html += '</tr>';
+		}
+		html += '</tbody></table></div></div>';
+	}
+
+	// ── 3. \uC81C\uD488 \uB370\uC774\uD130 \uCD94\uCD9C \uC2E4\uC99D ──
+	if (ed.product_info && ed.product_info.length > 0) {
+		html += '<div class="eval-section-title"><div class="dot"></div> \uC81C\uD488 \uB370\uC774\uD130 \uCD94\uCD9C \uC2E4\uC99D</div>';
+		html += '<div class="card">';
+		html += '<div style="overflow-x:auto;"><table class="geo-table-pro"><thead><tr>';
+		html += '<th>\uD398\uC774\uC9C0</th><th>\uC81C\uD488\uBA85</th><th>\uAC00\uACA9</th><th>Schema \uC2A4\uD399</th><th>HTML \uC2A4\uD399</th><th>\uD3C9\uC810</th>';
+		html += '</tr></thead><tbody>';
+		for (var i = 0; i < ed.product_info.length; i++) {
+			var pi = ed.product_info[i];
+			var fn = pi.page_url ? (pi.page_url.length > 40 ? '...' + pi.page_url.slice(-37) : pi.page_url) : pi.filename;
+			html += '<tr>';
+			html += '<td><code style="font-size:10px;color:var(--accent);">' + esc(fn) + '</code></td>';
+			html += '<td>' + (pi.info.product_name ? '<span class="pill pill-green">' + esc(pi.info.product_name.slice(0, 25)) + '</span>' : '<span class="pill pill-red">\uC5C6\uC74C</span>') + '</td>';
+			html += '<td>' + (pi.info.prices.length > 0 ? '<span class="pill pill-green">' + esc(pi.info.prices[0]) + '</span>' : '<span class="pill pill-red">\uC5C6\uC74C</span>') + '</td>';
+			html += '<td>' + (pi.info.specs_in_schema.length > 0 ? '<span class="pill pill-green">' + pi.info.specs_in_schema.length + '\uAC1C</span>' : '<span class="pill pill-red">\uC5C6\uC74C</span>') + '</td>';
+			html += '<td>' + (pi.info.specs_in_html.length > 0 ? '<span class="pill pill-yellow">' + pi.info.specs_in_html.length + '\uAC1C</span>' : '<span class="pill pill-red">\uC5C6\uC74C</span>') + '</td>';
+			html += '<td>' + (pi.info.has_aggregate_rating ? '<span class="pill pill-green">' + esc(pi.info.rating_value || '') + ' \u2605</span>' : '<span class="pill pill-red">\uC5C6\uC74C</span>') + '</td>';
+			html += '</tr>';
+		}
+		html += '</tbody></table></div></div>';
+	}
+
+	// ── 4. JS \uC758\uC874\uC131 \uBD84\uC11D ──
+	if (ed.js_dependency) {
+		var jd = ed.js_dependency;
+		var depPct = Math.round(jd.estimated_js_dependency * 100);
+		var depColor = depPct >= 50 ? 'var(--danger)' : depPct >= 30 ? 'var(--warning)' : 'var(--success)';
+		html += '<div class="eval-section-title"><div class="dot"></div> JavaScript \uC758\uC874\uC131 \uBD84\uC11D</div>';
+		html += '<div class="card">';
+		html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">';
+		html += '<div style="text-align:center;padding:12px;background:var(--surface2);border-radius:var(--radius);"><div style="font-size:24px;font-weight:800;">' + jd.script_count + '</div><div style="font-size:10px;color:var(--text-muted);">\uCD1D \uC2A4\uD06C\uB9BD\uD2B8</div></div>';
+		html += '<div style="text-align:center;padding:12px;background:var(--surface2);border-radius:var(--radius);"><div style="font-size:24px;font-weight:800;">' + jd.external_scripts + '</div><div style="font-size:10px;color:var(--text-muted);">\uC678\uBD80 \uC2A4\uD06C\uB9BD\uD2B8</div></div>';
+		html += '<div style="text-align:center;padding:12px;background:var(--surface2);border-radius:var(--radius);"><div style="font-size:24px;font-weight:800;">' + jd.inline_scripts + '</div><div style="font-size:10px;color:var(--text-muted);">\uC778\uB77C\uC778 \uC2A4\uD06C\uB9BD\uD2B8</div></div>';
+		html += '<div style="text-align:center;padding:12px;background:var(--surface2);border-radius:var(--radius);"><div style="font-size:24px;font-weight:800;color:' + depColor + ';">' + depPct + '%</div><div style="font-size:10px;color:var(--text-muted);">JS \uC758\uC874\uB3C4</div></div>';
+		html += '</div>';
+		if (jd.frameworks_detected && jd.frameworks_detected.length > 0) {
+			html += '<div style="font-size:12px;color:var(--text-muted);">\uAC10\uC9C0\uB41C \uD504\uB808\uC784\uC6CC\uD06C: ';
+			for (var fi = 0; fi < jd.frameworks_detected.length; fi++) {
+				html += '<span class="pill pill-blue" style="margin-right:4px;">' + esc(jd.frameworks_detected[fi]) + '</span>';
 			}
 			html += '</div>';
 		}
-		// Schema implementation matrix
+		html += '</div>';
+	}
+
+	// ── 5. LLM \uBD84\uC11D \uC2E4\uC99D \uC139\uC158 (rich report) ──
+	if (rev) {
+		if (rev.sections && rev.sections.length > 0) {
+			html += '<div class="eval-section-title"><div class="dot"></div> LLM \uBD84\uC11D \uC2E4\uC99D \uC139\uC158</div>';
+			for (var i = 0; i < rev.sections.length; i++) {
+				var sec = rev.sections[i];
+				html += collapsible(esc(sec.title || sec.id || ('Section ' + (i + 1))),
+					'<div style="font-size:12px;color:var(--text-muted);line-height:1.6;white-space:pre-wrap;">' + esc(sec.content || '') + '</div>', i === 0);
+			}
+		}
 		if (rev.schema_implementation_matrix && rev.schema_implementation_matrix.length > 0) {
-			html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">Schema Implementation Matrix</h3>';
-			html += '<table class="eval-page-table"><thead><tr><th>Schema</th><th>Page</th><th>Status</th><th>Quality</th></tr></thead><tbody>';
+			html += '<div class="eval-section-title"><div class="dot"></div> Schema \uAD6C\uD604 \uB9E4\uD2B8\uB9AD\uC2A4 (LLM)</div>';
+			html += '<div class="card"><div style="overflow-x:auto;"><table class="geo-table-pro"><thead><tr>';
+			html += '<th>\uC81C\uD488\uAD70</th><th>\uD398\uC774\uC9C0</th><th>ItemList</th><th>Product</th><th>Offer</th><th>Rating</th><th>\uC2A4\uD399</th><th>Breadcrumb</th><th>FAQ</th><th>LLM \uAC00\uC6A9\uC728</th>';
+			html += '</tr></thead><tbody>';
 			for (var i = 0; i < rev.schema_implementation_matrix.length; i++) {
 				var sim = rev.schema_implementation_matrix[i];
-				html += '<tr><td>' + esc(sim.schema || sim.type || '') + '</td>';
-				html += '<td style="font-size:11px;">' + esc(sim.page || sim.url || '') + '</td>';
-				html += '<td>' + (sim.implemented || sim.present ? '✅' : '❌') + '</td>';
-				html += '<td>' + esc(sim.quality || '-') + '</td></tr>';
+				var checkY = '<span style="color:var(--success);font-size:14px;">\u2713</span>';
+				var checkN = '<span style="color:var(--danger);font-size:14px;">\u2717</span>';
+				var pctColor = (sim.llm_availability_pct || 0) >= 70 ? 'var(--success)' : (sim.llm_availability_pct || 0) >= 40 ? 'var(--warning)' : 'var(--danger)';
+				html += '<tr>';
+				html += '<td><strong>' + esc(sim.product_category || '') + '</strong></td>';
+				html += '<td style="font-size:10px;color:var(--accent);font-family:monospace;">' + esc((sim.page_url || '').slice(-30)) + '</td>';
+				html += '<td style="text-align:center;">' + (sim.item_list ? checkY : checkN) + '</td>';
+				html += '<td style="text-align:center;">' + (sim.product ? checkY : checkN) + '</td>';
+				html += '<td style="text-align:center;">' + (sim.offer ? checkY : checkN) + '</td>';
+				html += '<td style="text-align:center;">' + (sim.aggregate_rating ? checkY : checkN) + '</td>';
+				html += '<td style="text-align:center;">' + (sim.specs ? checkY : checkN) + '</td>';
+				html += '<td style="text-align:center;">' + (sim.breadcrumb ? checkY : checkN) + '</td>';
+				html += '<td style="text-align:center;">' + (sim.faq_page ? checkY : checkN) + '</td>';
+				html += '<td style="color:' + pctColor + ';font-weight:700;text-align:center;">' + (sim.llm_availability_pct || 0) + '%</td>';
+				html += '</tr>';
 			}
-			html += '</tbody></table></div>';
+			html += '</tbody></table></div></div>';
 		}
-		// JS dependency details
-		if (rev.js_dependency_details && rev.js_dependency_details.length > 0) {
-			html += collapsible('JS Dependency Details', (function() {
-				var h = '<table class="eval-page-table"><thead><tr><th>Script</th><th>Type</th><th>Impact</th></tr></thead><tbody>';
-				rev.js_dependency_details.forEach(function(jd) {
-					h += '<tr><td style="font-size:11px;">' + esc(jd.script || jd.src || '') + '</td>';
-					h += '<td>' + esc(jd.type || '') + '</td><td>' + esc(jd.impact || '-') + '</td></tr>';
-				});
-				h += '</tbody></table>';
-				return h;
-			})());
-		}
-		// Claim verifications
 		if (rev.claim_verifications && rev.claim_verifications.length > 0) {
-			html += collapsible('Claim Verifications', (function() {
-				var h = '<table class="eval-page-table"><thead><tr><th>Claim</th><th>Trust Level</th><th>Factcheck Risk</th></tr></thead><tbody>';
-				rev.claim_verifications.forEach(function(cv) {
-					var trustColor = cv.trust_level === 'high' ? 'var(--success)' : cv.trust_level === 'medium' ? 'var(--warning)' : 'var(--danger)';
-					h += '<tr><td style="font-size:12px;max-width:300px;">' + esc(cv.claim || cv.text || '') + '</td>';
-					h += '<td style="color:' + trustColor + ';font-weight:600;">' + esc(cv.trust_level || '-') + '</td>';
-					h += '<td>' + esc(cv.factcheck_risk || '-') + '</td></tr>';
+			html += '<div class="eval-section-title"><div class="dot"></div> \uD074\uB808\uC784 \uAC80\uC99D \uACB0\uACFC</div>';
+			html += '<div class="card"><div style="overflow-x:auto;"><table class="geo-table-pro"><thead><tr>';
+			html += '<th>\uD074\uB808\uC784</th><th>LLM \uC2E0\uB8B0\uB3C4</th><th>\uD329\uD2B8\uCCB4\uD06C \uC704\uD5D8</th>';
+			html += '</tr></thead><tbody>';
+			for (var i = 0; i < rev.claim_verifications.length; i++) {
+				var cv = rev.claim_verifications[i];
+				var trustCls = cv.llm_trust_level === 'high' ? 'pill-green' : cv.llm_trust_level === 'medium' ? 'pill-yellow' : 'pill-red';
+				var riskCls = cv.factcheck_risk === 'low' ? 'pill-green' : cv.factcheck_risk === 'medium' ? 'pill-yellow' : 'pill-red';
+				html += '<tr>';
+				html += '<td style="font-size:12px;">\u201C' + esc(cv.claim || '') + '\u201D</td>';
+				html += '<td><span class="pill ' + trustCls + '">' + esc(cv.llm_trust_level || '-') + '</span></td>';
+				html += '<td><span class="pill ' + riskCls + '">' + esc(cv.factcheck_risk || '-') + '</span></td>';
+				html += '</tr>';
+			}
+			html += '</tbody></table></div></div>';
+		}
+		if (rev.js_dependency_details && rev.js_dependency_details.length > 0) {
+			html += collapsible('JS \uC758\uC874\uC131 \uC0C1\uC138 (LLM \uBD84\uC11D)', (function() {
+				var h = '<table class="geo-table-pro"><thead><tr><th>\uB370\uC774\uD130 \uD56D\uBAA9</th><th>\uC608\uC2DC \uAC12</th><th>\uC815\uC801 HTML</th><th>LLM \uC811\uADFC</th><th>GEO \uC601\uD5A5</th></tr></thead><tbody>';
+				rev.js_dependency_details.forEach(function(jd) {
+					var accCls = jd.llm_accessible === 'yes' ? 'pill-green' : jd.llm_accessible === 'partial' ? 'pill-yellow' : 'pill-red';
+					h += '<tr><td>' + esc(jd.data_item || jd.script || '') + '</td>';
+					h += '<td style="font-size:11px;color:var(--text-muted);">' + esc(jd.example_value || '') + '</td>';
+					h += '<td>' + (jd.in_static_html ? '<span class="pill pill-green">\u2705</span>' : '<span class="pill pill-red">\u274C</span>') + '</td>';
+					h += '<td><span class="pill ' + accCls + '">' + esc(jd.llm_accessible || '') + '</span></td>';
+					h += '<td style="font-size:11px;">' + esc(jd.geo_impact || '') + '</td></tr>';
 				});
 				h += '</tbody></table>';
 				return h;
 			})());
 		}
-	}
-	if (!ed.schema_coverage && !ed.js_dependency && !html) return '<div class="empty">No evidence data available.</div>';
-	if (html && (ed.schema_coverage || ed.product_info)) {
-		// Show eval_data evidence as collapsible supplement
-		html += collapsible('정적 추출 실증 데이터', renderEvalEvidenceContent(ed));
-		return html;
-	}
-	if (html) return html;
-
-	// Schema comparison: implemented vs not
-	if (ed.schema_coverage) {
-		var implemented = ed.schema_coverage.filter(function(s) { return s.present; });
-		var missing = ed.schema_coverage.filter(function(s) { return !s.present; });
-
-		html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">';
-		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">✅ 구현된 스키마 (실측)</h3>';
-		for (var i = 0; i < implemented.length; i++) {
-			var s = implemented[i];
-			html += '<div style="padding:8px;margin-bottom:6px;background:rgba(16,185,129,0.05);border:1px solid rgba(16,185,129,0.2);border-radius:6px;">';
-			html += '<div style="font-weight:700;font-size:13px;">' + esc(s.schema_type) + '</div>';
-			html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">' + esc(s.details) + ' · 품질: ' + esc(s.quality) + '</div></div>';
-		}
-		if (implemented.length === 0) html += '<div class="empty" style="font-size:12px;">구현된 스키마 없음</div>';
-		html += '</div>';
-
-		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">❌ 미구현 스키마 (실측)</h3>';
-		for (var i = 0; i < missing.length; i++) {
-			var s = missing[i];
-			var critical = ['Product', 'Offer', 'AggregateRating'].indexOf(s.schema_type) >= 0;
-			html += '<div style="padding:8px;margin-bottom:6px;background:' + (critical ? 'rgba(239,68,68,0.05)' : 'rgba(245,158,11,0.05)') + ';border:1px solid ' + (critical ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)') + ';border-radius:6px;">';
-			html += '<div style="font-weight:700;font-size:13px;color:' + (critical ? 'var(--danger)' : 'var(--warning)') + ';">' + esc(s.schema_type) + (critical ? ' (핵심)' : '') + '</div></div>';
-		}
-		if (missing.length === 0) html += '<div class="empty" style="font-size:12px;">모든 스키마 구현 완료</div>';
-		html += '</div></div>';
-	}
-
-	// Product info evidence
-	if (ed.product_info && ed.product_info.length > 0) {
-		html += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">🔬 제품 데이터 추출 실증</h3>';
-		html += '<div style="overflow-x:auto;"><table class="eval-page-table"><thead><tr><th>페이지</th><th>제품명</th><th>가격</th><th>Schema 스펙</th><th>HTML 스펙</th><th>평점</th></tr></thead><tbody>';
-		for (var i = 0; i < ed.product_info.length; i++) {
-			var pi = ed.product_info[i];
-			var fn = pi.filename.length > 30 ? '...' + pi.filename.slice(-25) : pi.filename;
-			html += '<tr><td style="font-family:monospace;font-size:11px;">' + esc(fn) + '</td>';
-			html += '<td>' + (pi.info.product_name ? '✅' : '❌') + '</td>';
-			html += '<td>' + (pi.info.prices.length > 0 ? '✅ ' + pi.info.prices.length : '❌') + '</td>';
-			html += '<td>' + (pi.info.specs_in_schema.length > 0 ? '✅ ' + pi.info.specs_in_schema.length : '❌') + '</td>';
-			html += '<td>' + (pi.info.specs_in_html.length > 0 ? '⚠️ ' + pi.info.specs_in_html.length : '❌') + '</td>';
-			html += '<td>' + (pi.info.has_aggregate_rating ? '✅' : '❌') + '</td></tr>';
-		}
-		html += '</tbody></table></div></div>';
 	}
 
 	return html;
 }
 
 // ── Tab: Synthetic Probes ────────────────────────────
+function probeVerdictPill(verdict) {
+	var v = (verdict || '').toUpperCase();
+	var cls = v === 'PASS' ? 'pill-green' : v === 'PARTIAL' ? 'pill-yellow' : 'pill-red';
+	return '<span class="pill ' + cls + '" style="font-weight:800;">' + v + '</span>';
+}
+
 function renderProbesTab(data, rr) {
-	// Rich report probes supplement
-	if (rr && rr.probes) {
-		var rpb = rr.probes;
-		var richHtml = '';
-		if (rpb.methodology) {
-			richHtml += '<div class="card" style="padding:12px 16px;margin-bottom:12px;"><div style="font-size:12px;color:var(--text-muted);"><strong>Methodology:</strong> ' + esc(rpb.methodology) + '</div></div>';
-		}
-		if (rpb.summary) {
-			richHtml += '<div class="card" style="padding:12px;margin-bottom:12px;">';
-			richHtml += '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;">';
-			if (rpb.summary.pass !== undefined) richHtml += '<span style="color:var(--success);font-weight:600;">PASS: ' + rpb.summary.pass + '</span>';
-			if (rpb.summary.partial !== undefined) richHtml += '<span style="color:var(--warning);font-weight:600;">PARTIAL: ' + rpb.summary.partial + '</span>';
-			if (rpb.summary.fail !== undefined) richHtml += '<span style="color:var(--danger);font-weight:600;">FAIL: ' + rpb.summary.fail + '</span>';
-			richHtml += '</div></div>';
-		}
-		// If rich probes have detailed results, show them
-		if (rpb.results && rpb.results.length > 0) {
-			richHtml += '<div class="card"><h3 style="font-size:14px;margin-bottom:12px;">LLM Probe Results</h3>';
-			for (var i = 0; i < rpb.results.length; i++) {
-				var rp = rpb.results[i];
-				var vCol = (rp.verdict === 'PASS' || rp.verdict === 'pass') ? 'var(--success)' : (rp.verdict === 'PARTIAL' || rp.verdict === 'partial') ? 'var(--warning)' : 'var(--danger)';
-				richHtml += '<div style="padding:10px;margin-bottom:8px;background:var(--surface2);border-radius:6px;border-left:3px solid ' + vCol + ';">';
-				richHtml += '<div style="font-weight:600;font-size:13px;">' + esc(rp.probe_id || rp.id || '') + ' ' + esc(rp.probe_name || rp.name || '') + ' <span style="color:' + vCol + ';">[' + esc(rp.verdict || '') + ']</span></div>';
-				if (rp.required_data) richHtml += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Required: ' + esc(rp.required_data) + '</div>';
-				if (rp.data_availability) richHtml += '<div style="font-size:11px;color:var(--text-muted);">Availability: ' + esc(rp.data_availability) + '</div>';
-				if (rp.evidence_claim) richHtml += '<div style="font-size:11px;color:var(--text-muted);">Evidence: ' + esc(rp.evidence_claim) + '</div>';
-				if (rp.tags && rp.tags.length > 0) {
-					richHtml += '<div style="margin-top:4px;">';
-					rp.tags.forEach(function(t) { richHtml += '<span style="display:inline-block;font-size:10px;padding:1px 6px;margin:1px;border-radius:3px;background:rgba(99,102,241,0.1);color:#818cf8;">' + esc(t) + '</span>'; });
-					richHtml += '</div>';
+	var html = '';
+	var rpb = (rr && rr.probes) ? rr.probes : null;
+	var probes = data.synthetic_probes;
+	var actualProbes = (probes && probes.probes) ? probes.probes : [];
+	var richResults = rpb ? (rpb.results || []) : [];
+
+	// Priority: actual execution > multi-provider > rich report (LLM descriptions)
+	// Rich report probes are LLM-generated scenarios, not real execution results
+	var allProbes = actualProbes.length > 0 ? actualProbes : [];
+	// Extract from multi-provider: flatten all providers' probes with provider tag
+	var mpProbesByQuery = {}; // query -> [{provider, model, probe}]
+	if (data.multi_provider_probes) {
+		var mpk = data.multi_provider_probes.knowledge_results || [];
+		var mpw = data.multi_provider_probes.web_search_results || [];
+		mpk.concat(mpw).forEach(function(pr) {
+			(pr.probes || []).forEach(function(p) {
+				var key = p.probe_id || p.query;
+				if (!mpProbesByQuery[key]) mpProbesByQuery[key] = [];
+				mpProbesByQuery[key].push({
+					probe_id: p.probe_id, probe_name: p.probe_name, category: p.category,
+					query: p.query, response: p.response, verdict: p.error ? 'FAIL' : (p.response ? 'PASS' : 'FAIL'),
+					latency_ms: p.latency_ms, model: pr.model, provider: pr.provider_id,
+					track: pr.track, error: p.error
+				});
+			});
+		});
+		// If no single/rich probes, use multi-provider as primary (deduplicated by probe_id)
+		if (allProbes.length === 0) {
+			var seen = {};
+			Object.keys(mpProbesByQuery).forEach(function(key) {
+				if (!seen[key]) {
+					seen[key] = true;
+					allProbes.push(mpProbesByQuery[key][0]);
 				}
-				richHtml += '</div>';
-			}
-			richHtml += '</div>';
-		}
-		// Then show the actual synthetic probe execution results below
-		if (richHtml) {
-			var actualProbes = renderActualProbes(data);
-			if (actualProbes) richHtml += collapsible('Synthetic Probe 실행 결과 (상세)', actualProbes, true);
-			return richHtml;
+			});
 		}
 	}
+	var hasMultiProvider = Object.keys(mpProbesByQuery).length > 0;
+
+	// Enrich actual/multi probes with rich report metadata (test_page, required_data, page_schema, etc.)
+	if (richResults.length > 0 && allProbes.length > 0) {
+		for (var ei = 0; ei < allProbes.length; ei++) {
+			var ap = allProbes[ei];
+			var apId = ap.probe_id || ap.id || '';
+			var match = richResults.find(function(rr2) { return rr2.probe_id === apId; });
+			if (match) {
+				if (!ap.test_page && match.test_page) ap.test_page = match.test_page;
+				if (!ap.required_data && match.required_data) ap.required_data = match.required_data;
+				if (!ap.page_schema && match.page_schema) ap.page_schema = match.page_schema;
+				if (!ap.data_availability && match.data_availability) ap.data_availability = match.data_availability;
+				if (!ap.evidence_claim && match.evidence_claim) ap.evidence_claim = match.evidence_claim;
+				if (!ap.tags && match.tags) ap.tags = match.tags;
+				if (!ap.prompt && match.prompt) ap.prompt = match.prompt;
+			}
+		}
+	}
+
+	if (allProbes.length === 0) {
+		return renderProbeEmptyState(data);
+	}
+
+	// ── Multi-Provider Summary (if available) ──
+	html += renderMultiProviderSummary(data);
+
+	if (allProbes.length === 0) return html || renderProbeEmptyState(data);
+
+	// ── Methodology ──
+	html += '<div class="card" style="border-color:rgba(139,92,246,0.3);margin-bottom:20px;">';
+	html += '<div style="display:flex;gap:14px;align-items:flex-start;">';
+	html += '<div style="font-size:24px;">\uD83E\uDDEA</div><div>';
+	html += '<div style="font-size:14px;font-weight:700;color:var(--purple);margin-bottom:6px;">Synthetic LLM Probe \u2014 \uBC29\uBC95\uB860</div>';
+	html += '<div style="font-size:12px;color:var(--text-muted);line-height:1.65;max-width:800px;">';
+	if (rpb && rpb.methodology) {
+		html += esc(rpb.methodology);
+	} else {
+		html += '\uC2E4\uC81C LLM \uC11C\uBE44\uC2A4\uAC00 \uD0C0\uAC9F \uC0AC\uC774\uD2B8\uB97C \uCC38\uC870\uD558\uC5EC \uC0AC\uC6A9\uC790 \uC9C8\uBB38\uC5D0 \uB2F5\uD560 \uB54C \uC5B4\uB5A4 \uC815\uBCF4\uB97C \uAC00\uC838\uAC08 \uC218 \uC788\uB294\uC9C0 \uAC80\uC99D\uD569\uB2C8\uB2E4. ';
+		html += '\uAC01 \uD504\uB85C\uBE0C\uC758 \uC751\uB2F5 \uC815\uBCF4 \uC644\uC804\uB3C4\uB97C <strong style="color:var(--text);">PASS / PARTIAL / FAIL</strong>\uB85C \uCC44\uC810\uD588\uC2B5\uB2C8\uB2E4.';
+	}
+	html += '</div></div></div></div>';
+
+	// ── Summary Counts ──
+	var pPass = 0, pPartial = 0, pFail = 0;
+	for (var si = 0; si < allProbes.length; si++) {
+		var sv = (allProbes[si].verdict || '').toUpperCase();
+		if (sv === 'PASS') pPass++;
+		else if (sv === 'PARTIAL') pPartial++;
+		else pFail++;
+	}
+	var pTotal = allProbes.length;
+	var passRate = pTotal > 0 ? Math.round((pPass / pTotal) * 100) : 0;
+
+	// ── Summary Table (Samsung style) ──
+	html += '<div class="eval-section-title"><div class="dot"></div> \uD504\uB85C\uBE0C \uC2E4\uD589 \uACB0\uACFC \u2014 \uC885\uD569 \uCC44\uC810\uD45C</div>';
+	html += '<div class="card">';
+	html += '<div style="overflow-x:auto;"><table class="geo-table-pro"><thead><tr>';
+	html += '<th>#</th><th>Synthetic \uD504\uB86C\uD504\uD2B8</th><th>\uD14C\uC2A4\uD2B8 \uD398\uC774\uC9C0</th><th>\uD575\uC2EC \uC694\uCCAD \uB370\uC774\uD130</th><th>\uD398\uC774\uC9C0 \uC2A4\uD0A4\uB9C8</th><th>\uC815\uBCF4 \uAC00\uC6A9\uC131</th><th>\uD310\uC815</th><th>\uC785\uC99D \uD074\uB808\uC784</th>';
+	html += '</tr></thead><tbody>';
+	for (var i = 0; i < allProbes.length; i++) {
+		var p = allProbes[i];
+		var v = (p.verdict || '').toUpperCase();
+		var rowBg = v === 'FAIL' ? 'background:rgba(239,68,68,0.04);' : v === 'PARTIAL' ? 'background:rgba(245,158,11,0.04);' : '';
+		var pId = p.probe_id || p.id || ('P-' + String(i + 1).padStart(2, '0'));
+		var pPrompt = p.prompt || p.probe_name || p.name || p.query || '';
+		var pTestPage = p.test_page || '';
+		if (pTestPage.length > 35) pTestPage = '...' + pTestPage.slice(-32);
+		var pRequiredData = '';
+		if (p.required_data) {
+			pRequiredData = Array.isArray(p.required_data) ? p.required_data.join(', ') : String(p.required_data);
+		}
+		var pSchema = p.page_schema || '';
+		var schemaPillCls = /Product|Offer|Rating/i.test(pSchema) ? 'pill-green' : /WebPage/i.test(pSchema) ? 'pill-red' : pSchema ? 'pill-yellow' : '';
+		var pAvail = p.data_availability || (p.accuracy !== undefined ? Math.round(p.accuracy * 100) + '%' : '');
+		var availColor = v === 'PASS' ? 'var(--success)' : v === 'PARTIAL' ? 'var(--warning)' : 'var(--danger)';
+		var pEvidence = p.evidence_claim || '';
+		html += '<tr style="' + rowBg + '">';
+		html += '<td style="font-weight:700;color:var(--purple);">' + esc(pId) + '</td>';
+		html += '<td style="font-size:12px;max-width:220px;">\u201C' + esc(pPrompt) + '\u201D</td>';
+		html += '<td style="font-family:monospace;font-size:10px;color:var(--accent);">' + esc(pTestPage) + '</td>';
+		html += '<td style="font-size:11px;color:var(--text-muted);">' + esc(pRequiredData) + '</td>';
+		html += '<td>' + (schemaPillCls ? '<span class="pill ' + schemaPillCls + '">' + esc(pSchema) + '</span>' : '<span style="color:var(--text-muted);">\u2014</span>') + '</td>';
+		html += '<td style="color:' + availColor + ';font-weight:700;font-size:12px;">' + esc(pAvail || '\u2014') + '</td>';
+		html += '<td>' + probeVerdictPill(v) + '</td>';
+		html += '<td style="font-size:11px;color:var(--text-muted);">' + esc(pEvidence.slice(0, 60)) + '</td>';
+		html += '</tr>';
+	}
+	html += '</tbody></table></div>';
+	// Summary counts
+	html += '<div style="display:flex;gap:16px;margin-top:16px;flex-wrap:wrap;">';
+	html += '<div style="padding:10px 20px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:var(--radius);text-align:center;">';
+	html += '<div style="font-size:22px;font-weight:800;color:var(--success);">' + pPass + '</div>';
+	html += '<div style="font-size:11px;color:var(--text-muted);">PASS (' + (pTotal > 0 ? Math.round(pPass/pTotal*100) : 0) + '%)</div></div>';
+	html += '<div style="padding:10px 20px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:var(--radius);text-align:center;">';
+	html += '<div style="font-size:22px;font-weight:800;color:var(--warning);">' + pPartial + '</div>';
+	html += '<div style="font-size:11px;color:var(--text-muted);">PARTIAL (' + (pTotal > 0 ? Math.round(pPartial/pTotal*100) : 0) + '%)</div></div>';
+	html += '<div style="padding:10px 20px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius);text-align:center;">';
+	html += '<div style="font-size:22px;font-weight:800;color:var(--danger);">' + pFail + '</div>';
+	html += '<div style="font-size:11px;color:var(--text-muted);">FAIL (' + (pTotal > 0 ? Math.round(pFail/pTotal*100) : 0) + '%)</div></div>';
+	html += '<div style="padding:10px 20px;background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.3);border-radius:var(--radius);flex:1;min-width:200px;">';
+	html += '<div style="font-size:12px;font-weight:700;color:var(--purple);margin-bottom:4px;">\uD575\uC2EC \uACB0\uB860</div>';
+	html += '<div style="font-size:12px;color:var(--text-muted);line-height:1.5;">' + pTotal + '\uAC1C \uD504\uB85C\uBE0C \uC911 <strong style="color:var(--text);">PASS ' + pPass + '\uAC1C(' + passRate + '%)</strong>. ';
+	if (pFail > 0) html += 'FAIL ' + pFail + '\uAC1C\uB294 LLM\uC774 \uD574\uB2F9 \uC815\uBCF4\uB97C \uC815\uC801 HTML\uC5D0\uC11C \uCD94\uCD9C\uD560 \uC218 \uC5C6\uC74C\uC744 \uC758\uBBF8.';
+	html += '</div></div>';
+	html += '</div></div>';
+
+	// ── Individual Probe Detail Cards (Samsung style) ──
+	html += '<div class="eval-section-title"><div class="dot"></div> \uAC1C\uBCC4 \uD504\uB85C\uBE0C \uC0C1\uC138 \uC2E4\uD589 \uAE30\uB85D</div>';
+	for (var i = 0; i < allProbes.length; i++) {
+		var p = allProbes[i];
+		var v = (p.verdict || '').toUpperCase();
+		var vColor = v === 'PASS' ? 'var(--success)' : v === 'PARTIAL' ? 'var(--warning)' : 'var(--danger)';
+		var borderColor = v === 'PASS' ? 'rgba(16,185,129,0.3)' : v === 'PARTIAL' ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)';
+		var pId = p.probe_id || p.id || ('P-' + String(i + 1).padStart(2, '0'));
+		var pPrompt = p.prompt || p.probe_name || p.name || p.query || '';
+		var pTestPage = p.test_page || '';
+		var mpResults = hasMultiProvider ? (mpProbesByQuery[pId] || mpProbesByQuery[p.query] || []) : [];
+
+		html += '<div style="padding:16px;margin-bottom:16px;background:var(--surface2);border-radius:var(--radius);border:1px solid ' + borderColor + ';">';
+		// Header: ID + Prompt + Verdict
+		html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">';
+		html += '<div>';
+		html += '<span style="font-size:11px;font-weight:700;color:var(--purple);background:rgba(139,92,246,0.15);padding:2px 8px;border-radius:8px;margin-right:8px;">' + esc(pId) + '</span>';
+		html += '<span style="font-size:13px;font-weight:700;">\u201C' + esc(pPrompt) + '\u201D</span>';
+		html += '</div>';
+		html += probeVerdictPill(v);
+		html += '</div>';
+		// 2-column: Left (input) + Right (output)
+		html += '<div class="eval-grid-2" style="margin-bottom:0;gap:12px;">';
+		// Left: Probe Input
+		html += '<div>';
+		html += '<div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">PROBE \uC785\uB825</div>';
+		if (pTestPage) {
+			html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">\uD14C\uC2A4\uD2B8 URL: <code style="color:var(--accent);">' + esc(pTestPage.length > 50 ? '...' + pTestPage.slice(-47) : pTestPage) + '</code></div>';
+		}
+		if (p.required_data) {
+			var rdText = Array.isArray(p.required_data) ? p.required_data : [String(p.required_data)];
+			html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">\uC694\uCCAD \uB370\uC774\uD130 \uD56D\uBAA9</div>';
+			html += '<div style="font-size:12px;color:var(--text);">';
+			for (var ri = 0; ri < rdText.length; ri++) {
+				html += '\u2460\u2461\u2462\u2463\u2464\u2465\u2466\u2467'[ri] + ' ' + esc(rdText[ri]);
+				if (ri < rdText.length - 1) html += ' &nbsp; ';
+			}
+			html += '</div>';
+		}
+		if (p.page_schema) {
+			var schemaPillCls2 = /Product|Offer|Rating/i.test(p.page_schema) ? 'pill-green' : /WebPage/i.test(p.page_schema) ? 'pill-red' : 'pill-yellow';
+			html += '<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">\uD398\uC774\uC9C0 \uC2A4\uD0A4\uB9C8: <span class="pill ' + schemaPillCls2 + '">' + esc(p.page_schema) + '</span></div>';
+		}
+		if (p.model || p.provider) {
+			html += '<div style="font-size:10px;color:var(--text-muted);margin-top:6px;">\uBAA8\uB378: ' + esc((p.provider || '') + '/' + (p.model || '')) + '</div>';
+		}
+		html += '</div>';
+		// Right: Probe Output
+		html += '<div>';
+		html += '<div style="font-size:11px;font-weight:600;color:' + vColor + ';margin-bottom:6px;">PROBE \uC2E4\uC81C \uC751\uB2F5 (\uC694\uC57D)</div>';
+		// Multi-provider responses
+		if (mpResults.length > 1) {
+			for (var mi = 0; mi < mpResults.length; mi++) {
+				var mpr = mpResults[mi];
+				html += '<div style="background:#0D0D0D;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:6px;">';
+				html += '<div style="font-size:10px;font-weight:700;color:var(--accent);margin-bottom:4px;">' + esc(mpr.provider || '') + '/' + esc(mpr.model || '') + ' <span style="color:var(--text-muted);">(' + esc(mpr.track || '') + ')</span></div>';
+				if (mpr.error) {
+					html += '<div style="font-size:11px;color:var(--danger);">' + esc(mpr.error.slice(0, 200)) + '</div>';
+				} else if (mpr.response) {
+					html += '<div style="font-size:11px;color:var(--text-muted);line-height:1.5;max-height:80px;overflow:auto;">' + esc(mpr.response.slice(0, 300)) + '</div>';
+				}
+				html += '</div>';
+			}
+		} else {
+			// Single response
+			var responseText = p.response || p.llm_response_excerpt || '';
+			if (responseText) {
+				html += '<div style="background:#0D0D0D;border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;color:var(--text-muted);line-height:1.6;max-height:120px;overflow:auto;">' + esc(responseText.slice(0, 500)) + '</div>';
+			} else {
+				html += '<div style="font-size:11px;color:var(--text-muted);">\uC751\uB2F5 \uB370\uC774\uD130 \uC5C6\uC74C</div>';
+			}
+		}
+		if (p.data_availability) {
+			html += '<div style="font-size:11px;color:' + vColor + ';font-weight:600;margin-top:6px;">\uC815\uBCF4 \uAC00\uC6A9\uC131: ' + esc(p.data_availability) + '</div>';
+		}
+		html += '</div>';
+		html += '</div>'; // close eval-grid-2
+		// Tags + Evidence
+		var bottomParts = [];
+		if (p.evidence_claim) bottomParts.push(p.evidence_claim);
+		var tags = p.tags || [];
+		if (tags.length > 0 || bottomParts.length > 0) {
+			html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:10px;align-items:center;">';
+			for (var ti = 0; ti < tags.length; ti++) {
+				var tag = tags[ti];
+				var tagLabel = typeof tag === 'string' ? tag : (tag.label || '');
+				var tagType = typeof tag === 'object' ? (tag.type || 'neutral') : 'neutral';
+				var tagCls = tagType === 'good' ? 'pill-green' : tagType === 'bad' ? 'pill-red' : 'pill-blue';
+				html += '<span class="pill ' + tagCls + '" style="font-size:9px;">' + esc(tagLabel) + '</span>';
+			}
+			if (bottomParts.length > 0) {
+				html += '<span style="font-size:10px;color:var(--text-muted);margin-left:4px;">\uC785\uC99D: ' + esc(bottomParts.join(', ')) + '</span>';
+			}
+			html += '</div>';
+		}
+		html += '</div>';
+	}
+
+	return html;
+}
+
+// Keep old function for backward compat
+function renderProbesTabLegacy(data, rr) {
 	var multiHtml = renderMultiProviderSummary(data);
 	var actualHtml = renderActualProbes(data);
 	if (multiHtml || actualHtml) {
@@ -2471,7 +2868,7 @@ function renderMultiProviderSummary(data) {
 			factHtml += '<tr>';
 			factHtml += '<td style="font-size:11px;">' + esc(item.fact_label || '') + '</td>';
 			factHtml += '<td style="font-size:11px;">' + esc(item.category || '') + '</td>';
-			item.per_llm.forEach(function(l) {
+			(item.per_llm || []).forEach(function(l) {
 				var accColor = l.accuracy === 'exact' ? '#22c55e' : l.accuracy === 'approximate' ? '#f59e0b' : l.accuracy === 'hallucinated' ? '#ef4444' : '#6b7280';
 				factHtml += '<td><span style="font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(0,0,0,0.1);color:' + accColor + ';font-weight:600;">' + esc(l.accuracy) + '</span></td>';
 			});
