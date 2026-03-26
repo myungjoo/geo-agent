@@ -723,6 +723,7 @@ export async function runPipeline(
 				// ── Generate Executive Summary & Structured Recommendations via LLM ──
 				let executiveSummary: Record<string, unknown> | null = null;
 				let structuredRecommendations: Record<string, unknown> | null = null;
+				let dimensionInterpretations: Record<string, unknown> | null = null;
 
 				if (analysisOutput) {
 					const dimSummary = currentDimensions
@@ -861,6 +862,46 @@ Rules: Every rationale MUST reference specific findings. Do NOT invent data. Wri
 					} catch {
 						// Non-fatal: structured recommendations are optional
 					}
+
+					// Dimension Interpretations — 각 차원 점수에 대한 LLM 해석
+					try {
+						const dimDetails = currentDimensions
+							.map(
+								(d) =>
+									`${d.id} ${d.label} (weight ${(d.weight * 100).toFixed(0)}%): ${d.score.toFixed(1)}/100\nEvidence: ${d.details.join("; ")}`,
+							)
+							.join("\n\n");
+
+						const dimRes = await trackedChatLLM({
+							prompt: `You are a GEO consultant. For each of the 7 GEO dimensions below, write a brief Korean interpretation explaining what the score means and why.
+
+Target: ${config.target_url}
+Site Type: ${analysisOutput.classification.site_type}
+
+${dimDetails}
+
+Generate a JSON with:
+- "dimensions": Object where keys are dimension IDs ("S1" through "S7") and values are objects with:
+  - "interpretation": 1-2 sentence Korean explanation of what this score means in practice for LLM visibility. Reference the specific evidence items.
+  - "status": One of "excellent" (80+), "good" (60-79), "needs_work" (40-59), "critical" (0-39)
+
+Rules: Reference the actual evidence provided. Do NOT invent findings. Write in Korean. Return ONLY valid JSON.`,
+							temperature: 0.3,
+							json_mode: true,
+							max_tokens: 1500,
+						});
+						const cleaned = dimRes.content
+							.replace(/```json\s*/g, "")
+							.replace(/```\s*/g, "")
+							.trim();
+						dimensionInterpretations = {
+							...JSON.parse(cleaned),
+							generated_at: new Date().toISOString(),
+							model: `${dimRes.provider}/${dimRes.model}`,
+						};
+					} catch {
+						// Non-fatal
+					}
 				}
 
 				try {
@@ -889,6 +930,7 @@ Rules: Every rationale MUST reference specific findings. Do NOT invent data. Wri
 					llm_call_log: llmCallLog,
 					executive_summary: executiveSummary,
 					structured_recommendations: structuredRecommendations,
+					dimension_interpretations: dimensionInterpretations,
 				};
 			},
 			(out) =>

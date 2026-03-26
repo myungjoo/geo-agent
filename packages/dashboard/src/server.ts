@@ -118,8 +118,20 @@ app.route("/api/settings", settingsRouter);
 
 // Dashboard UI — serve single HTML SPA
 let dashboardHtmlCache: string | null = null;
+let dashboardHtmlMtime = 0;
 
 function getDashboardHtml(): string {
+	// In dev mode, check file mtime to pick up changes without restart
+	const primaryPath = join(__dirname, "ui", "dashboard.html");
+	try {
+		const { mtimeMs } = require("node:fs").statSync(primaryPath);
+		if (mtimeMs > dashboardHtmlMtime) {
+			dashboardHtmlCache = null;
+			dashboardHtmlMtime = mtimeMs;
+		}
+	} catch {
+		/* ignore */
+	}
 	if (!dashboardHtmlCache) {
 		// Try src/ first (dev), then fall back to dist/ (built)
 		const candidates = [
@@ -147,6 +159,9 @@ function getDashboardHtml(): string {
 }
 
 app.get("/dashboard", (c) => {
+	c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+	c.header("Pragma", "no-cache");
+	c.header("Expires", "0");
 	return c.html(getDashboardHtml());
 });
 

@@ -454,6 +454,7 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 	let llmErrors: string[] = [];
 	let reportExecutiveSummary: Record<string, unknown> | null = null;
 	let reportStructuredRecs: Record<string, unknown> | null = null;
+	let reportDimInterpretations: Record<string, unknown> | null = null;
 	if (reportingStage?.result_full) {
 		try {
 			const reportData = JSON.parse(reportingStage.result_full);
@@ -461,6 +462,7 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 			llmErrors = reportData.llm_errors ?? [];
 			reportExecutiveSummary = reportData.executive_summary ?? null;
 			reportStructuredRecs = reportData.structured_recommendations ?? null;
+			reportDimInterpretations = reportData.dimension_interpretations ?? null;
 		} catch (err) {
 			const msg = `Reporting stage parse error: ${err instanceof Error ? err.message : String(err)}`;
 			console.warn(`⚠️ ${msg}`);
@@ -515,6 +517,10 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 		structured_recommendations:
 			reportStructuredRecs ??
 			(initial.structured_recommendations as Record<string, unknown> | null) ??
+			null,
+		dimension_interpretations:
+			reportDimInterpretations ??
+			(initial.dimension_interpretations as Record<string, unknown> | null) ??
 			null,
 		analysis_report: initial,
 		validation: final_data,
