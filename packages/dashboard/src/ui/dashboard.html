@@ -2150,12 +2150,105 @@ function renderBrandTab(data, ed, rr) {
 
 	html += '</div>'; // close eval-grid-2
 
-	// ── Explanation Footer ──
-	html += '<div style="padding:12px;background:rgba(47,128,237,0.05);border-radius:8px;border:1px solid rgba(47,128,237,0.1);">';
-	html += '<div style="font-size:11px;color:var(--text-muted);line-height:1.6;">';
-	html += '<strong style="color:var(--text);">\uD074\uB808\uC784 \uC2E0\uB8B0\uB3C4</strong> \u2014 \uB9C8\uCF00\uD305 \uBB38\uAD6C \uC911 \uCD9C\uCC98/\uADFC\uAC70\uAC00 \uC788\uB294 \uBE44\uC728. LLM\uC740 \uAC80\uC99D \uAC00\uB2A5\uD55C \uD329\uD2B8\uB97C \uC6B0\uC120 \uC778\uC6A9\uD558\uBA70, \uADFC\uAC70 \uC5C6\uB294 \uC8FC\uC7A5\uC740 \uD560\uB8E8\uC2DC\uB124\uC774\uC158 \uB9AC\uC2A4\uD06C\uAC00 \uB429\uB2C8\uB2E4.<br>';
-	html += '<strong style="color:var(--text);">\uAE0D\uC815\uB3C4</strong> \u2014 \uBA54\uC2DC\uC9C0\uC758 \uAC10\uC131\uC801 \uD1A4. LLM\uC774 \uBE0C\uB79C\uB4DC\uB97C \uC5B8\uAE09\uD560 \uB54C \uC774 \uD1A4\uC744 \uBC18\uC601\uD569\uB2C8\uB2E4.';
-	html += '</div></div>';
+	// ── Detail Explanation (collapsible) ──
+	html += '<details style="margin-top:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">';
+	html += '<summary style="cursor:pointer;padding:14px 16px;font-size:13px;font-weight:700;color:var(--text);background:rgba(47,128,237,0.05);user-select:none;">';
+	html += '\uD83D\uDCD6 \uBE0C\uB79C\uB4DC \uD3C9\uAC00 \uC0C1\uC138 \uC124\uBA85 \uBC0F \uADFC\uAC70</summary>';
+	html += '<div style="padding:20px;font-size:12px;color:var(--text);line-height:1.8;">';
+
+	// Section 1: 평가 지표 설명
+	html += '<div style="margin-bottom:20px;">';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2460 \uD3C9\uAC00 \uC9C0\uD45C \uC124\uBA85</div>';
+	html += '<table class="geo-table-pro" style="font-size:12px;"><thead><tr><th>\uC9C0\uD45C</th><th>\uC758\uBBF8</th><th>GEO \uC601\uD5A5</th></tr></thead><tbody>';
+	html += '<tr><td style="font-weight:600;">\uD074\uB808\uC784 \uC2E0\uB8B0\uB3C4</td>';
+	html += '<td>\uB9C8\uCF00\uD305 \uBB38\uAD6C \uC911 \uCD9C\uCC98/\uADFC\uAC70\uAC00 \uC788\uB294 \uBE44\uC728</td>';
+	html += '<td>LLM\uC740 \uAC80\uC99D \uAC00\uB2A5\uD55C \uD329\uD2B8\uB97C \uC6B0\uC120 \uC778\uC6A9\uD569\uB2C8\uB2E4. \uADFC\uAC70 \uC5C6\uB294 \uC8FC\uC7A5\uC740 \uD560\uB8E8\uC2DC\uB124\uC774\uC158\uC73C\uB85C \uD310\uB2E8\uB418\uC5B4 \uC778\uC6A9 \uD655\uB960\uC774 \uAE09\uACA9\uD788 \uB5A8\uC5B4\uC9D1\uB2C8\uB2E4.</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uAE0D\uC815\uB3C4</td>';
+	html += '<td>\uBA54\uC2DC\uC9C0\uC758 \uAC10\uC131\uC801 \uD1A4 (very_positive ~ negative)</td>';
+	html += '<td>LLM\uC774 \uBE0C\uB79C\uB4DC\uB97C \uC5B8\uAE09\uD560 \uB54C \uC774 \uD1A4\uC744 \uBC18\uC601\uD569\uB2C8\uB2E4. \uADE0\uD615 \uC7A1\uD78C \uAE0D\uC815 \uD1A4\uC774 \uC2E0\uB8B0\uB3C4\uC640 \uD568\uAED8 \uCD5C\uC801\uC785\uB2C8\uB2E4.</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uAC80\uC99D\uC131</td>';
+	html += '<td>\uAC01 \uD074\uB808\uC784\uC758 \uC0AC\uC2E4 \uD655\uC778 \uAC00\uB2A5 \uC218\uC900</td>';
+	html += '<td>verifiable(\uCD9C\uCC98 \uC788\uC74C) > factual(\uAC1D\uAD00\uC801 \uC0AC\uC2E4) > partial(\uBD80\uBD84 \uADFC\uAC70) > unverifiable(\uADFC\uAC70 \uC5C6\uC74C)</td></tr>';
+	html += '</tbody></table>';
+	html += '</div>';
+
+	// Section 2: 브랜드 6차원 설명
+	html += '<div style="margin-bottom:20px;">';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2461 \uBE0C\uB79C\uB4DC \uBA54\uC2DC\uC9C0 6\uCC28\uC6D0 \uBD84\uC11D</div>';
+	html += '<p style="margin-bottom:10px;color:var(--text-muted);">\uD06C\uB864\uB9C1\uB41C \uD398\uC774\uC9C0 \uD14D\uC2A4\uD2B8\uC5D0\uC11C \uD0A4\uC6CC\uB4DC \uBE48\uB3C4\uB97C \uBD84\uC11D\uD558\uC5EC \uC0AC\uC774\uD2B8\uAC00 \uC804\uB2EC\uD558\uB294 \uBE0C\uB79C\uB4DC \uC774\uBBF8\uC9C0\uB97C 6\uAC00\uC9C0 \uCC28\uC6D0\uC73C\uB85C \uD3C9\uAC00\uD569\uB2C8\uB2E4.</p>';
+	html += '<table class="geo-table-pro" style="font-size:12px;"><thead><tr><th>\uCC28\uC6D0</th><th>\uCE21\uC815 \uD0A4\uC6CC\uB4DC</th><th>\uC758\uBBF8</th></tr></thead><tbody>';
+	html += '<tr><td style="font-weight:600;">\uD601\uC2E0/\uB9AC\uB354\uC2ED</td><td><code>innovation, leading, pioneer, first</code></td>';
+	html += '<td>\uC0AC\uC774\uD2B8\uAC00 \uD601\uC2E0\uC801 \uB9AC\uB354 \uC774\uBBF8\uC9C0\uB97C \uC5BC\uB9C8\uB098 \uAC15\uD558\uAC8C \uC804\uB2EC\uD558\uB294\uC9C0</td></tr>';
+	html += '<tr><td style="font-weight:600;">AI/\uAE30\uC220 \uB9AC\uB354\uC2ED</td><td><code>ai, machine learning, smart, intelligent</code></td>';
+	html += '<td>AI/\uCCA8\uB2E8 \uAE30\uC220 \uBD84\uC57C\uC5D0\uC11C\uC758 \uC804\uBB38\uC131 \uC774\uBBF8\uC9C0</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uD504\uB9AC\uBBF8\uC5C4 \uD3EC\uC9C0\uC154\uB2DD</td><td><code>premium, luxury, flagship, ultra</code></td>';
+	html += '<td>\uACE0\uAE09/\uD504\uB9AC\uBBF8\uC5C4 \uBE0C\uB79C\uB4DC\uB85C\uC11C\uC758 \uC778\uC2DD \uC218\uC900</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uC9C0\uC18D\uAC00\uB2A5\uC131/ESG</td><td><code>sustainable, eco, carbon, green</code></td>';
+	html += '<td>\uD658\uACBD\xB7\uC0AC\uD68C\uC801 \uCC45\uC784 \uBA54\uC2DC\uC9C0 \uAC15\uB3C4</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uC0AC\uC2E4 \uAC80\uC99D\uAC00\uB2A5\uC131</td><td>\uCD9C\uCC98 \uC788\uB294 \uD074\uB808\uC784 \uBE44\uC728</td>';
+	html += '<td>\uC8FC\uC7A5\uC758 \uC2E0\uB8B0\uB3C4. \uB192\uC744\uC218\uB85D LLM\uC774 \uC548\uC2EC\uD558\uACE0 \uC778\uC6A9\uD569\uB2C8\uB2E4</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uACBD\uC7C1 \uCC28\uBCC4\uD654</td><td><code>only, exclusive, unique, patented</code></td>';
+	html += '<td>\uACBD\uC7C1\uC0AC \uB300\uBE44 \uCC28\uBCC4\uD654 \uBA54\uC2DC\uC9C0 \uAC15\uB3C4</td></tr>';
+	html += '</tbody></table>';
+	html += '</div>';
+
+	// Section 3: 검증성 등급
+	html += '<div style="margin-bottom:20px;">';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2462 \uAC80\uC99D\uC131 \uB4F1\uAE09 \uAE30\uC900</div>';
+	html += '<table class="geo-table-pro" style="font-size:12px;"><thead><tr><th>\uB4F1\uAE09</th><th>\uD310\uC815 \uAE30\uC900</th><th>\uC608\uC2DC</th></tr></thead><tbody>';
+	html += '<tr><td>' + brandVerifyPill('verifiable') + '</td>';
+	html += '<td>\uACF5\uAC1C \uB370\uC774\uD130\uB85C \uD329\uD2B8\uCCB4\uD06C \uAC00\uB2A5. \uCD9C\uCC98\uAC00 \uBA85\uC2DC\uB428</td>';
+	html += '<td>"2024 Red Dot Design Award \uC218\uC0C1", "IDC \uBCF4\uACE0\uC11C \uAE30\uC900 \uC810\uC720\uC728 1\uC704"</td></tr>';
+	html += '<tr><td>' + brandVerifyPill('factual') + '</td>';
+	html += '<td>\uAC1D\uAD00\uC801\uC73C\uB85C \uD655\uC778 \uAC00\uB2A5\uD55C \uC0AC\uC2E4</td>';
+	html += '<td>"\uC11C\uC6B8 \uBCF8\uC0AC", "\uC9C1\uC6D0 5\uB9CC\uBA85", "1969\uB144 \uC124\uB9BD"</td></tr>';
+	html += '<tr><td>' + brandVerifyPill('partial') + '</td>';
+	html += '<td>\uC77C\uBD80 \uADFC\uAC70\uAC00 \uC788\uC9C0\uB9CC \uBD88\uC644\uC804</td>';
+	html += '<td>"\uC5C5\uACC4 \uCD5C\uACE0 \uC218\uC900\uC758 \uAE30\uC220\uB825" (\uD2B9\uD5C8\uB294 \uC788\uC9C0\uB9CC \uBE44\uAD50 \uADFC\uAC70 \uBD80\uC871)</td></tr>';
+	html += '<tr><td>' + brandVerifyPill('unverifiable') + '</td>';
+	html += '<td>\uADFC\uAC70 \uC5C6\uB294 \uC8FC\uC7A5. LLM\uC774 \uD560\uB8E8\uC2DC\uB124\uC774\uC158\uC73C\uB85C \uD310\uB2E8\uD560 \uC704\uD5D8</td>';
+	html += '<td>"\uC138\uACC4 \uCD5C\uCD08" (\uCD9C\uCC98 \uC5C6\uC74C), "\uAC00\uC7A5 \uC0AC\uB791\uBC1B\uB294 \uBE0C\uB79C\uB4DC"</td></tr>';
+	html += '</tbody></table>';
+	html += '</div>';
+
+	// Section 4: LLM 인용 원리
+	html += '<div style="margin-bottom:20px;">';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2463 LLM\uC774 \uBE0C\uB79C\uB4DC\uB97C \uC778\uC6A9\uD558\uB294 \uC6D0\uB9AC</div>';
+	html += '<div style="line-height:1.8;color:var(--text-muted);">';
+	html += '<p style="margin-bottom:8px;">LLM(ChatGPT, Claude, Gemini \uB4F1)\uC740 \uC751\uB2F5 \uC0DD\uC131 \uC2DC \uB2E4\uC74C \uAE30\uC900\uC73C\uB85C \uC815\uBCF4\uB97C \uC120\uD0DD\uD569\uB2C8\uB2E4:</p>';
+	html += '<ul style="padding-left:20px;margin-bottom:8px;">';
+	html += '<li><strong>\uAC80\uC99D \uAC00\uB2A5\uD55C \uD329\uD2B8</strong>\uB97C \uC6B0\uC120 \uC778\uC6A9 \u2014 \uCD9C\uCC98\uAC00 \uBA85\uD655\uD55C \uC218\uC0C1, \uC21C\uC704, \uD2B9\uD5C8, \uC5F0\uAD6C\uACB0\uACFC</li>';
+	html += '<li><strong>\uADFC\uAC70 \uC5C6\uB294 \uC218\uC2DD\uC5B4</strong>("\uC138\uACC4 \uCD5C\uACE0", "\uAC00\uC7A5 \uB9CE\uC774 \uC120\uD0DD\uD55C")\uB294 \uD560\uB8E8\uC2DC\uB124\uC774\uC158 \uB9AC\uC2A4\uD06C\uB85C \uD68C\uD53C</li>';
+	html += '<li><strong>\uAD6C\uC870\uD654\uB41C \uB370\uC774\uD130</strong>(JSON-LD, \uBA54\uD0C0 \uD0DC\uADF8)\uAC00 \uC788\uC73C\uBA74 \uC815\uBCF4 \uCD94\uCD9C \uC815\uD655\uB3C4 \uC0C1\uC2B9</li>';
+	html += '<li><strong>\uC77C\uAD00\uB41C \uBE0C\uB79C\uB4DC \uBA54\uC2DC\uC9C0</strong>\uAC00 \uC5EC\uB7EC \uD398\uC774\uC9C0\uC5D0 \uBC18\uBCF5\uB418\uBA74 \uC778\uC2DD \uAC15\uD654</li>';
+	html += '</ul>';
+	html += '</div>';
+	html += '</div>';
+
+	// Section 5: 개선 가이드
+	html += '<div>';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2464 \uBE0C\uB79C\uB4DC \uC810\uC218 \uAC1C\uC120 \uAC00\uC774\uB4DC</div>';
+	html += '<table class="geo-table-pro" style="font-size:12px;"><thead><tr><th>\uC870\uCE58</th><th>\uC124\uBA85</th><th>\uC608\uC0C1 \uD6A8\uACFC</th></tr></thead><tbody>';
+	html += '<tr><td style="font-weight:600;">\uADFC\uAC70 \uC5C6\uB294 \uD074\uB808\uC784\uC5D0 \uCD9C\uCC98 \uCD94\uAC00</td>';
+	html += '<td>"\uC138\uACC4 \uCD5C\uCD08" \u2192 "IEEE 2023 \uBC1C\uD45C \uAE30\uC900 \uC138\uACC4 \uCD5C\uCD08"</td>';
+	html += '<td>\uD074\uB808\uC784 \uC2E0\uB8B0\uB3C4 \uC0C1\uC2B9, LLM \uC778\uC6A9 \uD655\uB960 \uC99D\uAC00</td></tr>';
+	html += '<tr><td style="font-weight:600;">Organization JSON-LD \uCD94\uAC00</td>';
+	html += '<td>\uD648\uD398\uC774\uC9C0\uC5D0 Organization \uC2A4\uD0A4\uB9C8 \uB9C8\uD06C\uC5C5 \uC0BD\uC785</td>';
+	html += '<td>S5 \uC810\uC218 +30\uC810, LLM\uC758 \uBE0C\uB79C\uB4DC \uC815\uBCF4 \uCD94\uCD9C \uC815\uD655\uB3C4 \uD5A5\uC0C1</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uC218\uC0C1/\uC778\uC99D \uC815\uBCF4 \uAD6C\uC870\uD654</td>';
+	html += '<td>\uC218\uC0C1 \uC774\uB825\uC744 \uBCC4\uB3C4 \uC139\uC158 + \uC5F0\uB3C4/\uAE30\uAD00\uBA85 \uBA85\uC2DC</td>';
+	html += '<td>\uD329\uD2B8 \uAC80\uC99D\uC131 \u2191, \uBE0C\uB79C\uB4DC \uC2E0\uB8B0 \uC2DC\uADF8\uB110 \uAC15\uD654</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uC18C\uC15C \uBBF8\uB514\uC5B4 + \uC5F0\uB77D\uCC98 \uBA85\uC2DC</td>';
+	html += '<td>\uD478\uD130\uC5D0 \uACF5\uC2DD SNS \uB9C1\uD06C, \uC774\uBA54\uC77C, \uC8FC\uC18C \uBA85\uC2DC</td>';
+	html += '<td>S5 \uC810\uC218 +15~25\uC810, \uC870\uC9C1 \uC2E4\uC7AC\uC131 \uC2E0\uD638</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uD575\uC2EC \uBA54\uC2DC\uC9C0 \uBC18\uBCF5 \uBC30\uCE58</td>';
+	html += '<td>\uBE0C\uB79C\uB4DC \uD575\uC2EC \uAC00\uCE58\uB97C \uBA54\uC778/\uC81C\uD488/About \uD398\uC774\uC9C0\uC5D0 \uC77C\uAD00\uB418\uAC8C \uBC30\uCE58</td>';
+	html += '<td>LLM\uC774 \uBE0C\uB79C\uB4DC \uC815\uCCB4\uC131\uC744 \uBA85\uD655\uD558\uAC8C \uD30C\uC545</td></tr>';
+	html += '</tbody></table>';
+	html += '</div>';
+
+	html += '</div>'; // close detail content
+	html += '</details>';
 
 	return html;
 }
