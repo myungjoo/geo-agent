@@ -295,7 +295,7 @@ describe("extractProductInfo", () => {
 		// Page has prices extracted from HTML, so title fallback is acceptable
 		const data = makeCrawlData({
 			title: "Galaxy S25 Ultra",
-			html: '<html><body><h1>Galaxy S25 Ultra</h1><p>Price: $1,299.99</p><p>Camera: 200 MP</p></body></html>',
+			html: "<html><body><h1>Galaxy S25 Ultra</h1><p>Price: $1,299.99</p><p>Camera: 200 MP</p></body></html>",
 			json_ld: [], // no Product schema
 		});
 		const result = extractProductInfo(data);
