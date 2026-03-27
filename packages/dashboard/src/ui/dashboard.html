@@ -1950,6 +1950,29 @@ function renderCrawlabilityTab(data, ed, rr) {
 		html += collapsible('\uC815\uC801 \uCD94\uCD9C \uB370\uC774\uD130 (eval_data)', renderEvalCrawlability(ed));
 	}
 
+	// ── Detail Explanation ──
+	html += '<details style="margin-top:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">';
+	html += '<summary style="cursor:pointer;padding:14px 16px;font-size:13px;font-weight:700;color:var(--text);background:rgba(47,128,237,0.05);user-select:none;">';
+	html += '\uD83D\uDCD6 \uD06C\uB864\uB9C1 \uD3C9\uAC00 \uC0C1\uC138 \uC124\uBA85 \uBC0F \uADFC\uAC70</summary>';
+	html += '<div style="padding:20px;font-size:12px;color:var(--text);line-height:1.8;">';
+	html += '<div style="margin-bottom:20px;">';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2460 AI \uD06C\uB864\uB7EC\uC640 \uC811\uADFC\uC131</div>';
+	html += '<div style="color:var(--text-muted);margin-bottom:10px;">LLM \uC11C\uBE44\uC2A4(ChatGPT, Claude, Gemini \uB4F1)\uB294 \uC790\uCCB4 \uD06C\uB864\uB7EC(GPTBot, ClaudeBot \uB4F1)\uB85C \uC6F9\uC0AC\uC774\uD2B8\uB97C \uC218\uC9D1\uD569\uB2C8\uB2E4. <code>robots.txt</code>\uC5D0\uC11C \uC774 \uBD07\uB4E4\uC774 \uCC28\uB2E8\uB418\uBA74 LLM\uC774 \uC0AC\uC774\uD2B8 \uC815\uBCF4\uB97C \uC218\uC9D1\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.</div>';
+	html += '<table class="geo-table-pro" style="font-size:12px;"><thead><tr><th>\uD56D\uBAA9</th><th>\uC124\uBA85</th><th>GEO \uC601\uD5A5</th></tr></thead><tbody>';
+	html += '<tr><td style="font-weight:600;">robots.txt AI \uBD07 \uD5C8\uC6A9</td><td>GPTBot, ClaudeBot, PerplexityBot \uB4F1 8\uAC1C \uBD07\uC758 \uC811\uADFC \uD5C8\uC6A9 \uC5EC\uBD80</td><td>\uCC28\uB2E8 \uC2DC LLM\uC774 \uC0AC\uC774\uD2B8 \uC815\uBCF4\uB97C \uC218\uC9D1\uD560 \uC218 \uC5C6\uC5B4 \uC778\uC6A9 \uBD88\uAC00</td></tr>';
+	html += '<tr><td style="font-weight:600;">llms.txt</td><td>AI \uC5D0\uC774\uC804\uD2B8\uC5D0\uAC8C \uC0AC\uC774\uD2B8 \uAD6C\uC870\uC640 \uD575\uC2EC \uCF58\uD150\uCE20\uB97C \uC54C\uB824\uC8FC\uB294 \uD30C\uC77C</td><td>\uC874\uC7AC \uC2DC AI\uAC00 \uC0AC\uC774\uD2B8 \uAD6C\uC870\uB97C \uBE60\uB974\uAC8C \uD30C\uC545 \uAC00\uB2A5 (\uD6A8\uACFC \uBBF8\uAC80\uC99D, \uBCF4\uC870 \uC218\uB2E8)</td></tr>';
+	html += '<tr><td style="font-weight:600;">sitemap.xml</td><td>\uD06C\uB864\uB7EC\uAC00 \uD398\uC774\uC9C0 \uBAA9\uB85D\uC744 \uD655\uC778\uD558\uB294 \uD45C\uC900 \uD30C\uC77C</td><td>\uC5C6\uC73C\uBA74 \uD558\uC704 \uD398\uC774\uC9C0\uAC00 \uC218\uC9D1\uB418\uC9C0 \uC54A\uC744 \uC218 \uC788\uC74C</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uC751\uB2F5 \uC18D\uB3C4</td><td>\uD398\uC774\uC9C0 \uB85C\uB529 \uC2DC\uAC04 (1\uCD08 \uBBF8\uB9CC \uC591\uD638)</td><td>\uB290\uB9AC\uBA74 \uD06C\uB864\uB7EC\uAC00 \uD0C0\uC784\uC544\uC6C3\uD558\uC5EC \uC218\uC9D1 \uC2E4\uD328</td></tr>';
+	html += '</tbody></table></div>';
+	html += '<div>';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2461 \uAC1C\uC120 \uAC00\uC774\uB4DC</div>';
+	html += '<ul style="padding-left:20px;color:var(--text-muted);">';
+	html += '<li>\uCC28\uB2E8\uB41C AI \uBD07\uC774 \uC788\uC73C\uBA74 <code>robots.txt</code>\uC5D0\uC11C \uD574\uB2F9 \uBD07\uC758 <code>Disallow</code> \uADDC\uCE59\uC744 \uC81C\uAC70\uD558\uC138\uC694</li>';
+	html += '<li>\uBA85\uC2DC\uB418\uC9C0 \uC54A\uC740 \uBD07\uC740 \uAE30\uBCF8\uC801\uC73C\uB85C \uD5C8\uC6A9\uB418\uC9C0\uB9CC, \uBA85\uC2DC\uC801 <code>Allow</code>\uAC00 \uAD8C\uC7A5\uB429\uB2C8\uB2E4</li>';
+	html += '<li><code>llms.txt</code>\uB294 \uC800\uBE44\uC6A9\uC73C\uB85C \uCD94\uAC00 \uAC00\uB2A5\uD558\uC9C0\uB9CC JSON-LD/robots.txt\uBCF4\uB2E4 \uC6B0\uC120\uC21C\uC704\uB294 \uB0AE\uC2B5\uB2C8\uB2E4</li>';
+	html += '</ul></div>';
+	html += '</div></details>';
+
 	return html;
 }
 
@@ -1993,6 +2016,7 @@ function renderStructureTab(data, ed, rr) {
 			html += '</div></div>';
 		}
 		if (ed.schema_coverage) html += collapsible('정적 추출 데이터 (eval_data)', renderEvalStructure(ed));
+		html += renderStructureExplanation();
 		return html;
 	}
 	if (!ed.schema_coverage) return '<div class="empty">No structure data available.</div>';
@@ -2047,7 +2071,39 @@ function renderStructureTab(data, ed, rr) {
 		html += '</div>';
 	}
 
+	html += renderStructureExplanation();
 	return html;
+}
+
+function renderStructureExplanation() {
+	var h = '';
+	h += '<details style="margin-top:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">';
+	h += '<summary style="cursor:pointer;padding:14px 16px;font-size:13px;font-weight:700;color:var(--text);background:rgba(47,128,237,0.05);user-select:none;">';
+	h += '\uD83D\uDCD6 \uAD6C\uC870\uD654 \uB370\uC774\uD130 \uD3C9\uAC00 \uC0C1\uC138 \uC124\uBA85 \uBC0F \uADFC\uAC70</summary>';
+	h += '<div style="padding:20px;font-size:12px;color:var(--text);line-height:1.8;">';
+	h += '<div style="margin-bottom:20px;">';
+	h += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2460 \uAD6C\uC870\uD654 \uB370\uC774\uD130\uB780?</div>';
+	h += '<div style="color:var(--text-muted);margin-bottom:10px;">JSON-LD, Schema.org \uB9C8\uD06C\uC5C5\uC740 \uD398\uC774\uC9C0\uC758 \uC815\uBCF4\uB97C \uAE30\uACC4\uAC00 \uC815\uD655\uD788 \uC77D\uC744 \uC218 \uC788\uB294 \uD615\uC2DD\uC73C\uB85C \uC81C\uACF5\uD569\uB2C8\uB2E4. LLM\uC740 \uC774 \uB370\uC774\uD130\uB97C \uC6B0\uC120\uC801\uC73C\uB85C \uD30C\uC2F1\uD558\uC5EC \uC815\uD655\uD55C \uC815\uBCF4\uB97C \uCD94\uCD9C\uD569\uB2C8\uB2E4.</div>';
+	h += '<table class="geo-table-pro" style="font-size:12px;"><thead><tr><th>\uC2A4\uD0A4\uB9C8 \uD0C0\uC785</th><th>\uC6A9\uB3C4</th><th>GEO \uC601\uD5A5</th></tr></thead><tbody>';
+	h += '<tr><td style="font-weight:600;">Organization</td><td>\uD68C\uC0AC/\uC870\uC9C1 \uC815\uBCF4 (\uC774\uB984, \uB85C\uACE0, \uC5F0\uB77D\uCC98)</td><td>LLM\uC774 \uBE0C\uB79C\uB4DC\uB97C \uC815\uD655\uD788 \uC2DD\uBCC4\uD558\uB294 \uD575\uC2EC \uADFC\uAC70</td></tr>';
+	h += '<tr><td style="font-weight:600;">Product / Offer</td><td>\uC81C\uD488\uBA85, \uAC00\uACA9, \uC7AC\uACE0, \uD3C9\uC810</td><td>\uAC00\uACA9/\uC2A4\uD399 \uC9C8\uBB38 \uC2DC \uC815\uD655\uD55C \uB2F5\uBCC0 \uAC00\uB2A5</td></tr>';
+	h += '<tr><td style="font-weight:600;">FAQPage</td><td>\uC790\uC8FC \uBB3B\uB294 \uC9C8\uBB38 Q&A \uC30D</td><td>LLM\uC774 \uC9C1\uC811 \uC778\uC6A9\uD560 \uC218 \uC788\uB294 \uAC00\uC7A5 \uD6A8\uACFC\uC801\uC778 \uD615\uC2DD</td></tr>';
+	h += '<tr><td style="font-weight:600;">BreadcrumbList</td><td>\uD398\uC774\uC9C0 \uACC4\uCE35 \uAD6C\uC870</td><td>\uC0AC\uC774\uD2B8 \uAD6C\uC870 \uD30C\uC545\uC5D0 \uB3C4\uC6C0</td></tr>';
+	h += '<tr><td style="font-weight:600;">AggregateRating</td><td>\uC0AC\uC6A9\uC790 \uD3C9\uC810/\uB9AC\uBDF0 \uC218</td><td>\uC2E0\uB8B0\uB3C4 \uC2DC\uADF8\uB110\uB85C LLM \uCD94\uCC9C \uD655\uB960 \uC0C1\uC2B9</td></tr>';
+	h += '</tbody></table></div>';
+	h += '<div style="margin-bottom:20px;">';
+	h += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2461 JS \uC758\uC874\uB3C4\uC640 GEO</div>';
+	h += '<div style="color:var(--text-muted);">LLM \uD06C\uB864\uB7EC\uB294 JavaScript\uB97C \uC2E4\uD589\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. JS\uB85C \uB80C\uB354\uB9C1\uB418\uB294 \uCF58\uD150\uCE20\uB294 LLM\uC774 \uBCFC \uC218 \uC5C6\uC73C\uBBC0\uB85C, \uC815\uC801 HTML\uC5D0 \uD575\uC2EC \uC815\uBCF4\uAC00 \uD3EC\uD568\uB418\uC5B4\uC57C \uD569\uB2C8\uB2E4. JS \uC758\uC874\uB3C4 50% \uC774\uC0C1\uC774\uBA74 GEO \uCD5C\uC801\uD654 \uD6A8\uACFC\uAC00 \uD06C\uAC8C \uAC10\uC18C\uD569\uB2C8\uB2E4.</div>';
+	h += '</div>';
+	h += '<div>';
+	h += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2462 \uAC1C\uC120 \uAC00\uC774\uB4DC</div>';
+	h += '<ul style="padding-left:20px;color:var(--text-muted);">';
+	h += '<li><strong>JSON-LD \uCD94\uAC00</strong>: \uD575\uC2EC \uC815\uBCF4(Organization, Product, FAQ)\uB97C JSON-LD\uB85C \uCD94\uAC00\uD558\uBA74 S2 \uC810\uC218 \uB300\uD3ED \uC0C1\uC2B9</li>';
+	h += '<li><strong>\uC2DC\uB9E8\uD2F1 HTML</strong>: <code>&lt;article&gt;</code>, <code>&lt;main&gt;</code>, <code>&lt;nav&gt;</code> \uB4F1 \uC2DC\uB9E8\uD2F1 \uD0DC\uADF8 \uC0AC\uC6A9\uC73C\uB85C \uCF58\uD150\uCE20 \uC601\uC5ED \uBA85\uD655\uD654</li>';
+	h += '<li><strong>SSR/Pre-rendering</strong>: SPA\uC758 \uACBD\uC6B0 \uC11C\uBC84 \uC0AC\uC774\uB4DC \uB80C\uB354\uB9C1\uC73C\uB85C JS \uC758\uC874\uB3C4 \uD574\uC18C</li>';
+	h += '</ul></div>';
+	h += '</div></details>';
+	return h;
 }
 
 // ── Tab 4: Products ──────────────────────────────────
@@ -2192,6 +2248,31 @@ function renderProductsTab(data, ed, rr) {
 	html += '<strong style="color:var(--text);">\uB178\uCD9C\uB3C4 \uC0B0\uCD9C \uAE30\uC900</strong>: Schema \uC2A4\uD399(35\uC810) + \uAC00\uACA9(25\uC810) + \uD3C9\uC810(20\uC810) + HTML \uC2A4\uD399(10\uC810) + \uC81C\uD488\uBA85(10\uC810). ';
 	html += 'JSON-LD \uAD6C\uC870\uD654 \uB370\uC774\uD130\uAC00 \uAC00\uC7A5 \uB192\uC740 \uBE44\uC911\uC744 \uCC28\uC9C0\uD558\uBA70, \uC774\uB294 LLM\uC774 \uAC00\uC7A5 \uC815\uD655\uD558\uAC8C \uD30C\uC2F1\uD560 \uC218 \uC788\uB294 \uD615\uC2DD\uC785\uB2C8\uB2E4.';
 	html += '</div></div>';
+
+	// ── Detail Explanation ──
+	html += '<details style="margin-top:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">';
+	html += '<summary style="cursor:pointer;padding:14px 16px;font-size:13px;font-weight:700;color:var(--text);background:rgba(47,128,237,0.05);user-select:none;">';
+	html += '\uD83D\uDCD6 \uC81C\uD488 \uD3C9\uAC00 \uC0C1\uC138 \uC124\uBA85 \uBC0F \uADFC\uAC70</summary>';
+	html += '<div style="padding:20px;font-size:12px;color:var(--text);line-height:1.8;">';
+	html += '<div style="margin-bottom:20px;">';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2460 \uB178\uCD9C\uB3C4 \uC810\uC218 \uAE30\uC900</div>';
+	html += '<table class="geo-table-pro" style="font-size:12px;"><thead><tr><th>\uD56D\uBAA9</th><th>\uBC30\uC810</th><th>\uCE21\uC815 \uBC29\uBC95</th></tr></thead><tbody>';
+	html += '<tr><td style="font-weight:600;">JSON-LD \uC2A4\uD399 (Product schema)</td><td>35\uC810</td><td>additionalProperty\uC758 PropertyValue \uBC30\uC5F4\uC5D0\uC11C \uC2A4\uD399 \uD56D\uBAA9 \uCD94\uCD9C</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uAC00\uACA9 \uC815\uBCF4 (Offer)</td><td>25\uC810</td><td>Offer.price \uB610\uB294 HTML\uC5D0\uC11C \uAC00\uACA9 \uD328\uD134($, \u20A9 \uB4F1) \uAC10\uC9C0</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uD3C9\uC810/\uB9AC\uBDF0 (AggregateRating)</td><td>20\uC810</td><td>ratingValue, reviewCount \uC874\uC7AC \uC5EC\uBD80</td></tr>';
+	html += '<tr><td style="font-weight:600;">HTML \uC2A4\uD399</td><td>10\uC810</td><td>\uBCF8\uBB38\uC5D0\uC11C MP, mAh, GB, GHz \uB4F1 \uB2E8\uC704 \uD328\uD134 \uAC10\uC9C0</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uC81C\uD488\uBA85</td><td>10\uC810</td><td>Product JSON-LD\uC758 name \uB610\uB294 \uD398\uC774\uC9C0 \uD0C0\uC774\uD2C0\uC5D0\uC11C \uCD94\uCD9C</td></tr>';
+	html += '</tbody></table></div>';
+	html += '<div>';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2461 LLM\uC774 \uC81C\uD488 \uC815\uBCF4\uB97C \uCC3E\uB294 \uBC29\uBC95</div>';
+	html += '<div style="color:var(--text-muted);">';
+	html += '<p style="margin-bottom:8px;">LLM\uC740 \uC81C\uD488 \uC815\uBCF4\uB97C \uB2E4\uC74C \uC21C\uC11C\uB85C \uCC3E\uC2B5\uB2C8\uB2E4:</p>';
+	html += '<ol style="padding-left:20px;">';
+	html += '<li><strong>JSON-LD Product \uC2A4\uD0A4\uB9C8</strong> \u2014 \uAC00\uC7A5 \uC815\uD655\uD558\uAC8C \uD30C\uC2F1. \uC81C\uD488\uBA85, \uAC00\uACA9, \uC2A4\uD399, \uD3C9\uC810\uC744 \uAD6C\uC870\uD654\uB41C \uD615\uD0DC\uB85C \uCD94\uCD9C</li>';
+	html += '<li><strong>HTML \uD14D\uC2A4\uD2B8</strong> \u2014 \uD14C\uC774\uBE14, \uB9AC\uC2A4\uD2B8 \uB4F1\uC5D0\uC11C \uC2A4\uD399 \uD328\uD134\uC744 \uD734\uB9AC\uC2A4\uD2F1\uC73C\uB85C \uCD94\uCD9C (\uBD80\uC815\uD655\uD560 \uC218 \uC788\uC74C)</li>';
+	html += '<li><strong>LLM \uD559\uC2B5 \uB370\uC774\uD130</strong> \u2014 \uC6F9\uC5D0\uC11C \uCC3E\uC9C0 \uBABB\uD558\uBA74 \uAE30\uC874 \uD559\uC2B5 \uB370\uC774\uD130\uC5D0\uC11C \uCD94\uCE21 (\uD560\uB8E8\uC2DC\uB124\uC774\uC158 \uC704\uD5D8)</li>';
+	html += '</ol></div></div>';
+	html += '</div></details>';
 
 	return html;
 }
@@ -2540,6 +2621,33 @@ function renderPagesTab(data, rr) {
 	}
 	html += '</div>';
 
+	// ── Detail Explanation ──
+	html += '<details style="margin-top:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">';
+	html += '<summary style="cursor:pointer;padding:14px 16px;font-size:13px;font-weight:700;color:var(--text);background:rgba(47,128,237,0.05);user-select:none;">';
+	html += '\uD83D\uDCD6 \uD398\uC774\uC9C0 \uD3C9\uAC00 \uC0C1\uC138 \uC124\uBA85 \uBC0F \uADFC\uAC70</summary>';
+	html += '<div style="padding:20px;font-size:12px;color:var(--text);line-height:1.8;">';
+	html += '<div style="margin-bottom:20px;">';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2460 \uD398\uC774\uC9C0\uBCC4 \uC810\uC218 \uC0B0\uCD9C</div>';
+	html += '<div style="color:var(--text-muted);margin-bottom:10px;">\uAC01 \uD398\uC774\uC9C0\uB294 S1\u2013S7 7\uAC1C \uCC28\uC6D0\uC73C\uB85C \uB3C5\uB9BD\uC801\uC73C\uB85C \uCC44\uC810\uB429\uB2C8\uB2E4. \uD648\uD398\uC774\uC9C0\uB294 2\uBC30 \uAC00\uC911\uCE58\uB97C \uBC1B\uC73C\uBA70, \uD558\uC704 \uD398\uC774\uC9C0\uB4E4\uC758 \uC810\uC218\uAC00 \uC885\uD569 \uC810\uC218\uC5D0 \uD3C9\uADE0\uC73C\uB85C \uBC18\uC601\uB429\uB2C8\uB2E4.</div>';
+	html += '</div>';
+	html += '<div style="margin-bottom:20px;">';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2461 \uD06C\uB864\uB9C1 \uBC94\uC704</div>';
+	html += '<div style="color:var(--text-muted);">';
+	html += '<ul style="padding-left:20px;">';
+	html += '<li><strong>depth 1</strong>: \uD648\uD398\uC774\uC9C0\uC5D0\uC11C \uB2EC\uD55C \uB9C1\uD06C \uD0D0\uC0C9 (\uCD5C\uB300 30\uD398\uC774\uC9C0)</li>';
+	html += '<li><strong>depth 2</strong>: \uC81C\uD488/\uCE74\uD14C\uACE0\uB9AC \uD398\uC774\uC9C0\uC5D0\uC11C 2\u20133\uAC1C \uD558\uC704 \uB9C1\uD06C</li>';
+	html += '<li><strong>depth 3</strong>: JSON-LD\uAC00 \uC788\uB294 \uD398\uC774\uC9C0\uC5D0\uC11C 1\u20132\uAC1C \uC0C1\uC138 \uB9C1\uD06C</li>';
+	html += '<li>\uC81C\uD488 URL \uD328\uD134(/product, /item \uB4F1)\uC744 \uC6B0\uC120 \uD0D0\uC0C9\uD569\uB2C8\uB2E4</li>';
+	html += '</ul></div></div>';
+	html += '<div>';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2462 \uD0DC\uADF8 \uC758\uBBF8</div>';
+	html += '<div style="display:flex;flex-wrap:wrap;gap:8px;color:var(--text-muted);">';
+	html += '<span><span class="pill pill-green" style="font-size:10px;">good</span> \uD574\uB2F9 \uD56D\uBAA9\uC774 \uC798 \uAD6C\uD604\uB428</span>';
+	html += '<span><span class="pill pill-red" style="font-size:10px;">bad</span> \uAC1C\uC120 \uD544\uC694</span>';
+	html += '<span><span class="pill pill-blue" style="font-size:10px;">neutral</span> \uCC38\uACE0 \uC815\uBCF4</span>';
+	html += '</div></div>';
+	html += '</div></details>';
+
 	return html;
 }
 
@@ -2584,6 +2692,30 @@ function renderRecommendationsTab(data, ed, rr) {
 		}
 		if (rawHtml) html += collapsible('정적 분석 기반 원본 데이터', rawHtml);
 	}
+
+	// ── Detail Explanation ──
+	html += '<details style="margin-top:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">';
+	html += '<summary style="cursor:pointer;padding:14px 16px;font-size:13px;font-weight:700;color:var(--text);background:rgba(47,128,237,0.05);user-select:none;">';
+	html += '\uD83D\uDCD6 \uAD8C\uACE0\uC0AC\uD56D \uC0C1\uC138 \uC124\uBA85 \uBC0F \uADFC\uAC70</summary>';
+	html += '<div style="padding:20px;font-size:12px;color:var(--text);line-height:1.8;">';
+	html += '<div style="margin-bottom:20px;">';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2460 \uC6B0\uC120\uC21C\uC704 \uAE30\uC900</div>';
+	html += '<table class="geo-table-pro" style="font-size:12px;"><thead><tr><th>\uB4F1\uAE09</th><th>\uC758\uBBF8</th><th>\uAD8C\uC7A5 \uC2DC\uC810</th></tr></thead><tbody>';
+	html += '<tr><td><span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800;background:#EF4444;color:#fff;">CRITICAL</span></td><td>GEO \uC810\uC218\uC5D0 \uC2EC\uAC01\uD55C \uC601\uD5A5</td><td>\uC989\uC2DC \uC870\uCE58 (\uC8FC \uB2E8\uC704)</td></tr>';
+	html += '<tr><td><span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800;background:#F59E0B;color:#fff;">HIGH</span></td><td>\uC810\uC218 \uD5A5\uC0C1\uC5D0 \uB192\uC740 \uAE30\uC5EC</td><td>\uB2E8\uAE30 \uC870\uCE58 (1\u20132\uC8FC)</td></tr>';
+	html += '<tr><td><span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800;background:#3B82F6;color:#fff;">MEDIUM</span></td><td>\uAC1C\uC120 \uC2DC \uC810\uC218 \uC0C1\uC2B9 \uAE30\uB300</td><td>\uC911\uAE30 \uACC4\uD68D (1\uAC1C\uC6D4)</td></tr>';
+	html += '<tr><td><span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800;background:#10B981;color:#fff;">LOW</span></td><td>\uBD80\uAC00\uC801 \uAC1C\uC120</td><td>\uC5EC\uC720 \uC2DC \uC801\uC6A9</td></tr>';
+	html += '</tbody></table></div>';
+	html += '<div>';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2461 \uAD8C\uACE0\uC0AC\uD56D \uC0DD\uC131 \uBC29\uC2DD</div>';
+	html += '<div style="color:var(--text-muted);">';
+	html += '<ul style="padding-left:20px;">';
+	html += '<li><strong>\uC815\uC801 \uBD84\uC11D</strong>: S1\u2013S7 \uCC28\uC6D0 \uC810\uC218\uC5D0\uC11C \uBD80\uC871\uD55C \uD56D\uBAA9\uC744 \uADDC\uCE59 \uAE30\uBC18\uC73C\uB85C \uB3C4\uCD9C (\uC601\uD5A5\uB3C4/\uB09C\uC774\uB3C4/\uC2A4\uD504\uB9B0\uD2B8 \uD3EC\uD568)</li>';
+	html += '<li><strong>AI \uBD84\uC11D</strong>: LLM\uC774 \uC815\uC801 \uBD84\uC11D \uACB0\uACFC + \uD504\uB85C\uBE0C \uACB0\uACFC + \uBE0C\uB79C\uB4DC \uD3C9\uAC00\uB97C \uC885\uD569\uD558\uC5EC \uB9DE\uCDA4\uD615 \uAD8C\uACE0\uC548 \uC0DD\uC131</li>';
+	html += '<li>\uAC01 \uAD8C\uACE0\uC5D0\uB294 <strong>\uADFC\uAC70</strong>(\uC65C \uD544\uC694\uD55C\uC9C0), <strong>\uC870\uCE58 \uBC29\uBC95</strong>, <strong>\uC608\uC0C1 \uD6A8\uACFC</strong>\uAC00 \uD3EC\uD568\uB429\uB2C8\uB2E4</li>';
+	html += '</ul></div></div>';
+	html += '</div></details>';
+
 	return html;
 }
 
@@ -2839,6 +2971,25 @@ function renderEvidenceTab(data, ed, rr) {
 			})());
 		}
 	}
+
+	// ── Detail Explanation ──
+	html += '<details style="margin-top:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">';
+	html += '<summary style="cursor:pointer;padding:14px 16px;font-size:13px;font-weight:700;color:var(--text);background:rgba(47,128,237,0.05);user-select:none;">';
+	html += '\uD83D\uDCD6 \uC2E4\uC99D \uB370\uC774\uD130 \uC0C1\uC138 \uC124\uBA85 \uBC0F \uADFC\uAC70</summary>';
+	html += '<div style="padding:20px;font-size:12px;color:var(--text);line-height:1.8;">';
+	html += '<div style="margin-bottom:20px;">';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2460 \uC2E4\uC99D \uD0ED\uC758 \uC5ED\uD560</div>';
+	html += '<div style="color:var(--text-muted);margin-bottom:10px;">\uC2E4\uC99D \uD0ED\uC740 \uB2E4\uB978 \uD0ED\uB4E4\uC758 \uD3C9\uAC00 \uADFC\uAC70\uAC00 \uB418\uB294 <strong>\uC6D0\uBCF8 \uB370\uC774\uD130</strong>\uB97C \uBAA8\uC544\uB193\uC740 \uACF3\uC785\uB2C8\uB2E4. \uD06C\uB864\uB9C1\uB41C HTML\uC5D0\uC11C \uC2E4\uC81C\uB85C \uCD94\uCD9C\uD55C \uC6D0\uBB38 \uC99D\uAC70\uB97C \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.</div>';
+	html += '</div>';
+	html += '<div style="margin-bottom:20px;">';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2461 \uC8FC\uC694 \uC139\uC158 \uC124\uBA85</div>';
+	html += '<table class="geo-table-pro" style="font-size:12px;"><thead><tr><th>\uC139\uC158</th><th>\uB0B4\uC6A9</th><th>\uD65C\uC6A9\uCC98</th></tr></thead><tbody>';
+	html += '<tr><td style="font-weight:600;">Schema \uAD6C\uD604 \uB9E4\uD2B8\uB9AD\uC2A4</td><td>\uD398\uC774\uC9C0\uBCC4 Schema.org \uD0C0\uC785 \uAD6C\uD604 \uD604\uD669</td><td>\uAD6C\uC870\uD654 \uD0ED\uC758 \uC810\uC218 \uADFC\uAC70</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uD074\uB808\uC784 \uAC80\uC99D</td><td>\uB9C8\uCF00\uD305 \uBB38\uAD6C\uC758 LLM \uC2E0\uB8B0\uB3C4 \uD3C9\uAC00</td><td>\uBE0C\uB79C\uB4DC \uD0ED\uC758 \uAC80\uC99D\uC131 \uB4F1\uAE09 \uADFC\uAC70</td></tr>';
+	html += '<tr><td style="font-weight:600;">JS \uC758\uC874\uC131 \uC0C1\uC138</td><td>\uAC01 \uB370\uC774\uD130 \uD56D\uBAA9\uC774 \uC815\uC801 HTML\uC5D0 \uC874\uC7AC\uD558\uB294\uC9C0</td><td>\uAD6C\uC870\uD654 \uD0ED\uC758 JS \uC758\uC874\uB3C4 \uD3C9\uAC00 \uADFC\uAC70</td></tr>';
+	html += '<tr><td style="font-weight:600;">\uC6D0\uBB38 \uC99D\uAC70 \uC2A4\uB2C8\uD3AB</td><td>JSON-LD, robots.txt, \uBA54\uD0C0\uD0DC\uADF8 \uC6D0\uBB38 \uBC1C\uCDE8</td><td>\uBAA8\uB4E0 \uD0ED\uC758 \uD310\uB2E8 \uADFC\uAC70</td></tr>';
+	html += '</tbody></table></div>';
+	html += '</div></details>';
 
 	return html;
 }
@@ -3108,6 +3259,46 @@ function renderProbesTab(data, rr) {
 		}
 		html += '</div>';
 	}
+
+	// ── Detail Explanation ──
+	html += '<details style="margin-top:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">';
+	html += '<summary style="cursor:pointer;padding:14px 16px;font-size:13px;font-weight:700;color:var(--text);background:rgba(47,128,237,0.05);user-select:none;">';
+	html += '\uD83D\uDCD6 \uD504\uB85C\uBE0C \uD3C9\uAC00 \uC0C1\uC138 \uC124\uBA85 \uBC0F \uADFC\uAC70</summary>';
+	html += '<div style="padding:20px;font-size:12px;color:var(--text);line-height:1.8;">';
+	html += '<div style="margin-bottom:20px;">';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2460 Synthetic Probe\uB780?</div>';
+	html += '<div style="color:var(--text-muted);margin-bottom:10px;">\uC2E4\uC81C \uC0AC\uC6A9\uC790\uAC00 LLM\uC5D0 \uBB3C\uC5B4\uBCFC \uBC95\uD55C \uC9C8\uBB38\uC744 AI\uC5D0\uAC8C \uC9C1\uC811 \uC9C8\uBB38\uD558\uC5EC, \uD0C0\uAC9F \uC0AC\uC774\uD2B8\uC758 \uC815\uBCF4\uAC00 \uC5BC\uB9C8\uB098 \uC815\uD655\uD558\uAC8C \uC778\uC6A9\uB418\uB294\uC9C0 \uD14C\uC2A4\uD2B8\uD558\uB294 \uBC29\uBC95\uC785\uB2C8\uB2E4.</div>';
+	html += '</div>';
+	html += '<div style="margin-bottom:20px;">';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2461 8\uAC1C \uD504\uB85C\uBE0C \uAD6C\uC131</div>';
+	html += '<table class="geo-table-pro" style="font-size:12px;"><thead><tr><th>ID</th><th>\uC720\uD615</th><th>\uCE21\uC815 \uD56D\uBAA9</th></tr></thead><tbody>';
+	html += '<tr><td>P-01</td><td>\uC815\uD655\uB3C4</td><td>\uC81C\uD488 \uC2A4\uD399\uC774 \uC815\uD655\uD788 \uC778\uC6A9\uB418\uB294\uC9C0</td></tr>';
+	html += '<tr><td>P-02</td><td>\uC815\uD655\uB3C4</td><td>\uAC00\uACA9 \uC815\uBCF4\uAC00 \uC815\uD655\uD55C\uC9C0</td></tr>';
+	html += '<tr><td>P-03</td><td>\uC778\uC6A9</td><td>\uACBD\uC7C1\uC0AC \uBE44\uAD50 \uC2DC \uD0C0\uAC9F\uC774 \uC5B8\uAE09\uB418\uB294\uC9C0</td></tr>';
+	html += '<tr><td>P-04</td><td>\uC778\uC2DD</td><td>LLM\uC774 \uBE0C\uB79C\uB4DC\uB97C \uC815\uD655\uD788 \uC544\uB294\uC9C0</td></tr>';
+	html += '<tr><td>P-05</td><td>\uCD94\uCC9C</td><td>\uCD94\uCC9C \uC694\uCCAD \uC2DC \uD0C0\uAC9F\uC774 \uD3EC\uD568\uB418\uB294\uC9C0</td></tr>';
+	html += '<tr><td>P-06</td><td>\uC815\uD655\uB3C4</td><td>\uC8FC\uC694 \uC218\uCE58/\uC0AC\uC2E4\uC774 \uC815\uD655\uD55C\uC9C0</td></tr>';
+	html += '<tr><td>P-07</td><td>\uC778\uC6A9</td><td>\uCD5C\uC2E0 \uC815\uBCF4\uAC00 \uBC18\uC601\uB418\uB294\uC9C0</td></tr>';
+	html += '<tr><td>P-08</td><td>\uCD94\uCC9C</td><td>\uBB38\uC81C \uD574\uACB0 \uC2DC \uD0C0\uAC9F\uC774 \uD574\uACB0\uCC45\uC73C\uB85C \uC5B8\uAE09\uB418\uB294\uC9C0</td></tr>';
+	html += '</tbody></table></div>';
+	html += '<div style="margin-bottom:20px;">';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2462 \uD310\uC815 \uAE30\uC900</div>';
+	html += '<table class="geo-table-pro" style="font-size:12px;"><thead><tr><th>\uD310\uC815</th><th>\uC870\uAC74</th></tr></thead><tbody>';
+	html += '<tr><td><span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:10px;font-weight:800;background:rgba(16,185,129,0.2);color:#10B981;">PASS</span></td><td>\uD0C0\uAC9F \uC0AC\uC774\uD2B8\uAC00 \uC778\uC6A9\uB418\uACE0 \uC815\uD655\uB3C4\uAC00 \uB192\uC74C (cited=true & accuracy\u226570%)</td></tr>';
+	html += '<tr><td><span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:10px;font-weight:800;background:rgba(245,158,11,0.2);color:#F59E0B;">PARTIAL</span></td><td>\uC778\uC6A9\uB418\uC9C0\uB9CC \uBD80\uC815\uD655\uD558\uAC70\uB098, \uC778\uC6A9 \uC5C6\uC774 \uBD80\uBD84 \uC815\uD655 (accuracy 30\u201370%)</td></tr>';
+	html += '<tr><td><span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:10px;font-weight:800;background:rgba(239,68,68,0.2);color:#EF4444;">FAIL</span></td><td>\uC778\uC6A9\uB418\uC9C0 \uC54A\uAC70\uB098 \uC815\uD655\uB3C4\uAC00 \uB9E4\uC6B0 \uB0AE\uC74C (accuracy<30%)</td></tr>';
+	html += '</tbody></table></div>';
+	html += '<div>';
+	html += '<div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">\u2463 GEO Score \uBC18\uC601</div>';
+	html += '<div style="color:var(--text-muted);">';
+	html += '<ul style="padding-left:20px;">';
+	html += '<li><strong>\uC778\uC6A9\uB960(25%)</strong>: \uD504\uB85C\uBE0C\uC5D0\uC11C cited=true\uC778 \uBE44\uC728</li>';
+	html += '<li><strong>\uC815\uD655\uB3C4(20%)</strong>: \uC804\uCCB4 \uD504\uB85C\uBE0C \uD3C9\uADE0 accuracy</li>';
+	html += '<li><strong>\uC815\uBCF4\uC778\uC2DD(20%)</strong>: PASS + PARTIAL\u00D70.5 \uBE44\uC728</li>';
+	html += '<li><strong>\uCEE4\uBC84\uB9AC\uC9C0(15%)</strong>: \uC5EC\uB7EC \uD504\uB85C\uBC14\uC774\uB354\uC5D0\uC11C \uC778\uC6A9\uB418\uB294 \uBC94\uC704</li>';
+	html += '<li><strong>\uC21C\uC704(10%)</strong>: \uC778\uC6A9\uB960\u00D70.6 + \uC815\uBCF4\uC778\uC2DD\uB960\u00D70.4 \uAC00\uC911 \uD3C9\uADE0</li>';
+	html += '</ul></div></div>';
+	html += '</div></details>';
 
 	return html;
 }
