@@ -188,21 +188,43 @@ export function createAnalysisToolState(): AnalysisToolState {
 
 // ── Helpers ─────────────────────────────────────────────────
 
+interface DimensionResult {
+	score: number;
+	evidence: { keyword: string; hits: number }[];
+	total_hits: number;
+	max_hits: number;
+	page_count: number;
+}
+
 /** Score how strongly a set of keywords appears across all pages (0-100) */
-function assessDimension(pages: CrawlData[], keywords: string[]): number {
+function assessDimension(pages: CrawlData[], keywords: string[]): DimensionResult {
 	let totalHits = 0;
 	let totalPages = 0;
+	const keywordHits: Record<string, number> = {};
+	for (const kw of keywords) keywordHits[kw] = 0;
+
 	for (const page of pages) {
 		totalPages++;
 		const text = page.html.toLowerCase();
 		for (const kw of keywords) {
 			const regex = new RegExp(kw, "gi");
 			const matches = text.match(regex);
-			if (matches) totalHits += Math.min(matches.length, 5); // Cap at 5 per keyword per page
+			if (matches) {
+				const capped = Math.min(matches.length, 5); // Cap at 5 per keyword per page
+				totalHits += capped;
+				keywordHits[kw] += capped;
+			}
 		}
 	}
 	const maxHits = totalPages * keywords.length * 3; // 3 hits per keyword per page = good coverage
-	return Math.min(Math.round((totalHits / Math.max(maxHits, 1)) * 100), 100);
+	const evidence = keywords.map((kw) => ({ keyword: kw, hits: keywordHits[kw] }));
+	return {
+		score: Math.min(Math.round((totalHits / Math.max(maxHits, 1)) * 100), 100),
+		evidence,
+		total_hits: totalHits,
+		max_hits: maxHits,
+		page_count: totalPages,
+	};
 }
 
 // ── Tool Handlers Factory ───────────────────────────────────
@@ -379,62 +401,56 @@ export function createAnalysisToolHandlers(
 
 			// Brand perception dimensions
 			const html = crawlData.html.toLowerCase();
+			const dimResults = {
+				innovation: assessDimension(allPages, [
+					"innovation",
+					"innovative",
+					"leading",
+					"pioneer",
+					"first",
+				]),
+				aiTech: assessDimension(allPages, [
+					"ai",
+					"artificial intelligence",
+					"machine learning",
+					"smart",
+					"intelligent",
+				]),
+				premium: assessDimension(allPages, ["premium", "luxury", "flagship", "pro", "ultra"]),
+				esg: assessDimension(allPages, [
+					"sustainable",
+					"eco",
+					"recycle",
+					"carbon",
+					"green",
+					"environment",
+				]),
+				differentiation: assessDimension(allPages, [
+					"only",
+					"exclusive",
+					"unique",
+					"patented",
+					"proprietary",
+				]),
+			};
+			const verifiableCount = claims.filter((c) => c.verifiability === "verifiable").length;
 			const dimensions = [
-				{
-					label: "Innovation/Leadership Image",
-					score: assessDimension(allPages, [
-						"innovation",
-						"innovative",
-						"leading",
-						"pioneer",
-						"first",
-					]),
-				},
-				{
-					label: "AI/Tech Leadership",
-					score: assessDimension(allPages, [
-						"ai",
-						"artificial intelligence",
-						"machine learning",
-						"smart",
-						"intelligent",
-					]),
-				},
-				{
-					label: "Premium Brand Positioning",
-					score: assessDimension(allPages, ["premium", "luxury", "flagship", "pro", "ultra"]),
-				},
-				{
-					label: "Sustainability/ESG",
-					score: assessDimension(allPages, [
-						"sustainable",
-						"eco",
-						"recycle",
-						"carbon",
-						"green",
-						"environment",
-					]),
-				},
+				{ label: "Innovation/Leadership Image", ...dimResults.innovation },
+				{ label: "AI/Tech Leadership", ...dimResults.aiTech },
+				{ label: "Premium Brand Positioning", ...dimResults.premium },
+				{ label: "Sustainability/ESG", ...dimResults.esg },
 				{
 					label: "Factual Claim Verifiability",
-					score:
-						claims.length > 0
-							? Math.round(
-									(claims.filter((c) => c.verifiability === "verifiable").length / claims.length) *
-										100,
-								)
-							: 0,
+					score: claims.length > 0 ? Math.round((verifiableCount / claims.length) * 100) : 0,
+					evidence: [
+						{ keyword: "verifiable claims", hits: verifiableCount },
+						{ keyword: "total claims", hits: claims.length },
+					],
+					total_hits: verifiableCount,
+					max_hits: claims.length,
+					page_count: allPages.length,
 				},
-				{
-					label: "Competitive Differentiation",
-					score: assessDimension(allPages, [
-						"only",
-						"exclusive",
-						"unique",
-						"patented",
-						"proprietary",
-					]),
-				},
+				{ label: "Competitive Differentiation", ...dimResults.differentiation },
 			];
 
 			return JSON.stringify({ dimensions, claims: claims.slice(0, 20) });

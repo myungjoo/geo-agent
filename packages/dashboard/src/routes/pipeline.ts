@@ -496,6 +496,10 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 	// parseWarnings를 llmErrors에 합산하여 사용자에게 전달
 	const allErrors = [...llmErrors, ...parseWarnings];
 
+	// GEO Score (Level 1) — probe 결과가 반영된 종합 점수
+	const geoScore = (initial.geo_score as Record<string, unknown>) ?? null;
+	const readinessScore = (initial.readiness_score as number) ?? initialScore;
+
 	return c.json({
 		initial_score: initialScore,
 		initial_grade: initial.grade ?? "Unknown",
@@ -504,6 +508,8 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/evaluation", async (c) => {
 		delta: finalScore - initialScore,
 		site_type: initial.site_type ?? "unknown",
 		dimensions: initial.dimensions ?? [],
+		geo_score: geoScore,
+		readiness_score: readinessScore,
 		multi_page: initial.multi_page ?? null,
 		eval_data: initial.eval_data ?? null,
 		synthetic_probes: initial.synthetic_probes ?? null,

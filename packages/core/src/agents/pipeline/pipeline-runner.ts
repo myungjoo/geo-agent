@@ -1,6 +1,7 @@
 import { CloneManager } from "../../clone/clone-manager.js";
 import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
 import type { LLMProviderSettings } from "../../llm/provider-config.js";
+import { GEO_SCORE_WEIGHTS } from "../../models/geo-score.js";
 /**
  * Pipeline Runner — Orchestrator에 모든 Agent를 등록하고 E2E 파이프라인 실행
  *
@@ -33,6 +34,26 @@ import { isLLMAuthError } from "../shared/llm-helpers.js";
 import type { CrawlData } from "../shared/types.js";
 import { type StrategyOutput, runStrategy } from "../strategy/strategy-agent.js";
 import { type ValidationOutput, runValidation } from "../validation/validation-agent.js";
+
+/** Probe 결과 반영 후 GEO Score total을 GEO_SCORE_WEIGHTS로 재계산 */
+function recalculateGeoScoreTotal(gs: {
+	citation_rate: number;
+	citation_accuracy: number;
+	info_recognition_score: number;
+	coverage: number;
+	rank_position: number;
+	structured_score: number;
+	total: number;
+}): void {
+	gs.total = Math.round(
+		gs.citation_rate * GEO_SCORE_WEIGHTS.citation_rate +
+			gs.citation_accuracy * GEO_SCORE_WEIGHTS.citation_accuracy +
+			gs.info_recognition_score * GEO_SCORE_WEIGHTS.info_recognition_score +
+			gs.coverage * GEO_SCORE_WEIGHTS.coverage +
+			gs.rank_position * GEO_SCORE_WEIGHTS.rank_position +
+			gs.structured_score * GEO_SCORE_WEIGHTS.structured_score,
+	);
+}
 
 // ── Pipeline Config ─────────────────────────────────────────
 
@@ -314,7 +335,8 @@ export async function runPipeline(
 					richReport = result.richReport;
 				}
 				ctx.setRef("analysis", analysisOutput.report.report_id);
-				currentScore = analysisOutput.geo_scores.overall_score;
+				// GEO Score (Level 1) — probe 결과가 반영된 종합 점수 사용
+				currentScore = analysisOutput.report.current_geo_score.total;
 				currentGrade = analysisOutput.geo_scores.grade;
 				currentDimensions = analysisOutput.geo_scores.dimensions;
 				initialScore = currentScore;
@@ -387,6 +409,18 @@ export async function runPipeline(
 						analysisOutput.report.current_geo_score.llm_breakdown =
 							multiProbeResults.comparison.llm_breakdown;
 
+						// coverage: 인용한 프로바이더 비율
+						const totalProviders = Object.keys(multiProbeResults.comparison.llm_breakdown).length;
+						const citingProviders = Object.values(
+							multiProbeResults.comparison.llm_breakdown,
+						).filter((b) => (b as { citation_rate: number }).citation_rate > 0).length;
+						analysisOutput.report.current_geo_score.coverage = Math.round(
+							(citingProviders / Math.max(totalProviders, 1)) * 100,
+						);
+
+						// GEO Score total 재계산 (GEO_SCORE_WEIGHTS 기반)
+						recalculateGeoScoreTotal(analysisOutput.report.current_geo_score);
+
 						// SyntheticProbeRunResult 호환 래퍼 (기존 UI 호환)
 						probeResults = convertMultiToSingleProbeResult(multiProbeResults);
 					} else {
@@ -417,6 +451,14 @@ export async function runPipeline(
 							analysisOutput.report.current_geo_score.rank_position = Math.round(
 								(citRate * 0.6 + infoRate * 0.4) * 100,
 							);
+
+							// coverage: 단일 프로바이더이므로 citation_rate 기반
+							analysisOutput.report.current_geo_score.coverage = Math.round(
+								probeResults.summary.citation_rate * 100,
+							);
+
+							// GEO Score total 재계산 (GEO_SCORE_WEIGHTS 기반)
+							recalculateGeoScoreTotal(analysisOutput.report.current_geo_score);
 						}
 					}
 				} catch (probeErr) {
@@ -434,10 +476,12 @@ export async function runPipeline(
 				const probeInfo = probeResults
 					? `, Probes: ${probeResults.summary.pass}P/${probeResults.summary.partial}A/${probeResults.summary.fail}F (citation ${Math.round(probeResults.summary.citation_rate * 100)}%)`
 					: "";
-				return `Score: ${out.geo_scores.overall_score}/100 (${out.geo_scores.grade}), Site: ${out.classification.site_type} (confidence: ${out.classification.confidence.toFixed(2)})${pageInfo}${probeInfo}`;
+				return `GEO Score: ${out.report.current_geo_score.total}/100 (Readiness: ${out.geo_scores.overall_score}), Site: ${out.classification.site_type} (confidence: ${out.classification.confidence.toFixed(2)})${pageInfo}${probeInfo}`;
 			},
 			(out) => ({
-				score: out.geo_scores.overall_score,
+				score: out.report.current_geo_score.total,
+				readiness_score: out.geo_scores.overall_score,
+				geo_score: out.report.current_geo_score,
 				grade: out.geo_scores.grade,
 				site_type: out.classification.site_type,
 				dimensions: out.geo_scores.dimensions.map((d) => ({

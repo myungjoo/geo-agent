@@ -1316,6 +1316,8 @@ function renderStickyScoreHeader(data) {
 	var score = data.initial_score || 0;
 	var color = scoreColor(score);
 	var dims = data.dimensions || [];
+	var gs = data.geo_score || null;
+	var readiness = data.readiness_score || 0;
 	var html = '<div class="eval-sticky-header">';
 	html += '<div class="eval-sticky-score">';
 	// Gauge
@@ -1323,9 +1325,35 @@ function renderStickyScoreHeader(data) {
 	html += '<div class="gauge-value" style="color:' + color + ';">' + Math.round(score) + '</div></div>';
 	// Score meta
 	html += '<div class="score-meta">';
-	html += '<div class="score-label">GEO Readiness</div>';
+	html += '<div class="score-label">GEO Score</div>';
 	html += '<div class="score-value" style="color:' + color + ';">' + score.toFixed(1) + '<span style="font-size:12px;color:var(--text-muted);font-weight:400;"> / 100</span></div>';
 	html += '<div class="score-grade">' + esc(String(data.initial_grade || '')) + ' · ' + esc(String(data.site_type || '')) + '</div>';
+	// GEO Score sub-metrics (Level 1)
+	if (gs) {
+		var metrics = [
+			{ label: '\uC778\uC6A9\uB960', key: 'citation_rate', weight: '25%' },
+			{ label: '\uC815\uD655\uB3C4', key: 'citation_accuracy', weight: '20%' },
+			{ label: '\uC815\uBCF4\uC778\uC2DD', key: 'info_recognition_score', weight: '20%' },
+			{ label: '\uCEE4\uBC84\uB9AC\uC9C0', key: 'coverage', weight: '15%' },
+			{ label: '\uC21C\uC704', key: 'rank_position', weight: '10%' },
+			{ label: '\uAD6C\uC870\uD654', key: 'structured_score', weight: '10%' }
+		];
+		html += '<div style="display:flex;flex-wrap:wrap;gap:4px 8px;margin-top:8px;">';
+		for (var mi = 0; mi < metrics.length; mi++) {
+			var m = metrics[mi];
+			var mv = gs[m.key] || 0;
+			var mc = scoreColor(mv);
+			html += '<div style="display:flex;align-items:center;gap:4px;">';
+			html += '<span style="font-size:9px;color:var(--text-muted);">' + m.label + '</span>';
+			html += '<span style="font-size:11px;font-weight:700;color:' + mc + ';">' + Math.round(mv) + '</span>';
+			html += '</div>';
+		}
+		html += '</div>';
+	}
+	if (readiness > 0) {
+		var rc = scoreColor(readiness);
+		html += '<div style="margin-top:6px;font-size:10px;color:var(--text-muted);">Readiness: <span style="font-weight:700;color:' + rc + ';">' + Math.round(readiness) + '</span>/100</div>';
+	}
 	html += '</div>';
 	// Delta if exists
 	if (data.delta && data.delta !== 0) {
@@ -1337,7 +1365,7 @@ function renderStickyScoreHeader(data) {
 		html += '<div style="font-size:32px;font-weight:900;color:' + fColor + ';">' + Math.round(fScore) + '</div>';
 		html += '</div>';
 	}
-	// Divider + Mini dimension bars
+	// Divider + Mini dimension bars (Readiness S1-S7)
 	if (dims.length > 0) {
 		html += '<div class="sticky-divider"></div>';
 		html += '<div class="dim-mini-bars">';
@@ -1534,23 +1562,97 @@ function renderEvalSubTab(tabId, data, container) {
 // ── Tab 1: Overview ──────────────────────────────────
 function renderOverviewTab(data, ed, rr) {
 	var html = '';
+	var gs = data.geo_score || null;
+	var probes = data.synthetic_probes || null;
 
-	// 7-Dimension Detailed Analysis
-	var dimDescriptions = {
-		'S1': 'AI 크롤러(GPTBot, ClaudeBot 등)가 사이트에 접근 가능한지, robots.txt/llms.txt/sitemap 설정 상태를 평가합니다.',
-		'S2': 'JSON-LD, Schema.org, Open Graph 등 구조화 데이터의 존재 여부와 품질을 평가합니다.',
-		'S3': '시맨틱 HTML 구조, 헤딩 계층, 텍스트 대 마크업 비율 등 LLM 파싱 용이성을 평가합니다.',
-		'S4': '수치, 통계, 스펙 테이블 등 검증 가능한 팩트 데이터의 밀도를 평가합니다.',
-		'S5': '브랜드 스키마, 일관된 메시지, 소셜 링크 등 조직 신뢰 시그널을 평가합니다.',
-		'S6': 'llms.txt, AI 메타태그, RSS/Atom 피드 등 AI 에이전트 친화적 인프라를 평가합니다.',
-		'S7': 'Breadcrumb, 내부 링크 구조, 네비게이션, 사이트맵 등 콘텐츠 탐색 편의성을 평가합니다.'
-	};
-	// 2-column layout: Dimension Analysis (left) + LLM Provider Scores (right)
+	// ══════════════════════════════════════════════════════
+	// Section 1: LLM 성과 분석 (GEO Score Breakdown)
+	// ══════════════════════════════════════════════════════
+	html += '<div class="card" style="border-top:3px solid var(--primary);">';
+	html += '<div class="eval-section-title"><div class="dot"></div> AI \uBD84\uC11D \uACB0\uACFC</div>';
+	html += '<div style="font-size:11px;color:var(--text-muted);padding:0 14px 12px;margin-top:-8px;line-height:1.5;">AI \uC5D4\uC9C4(ChatGPT, Claude, Gemini \uB4F1)\uC5D0 \uC9C8\uBB38\uD588\uC744 \uB54C \uC774 \uC0AC\uC774\uD2B8\uAC00 \uC5BC\uB9C8\uB098 \uC778\uC6A9\uB418\uACE0 \uC815\uD655\uD558\uAC8C \uC18C\uAC1C\uB418\uB294\uC9C0 \uCE21\uC815\uD55C \uACB0\uACFC\uC785\uB2C8\uB2E4.</div>';
+
+	if (gs && (gs.citation_rate > 0 || gs.citation_accuracy > 0 || gs.info_recognition_score > 0)) {
+		var geoMetrics = [
+			{ key: 'citation_rate', label: '\uC778\uC6A9\uB960 (Citation Rate)', weight: 25, icon: '\uD83D\uDCCC',
+			  desc: 'LLM\uC5D0 \uC9C8\uBB38\uD588\uC744 \uB54C \uD0C0\uAC9F \uC0AC\uC774\uD2B8\uB97C \uCD9C\uCC98\uB85C \uC5B8\uAE09\uD558\uB294 \uBE48\uB3C4', tab: 'probes' },
+			{ key: 'citation_accuracy', label: '\uC778\uC6A9 \uC815\uD655\uB3C4 (Citation Accuracy)', weight: 20, icon: '\uD83C\uDFAF',
+			  desc: '\uC778\uC6A9\uB41C \uC815\uBCF4\uAC00 \uC6D0\uBB38\uACFC \uC77C\uCE58\uD558\uB294 \uC815\uB3C4. \uD560\uB8E8\uC2DC\uB124\uC774\uC158 \uC5EC\uBD80 \uD3EC\uD568', tab: 'probes' },
+			{ key: 'info_recognition_score', label: '\uC815\uBCF4 \uC778\uC2DD\uB960 (Info Recognition)', weight: 20, icon: '\uD83E\uDDE0',
+			  desc: 'LLM\uC774 \uC81C\uD488/\uBE0C\uB79C\uB4DC \uC815\uBCF4\uB97C \uC815\uD655\uD788 \uC778\uC2DD\uD558\uB294 \uBE44\uC728', tab: 'products' },
+			{ key: 'coverage', label: '\uCEE4\uBC84\uB9AC\uC9C0 (Coverage)', weight: 15, icon: '\uD83C\uDF10',
+			  desc: '\uC5EC\uB7EC LLM \uC11C\uBE44\uC2A4\uC5D0\uC11C \uC778\uC6A9\uB418\uB294 \uBC94\uC704', tab: 'probes' },
+			{ key: 'rank_position', label: '\uC778\uC6A9 \uC21C\uC704 (Rank Position)', weight: 10, icon: '\uD83C\uDFC6',
+			  desc: 'LLM \uC751\uB2F5\uC5D0\uC11C \uD0C0\uAC9F \uC0AC\uC774\uD2B8\uAC00 \uC5B8\uAE09\uB418\uB294 \uC704\uCE58', tab: 'probes' },
+			{ key: 'structured_score', label: '\uC0AC\uC774\uD2B8 \uC900\uBE44\uB3C4 (Structured Score)', weight: 10, icon: '\uD83C\uDFD7\uFE0F',
+			  desc: 'GEO Readiness S1\u2013S7 \uCC28\uC6D0 \uC810\uC218 \uC885\uD569 (\uC815\uC801 \uBD84\uC11D)', tab: 'structure' }
+		];
+		// 3-column metric cards
+		html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">';
+		for (var gi = 0; gi < geoMetrics.length; gi++) {
+			var gm = geoMetrics[gi];
+			var gv = Math.round(gs[gm.key] || 0);
+			var gc = scoreColor(gv);
+			var gbg = scoreColorRgba(gv, 0.06);
+			html += '<div style="padding:14px;background:' + gbg + ';border-radius:var(--radius);border:1px solid ' + scoreColorRgba(gv, 0.15) + ';cursor:pointer;" onclick="switchEvalSubTab(\'' + gm.tab + '\')">';
+			// Icon + label + weight
+			html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">';
+			html += '<span style="font-size:16px;">' + gm.icon + '</span>';
+			html += '<span style="font-size:12px;font-weight:700;flex:1;">' + gm.label + '</span>';
+			html += '<span style="font-size:9px;color:var(--text-muted);background:var(--surface2);padding:1px 5px;border-radius:6px;">' + gm.weight + '%</span>';
+			html += '</div>';
+			// Score + bar
+			html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">';
+			html += '<span style="font-size:28px;font-weight:900;color:' + gc + ';line-height:1;">' + gv + '</span>';
+			html += '<div style="flex:1;"><div class="bar-track" style="height:8px;"><div class="bar-fill" style="width:' + gv + '%;background:' + gc + ';"></div></div></div>';
+			html += '</div>';
+			// Description
+			html += '<div style="font-size:10px;color:var(--text-muted);line-height:1.4;">' + gm.desc + '</div>';
+			html += '</div>';
+		}
+		html += '</div>';
+		// Probe summary (compact)
+		if (probes && probes.summary) {
+			var ps = probes.summary;
+			html += '<div style="display:flex;align-items:center;gap:16px;padding:10px 14px;background:var(--surface2);border-radius:var(--radius);font-size:12px;">';
+			html += '<span style="color:var(--text-muted);">\uD504\uB85C\uBE0C \uACB0\uACFC:</span>';
+			html += '<span style="color:#10B981;font-weight:700;">PASS ' + ps.pass + '</span>';
+			html += '<span style="color:#F59E0B;font-weight:700;">PARTIAL ' + ps.partial + '</span>';
+			html += '<span style="color:#EF4444;font-weight:700;">FAIL ' + ps.fail + '</span>';
+			html += '<span style="color:var(--text-muted);margin-left:auto;">\uCD1D ' + ps.total + '\uAC74</span>';
+			html += '<button class="eval-tab-btn" style="font-size:11px;padding:3px 10px;" onclick="switchEvalSubTab(\'probes\')">\uC0C1\uC138 \u2192</button>';
+			html += '</div>';
+		}
+	} else {
+		html += '<div style="padding:24px;text-align:center;">';
+		html += '<div style="font-size:13px;color:var(--text-muted);">LLM Probe \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>';
+		html += '<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">LLM Provider\uB97C \uC124\uC815\uD558\uACE0 \uD30C\uC774\uD504\uB77C\uC778\uC744 \uC2E4\uD589\uD558\uBA74 \uC131\uACFC \uBD84\uC11D\uC774 \uD45C\uC2DC\uB429\uB2C8\uB2E4.</div>';
+		html += '</div>';
+	}
+	html += '</div>';
+
+	// ══════════════════════════════════════════════════════
+	// Section 2: 2-column — 사이트 준비도 (left) + LLM 프로바이더별 (right)
+	// ══════════════════════════════════════════════════════
 	html += '<div class="eval-grid-2">';
 
-	// ── Left: Dimension Analysis ──
-	html += '<div class="card">';
-	html += '<div class="eval-section-title"><div class="dot"></div> GEO \uCC28\uC6D0\uBCC4 \uBD84\uC11D</div>';
+	// ── Left: 사이트 준비도 (S1-S7) ──
+	html += '<div class="card" style="border-top:3px solid #8B5CF6;">';
+	var readiness = data.readiness_score || 0;
+	var rc = scoreColor(readiness);
+	html += '<div class="eval-section-title"><div class="dot" style="background:#8B5CF6;"></div> \uC815\uC801 \uBD84\uC11D \uACB0\uACFC';
+	if (readiness > 0) html += ' <span style="font-size:14px;font-weight:900;color:' + rc + ';margin-left:8px;">' + Math.round(readiness) + '<span style="font-size:11px;color:var(--text-muted);font-weight:400;">/100</span></span>';
+	html += '</div>';
+
+	var dimDescriptions = {
+		'S1': 'AI \uD06C\uB864\uB7EC(GPTBot, ClaudeBot \uB4F1)\uAC00 \uC0AC\uC774\uD2B8\uC5D0 \uC811\uADFC \uAC00\uB2A5\uD55C\uC9C0, robots.txt/llms.txt/sitemap \uC124\uC815 \uC0C1\uD0DC\uB97C \uD3C9\uAC00\uD569\uB2C8\uB2E4.',
+		'S2': 'JSON-LD, Schema.org, Open Graph \uB4F1 \uAD6C\uC870\uD654 \uB370\uC774\uD130\uC758 \uC874\uC7AC \uC5EC\uBD80\uC640 \uD488\uC9C8\uC744 \uD3C9\uAC00\uD569\uB2C8\uB2E4.',
+		'S3': '\uC2DC\uB9E8\uD2F1 HTML \uAD6C\uC870, \uD5E4\uB529 \uACC4\uCE35, \uD14D\uC2A4\uD2B8 \uB300 \uB9C8\uD06C\uC5C5 \uBE44\uC728 \uB4F1 LLM \uD30C\uC2F1 \uC6A9\uC774\uC131\uC744 \uD3C9\uAC00\uD569\uB2C8\uB2E4.',
+		'S4': '\uC218\uCE58, \uD1B5\uACC4, \uC2A4\uD399 \uD14C\uC774\uBE14 \uB4F1 \uAC80\uC99D \uAC00\uB2A5\uD55C \uD329\uD2B8 \uB370\uC774\uD130\uC758 \uBC00\uB3C4\uB97C \uD3C9\uAC00\uD569\uB2C8\uB2E4.',
+		'S5': '\uBE0C\uB79C\uB4DC \uC2A4\uD0A4\uB9C8, \uC77C\uAD00\uB41C \uBA54\uC2DC\uC9C0, \uC18C\uC15C \uB9C1\uD06C \uB4F1 \uC870\uC9C1 \uC2E0\uB8B0 \uC2DC\uADF8\uB110\uC744 \uD3C9\uAC00\uD569\uB2C8\uB2E4.',
+		'S6': 'llms.txt, AI \uBA54\uD0C0\uD0DC\uADF8, RSS/Atom \uD53C\uB4DC \uB4F1 AI \uC5D0\uC774\uC804\uD2B8 \uCE5C\uD654\uC801 \uC778\uD504\uB77C\uB97C \uD3C9\uAC00\uD569\uB2C8\uB2E4.',
+		'S7': 'Breadcrumb, \uB0B4\uBD80 \uB9C1\uD06C \uAD6C\uC870, \uB124\uBE44\uAC8C\uC774\uC158, \uC0AC\uC774\uD2B8\uB9F5 \uB4F1 \uCF58\uD150\uCE20 \uD0D0\uC0C9 \uD3B8\uC758\uC131\uC744 \uD3C9\uAC00\uD569\uB2C8\uB2E4.'
+	};
 	if (data.dimensions && data.dimensions.length > 0) {
 		var statusLabels = { excellent: '\uC6B0\uC218', good: '\uC591\uD638', needs_work: '\uAC1C\uC120 \uD544\uC694', critical: '\uC2EC\uAC01' };
 		var statusColors = { excellent: '#10B981', good: '#3B82F6', needs_work: '#F59E0B', critical: '#EF4444' };
@@ -1598,10 +1700,14 @@ function renderOverviewTab(data, ed, rr) {
 	} else {
 		html += '<div class="empty">\uCC28\uC6D0 \uB370\uC774\uD130 \uC5C6\uC74C</div>';
 	}
+	// Footer
+	html += '<div style="padding:10px 14px;background:rgba(139,92,246,0.05);border-radius:0 0 var(--radius) var(--radius);font-size:10px;color:var(--text-muted);line-height:1.5;">';
+	html += 'AI \uD06C\uB864\uB7EC\uAC00 \uC0AC\uC774\uD2B8\uB97C \uC5BC\uB9C8\uB098 \uC798 \uC77D\uC744 \uC218 \uC788\uB294\uC9C0 \uC815\uC801 \uBD84\uC11D\uD55C \uACB0\uACFC\uC785\uB2C8\uB2E4. GEO Score\uC758 <strong>\uAD6C\uC870\uD654 \uC810\uC218(10%)</strong>\uC5D0 \uBC18\uC601\uB429\uB2C8\uB2E4.';
+	html += '</div>';
 	html += '</div>';
 
-	// ── Right: LLM Provider Scores ──
-	html += '<div class="card">';
+	// ── Right: LLM 프로바이더별 점수 ──
+	html += '<div class="card" style="border-top:3px solid var(--primary);">';
 	html += '<div class="eval-section-title"><div class="dot"></div> LLM \uD504\uB85C\uBC14\uC774\uB354\uBCC4 \uC810\uC218</div>';
 	var mp = data.multi_provider_probes;
 	var hasProviderData = mp && mp.comparison && mp.comparison.llm_breakdown && Object.keys(mp.comparison.llm_breakdown).length > 0;
@@ -2150,13 +2256,32 @@ function renderBrandTab(data, ed, rr) {
 			var bd = brandDims[i];
 			var bdScore = bd.score || bd.value || 0;
 			var bdc = scoreColor(bdScore);
-			html += '<div style="margin-bottom:12px;">';
+			html += '<div style="margin-bottom:14px;">';
 			html += '<div style="display:flex;justify-content:space-between;margin-bottom:3px;">';
 			html += '<span style="font-size:12px;color:var(--text);">' + esc(bd.name || bd.label || bd.dimension || '') + '</span>';
 			html += '<span style="font-size:13px;font-weight:700;color:' + bdc + ';">' + bdScore + '/100</span>';
 			html += '</div>';
 			html += '<div class="bar-track" style="height:8px;"><div class="bar-fill" style="width:' + bdScore + '%;background:' + bdc + ';"></div></div>';
 			if (bd.description) html += '<div style="font-size:11px;color:var(--text-muted);margin-top:3px;line-height:1.4;">' + esc(bd.description) + '</div>';
+			// Evidence: keyword hit breakdown
+			if (bd.evidence && bd.evidence.length > 0) {
+				var foundKws = bd.evidence.filter(function(e) { return e.hits > 0; });
+				var missedKws = bd.evidence.filter(function(e) { return e.hits === 0; });
+				html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px;line-height:1.6;">';
+				if (foundKws.length > 0) {
+					html += '<span style="color:var(--success);">\u2714</span> ';
+					html += foundKws.map(function(e) { return '<code style="font-size:10px;background:rgba(34,197,94,0.1);padding:1px 4px;border-radius:3px;">' + esc(e.keyword) + '</code> \u00D7' + e.hits; }).join(', ');
+				}
+				if (missedKws.length > 0) {
+					if (foundKws.length > 0) html += '<br>';
+					html += '<span style="color:var(--text-muted);">\u2716</span> \uBBF8\uAC10\uC9C0: ';
+					html += missedKws.map(function(e) { return '<code style="font-size:10px;background:rgba(128,128,128,0.1);padding:1px 4px;border-radius:3px;">' + esc(e.keyword) + '</code>'; }).join(', ');
+				}
+				if (typeof bd.page_count === 'number') {
+					html += '<br><span style="font-size:10px;">\uD398\uC774\uC9C0 ' + bd.page_count + '\uAC1C \uBD84\uC11D, \uCD1D ' + (bd.total_hits || 0) + '\uD68C \uAC10\uC9C0 / \uAE30\uB300\uCE58 ' + (bd.max_hits || 0) + '\uD68C</span>';
+				}
+				html += '</div>';
+			}
 			html += '</div>';
 		}
 	} else {
@@ -2817,11 +2942,11 @@ function renderProbesTab(data, rr) {
 	var pTotal = allProbes.length;
 	var passRate = pTotal > 0 ? Math.round((pPass / pTotal) * 100) : 0;
 
-	// ── Summary Table (Samsung style) ──
+	// ── Summary Table ──
 	html += '<div class="eval-section-title"><div class="dot"></div> \uD504\uB85C\uBE0C \uC2E4\uD589 \uACB0\uACFC \u2014 \uC885\uD569 \uCC44\uC810\uD45C</div>';
 	html += '<div class="card">';
 	html += '<div style="overflow-x:auto;"><table class="geo-table-pro"><thead><tr>';
-	html += '<th>#</th><th>Synthetic \uD504\uB86C\uD504\uD2B8</th><th>\uD14C\uC2A4\uD2B8 \uD398\uC774\uC9C0</th><th>\uD575\uC2EC \uC694\uCCAD \uB370\uC774\uD130</th><th>\uD398\uC774\uC9C0 \uC2A4\uD0A4\uB9C8</th><th>\uC815\uBCF4 \uAC00\uC6A9\uC131</th><th>\uD310\uC815</th><th>\uC785\uC99D \uD074\uB808\uC784</th>';
+	html += '<th>#</th><th>\uC9C8\uBB38</th><th>\uC778\uC6A9</th><th>\uC815\uD655\uB3C4</th><th>\uD310\uC815</th><th>\uBE44\uACE0</th>';
 	html += '</tr></thead><tbody>';
 	for (var i = 0; i < allProbes.length; i++) {
 		var p = allProbes[i];
@@ -2829,26 +2954,23 @@ function renderProbesTab(data, rr) {
 		var rowBg = v === 'FAIL' ? 'background:rgba(239,68,68,0.04);' : v === 'PARTIAL' ? 'background:rgba(245,158,11,0.04);' : '';
 		var pId = p.probe_id || p.id || ('P-' + String(i + 1).padStart(2, '0'));
 		var pPrompt = p.prompt || p.probe_name || p.name || p.query || '';
-		var pTestPage = p.test_page || '';
-		if (pTestPage.length > 35) pTestPage = '...' + pTestPage.slice(-32);
-		var pRequiredData = '';
-		if (p.required_data) {
-			pRequiredData = Array.isArray(p.required_data) ? p.required_data.join(', ') : String(p.required_data);
-		}
-		var pSchema = p.page_schema || '';
-		var schemaPillCls = /Product|Offer|Rating/i.test(pSchema) ? 'pill-green' : /WebPage/i.test(pSchema) ? 'pill-red' : pSchema ? 'pill-yellow' : '';
-		var pAvail = p.data_availability || (p.accuracy !== undefined ? Math.round(p.accuracy * 100) + '%' : '');
-		var availColor = v === 'PASS' ? 'var(--success)' : v === 'PARTIAL' ? 'var(--warning)' : 'var(--danger)';
-		var pEvidence = p.evidence_claim || '';
+		var pCited = p.cited;
+		var pAccuracy = p.accuracy !== undefined ? Math.round(p.accuracy * 100) : null;
+		var accColor = pAccuracy !== null ? scoreColor(pAccuracy) : 'var(--text-muted)';
+		var citedHtml = pCited === true ? '<span style="color:var(--success);font-weight:700;">\u2705 \uC608</span>'
+			: pCited === false ? '<span style="color:var(--danger);font-weight:700;">\u274C \uC544\uB2C8\uC624</span>'
+			: '<span style="color:var(--text-muted);">\u2014</span>';
+		// Note column: evidence_claim > test_page > category
+		var pNote = p.evidence_claim || '';
+		if (!pNote && p.test_page) pNote = p.test_page;
+		if (!pNote && p.category) pNote = p.category;
 		html += '<tr style="' + rowBg + '">';
 		html += '<td style="font-weight:700;color:var(--purple);">' + esc(pId) + '</td>';
-		html += '<td style="font-size:12px;max-width:220px;">\u201C' + esc(pPrompt) + '\u201D</td>';
-		html += '<td style="font-family:monospace;font-size:10px;color:var(--accent);">' + esc(pTestPage) + '</td>';
-		html += '<td style="font-size:11px;color:var(--text-muted);">' + esc(pRequiredData) + '</td>';
-		html += '<td>' + (schemaPillCls ? '<span class="pill ' + schemaPillCls + '">' + esc(pSchema) + '</span>' : '<span style="color:var(--text-muted);">\u2014</span>') + '</td>';
-		html += '<td style="color:' + availColor + ';font-weight:700;font-size:12px;">' + esc(pAvail || '\u2014') + '</td>';
+		html += '<td style="font-size:12px;max-width:280px;">\u201C' + esc(pPrompt) + '\u201D</td>';
+		html += '<td>' + citedHtml + '</td>';
+		html += '<td style="font-weight:700;color:' + accColor + ';">' + (pAccuracy !== null ? pAccuracy + '%' : '\u2014') + '</td>';
 		html += '<td>' + probeVerdictPill(v) + '</td>';
-		html += '<td style="font-size:11px;color:var(--text-muted);">' + esc(pEvidence.slice(0, 60)) + '</td>';
+		html += '<td style="font-size:11px;color:var(--text-muted);max-width:200px;">' + esc(pNote.length > 80 ? pNote.slice(0, 77) + '...' : pNote) + '</td>';
 		html += '</tr>';
 	}
 	html += '</tbody></table></div>';
@@ -2896,30 +3018,49 @@ function renderProbesTab(data, rr) {
 		// Left: Probe Input
 		html += '<div>';
 		html += '<div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">PROBE \uC785\uB825</div>';
+		// Query (always available)
+		var pQuery = p.query || pPrompt;
+		if (pQuery) {
+			html += '<div style="font-size:12px;color:var(--text);margin-bottom:8px;line-height:1.5;background:#0D0D0D;padding:8px 10px;border-radius:8px;border:1px solid var(--border);">\u201C' + esc(pQuery) + '\u201D</div>';
+		}
+		// Category + model (always available)
+		html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">';
+		if (p.category) {
+			var catLabels = { accuracy: '\uC815\uD655\uB3C4 \uD14C\uC2A4\uD2B8', citation: '\uC778\uC6A9 \uD14C\uC2A4\uD2B8', recognition: '\uC778\uC2DD \uD14C\uC2A4\uD2B8', recommendation: '\uCD94\uCC9C \uD14C\uC2A4\uD2B8' };
+			html += '<span class="pill pill-blue" style="font-size:9px;">' + esc(catLabels[p.category] || p.category) + '</span>';
+		}
+		if (p.model || p.provider) {
+			html += '<span class="pill" style="font-size:9px;background:var(--surface2);color:var(--text-muted);">' + esc((p.provider || '') + '/' + (p.model || '')) + '</span>';
+		}
+		html += '</div>';
+		// Cited + Accuracy (core results, always available)
+		var pCitedDetail = p.cited === true ? '\u2705 \uC778\uC6A9\uB428' : p.cited === false ? '\u274C \uC778\uC6A9 \uC5C6\uC74C' : '';
+		var pAccDetail = p.accuracy !== undefined ? Math.round(p.accuracy * 100) + '%' : '';
+		if (pCitedDetail || pAccDetail) {
+			html += '<div style="display:flex;gap:16px;font-size:12px;margin-top:4px;">';
+			if (pCitedDetail) html += '<span>\uC778\uC6A9: <strong>' + pCitedDetail + '</strong></span>';
+			if (pAccDetail) html += '<span>\uC815\uD655\uB3C4: <strong style="color:' + scoreColor(p.accuracy * 100) + ';">' + pAccDetail + '</strong></span>';
+			html += '</div>';
+		}
+		// Optional rich metadata (test_page, required_data, page_schema)
 		if (pTestPage) {
-			html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">\uD14C\uC2A4\uD2B8 URL: <code style="color:var(--accent);">' + esc(pTestPage.length > 50 ? '...' + pTestPage.slice(-47) : pTestPage) + '</code></div>';
+			html += '<div style="font-size:10px;color:var(--text-muted);margin-top:6px;">\uD14C\uC2A4\uD2B8 URL: <code style="color:var(--accent);">' + esc(pTestPage.length > 50 ? '...' + pTestPage.slice(-47) : pTestPage) + '</code></div>';
 		}
 		if (p.required_data) {
-			var rdText = Array.isArray(p.required_data) ? p.required_data : [String(p.required_data)];
-			html += '<div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">\uC694\uCCAD \uB370\uC774\uD130 \uD56D\uBAA9</div>';
-			html += '<div style="font-size:12px;color:var(--text);">';
-			for (var ri = 0; ri < rdText.length; ri++) {
-				html += '\u2460\u2461\u2462\u2463\u2464\u2465\u2466\u2467'[ri] + ' ' + esc(rdText[ri]);
-				if (ri < rdText.length - 1) html += ' &nbsp; ';
-			}
-			html += '</div>';
+			var rdText = Array.isArray(p.required_data) ? p.required_data.join(', ') : String(p.required_data);
+			html += '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">\uC694\uCCAD \uB370\uC774\uD130: ' + esc(rdText) + '</div>';
 		}
 		if (p.page_schema) {
 			var schemaPillCls2 = /Product|Offer|Rating/i.test(p.page_schema) ? 'pill-green' : /WebPage/i.test(p.page_schema) ? 'pill-red' : 'pill-yellow';
-			html += '<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">\uD398\uC774\uC9C0 \uC2A4\uD0A4\uB9C8: <span class="pill ' + schemaPillCls2 + '">' + esc(p.page_schema) + '</span></div>';
+			html += '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">\uC2A4\uD0A4\uB9C8: <span class="pill ' + schemaPillCls2 + '" style="font-size:9px;">' + esc(p.page_schema) + '</span></div>';
 		}
-		if (p.model || p.provider) {
-			html += '<div style="font-size:10px;color:var(--text-muted);margin-top:6px;">\uBAA8\uB378: ' + esc((p.provider || '') + '/' + (p.model || '')) + '</div>';
+		if (p.latency_ms) {
+			html += '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">\uC751\uB2F5 \uC2DC\uAC04: ' + p.latency_ms + 'ms</div>';
 		}
 		html += '</div>';
 		// Right: Probe Output
 		html += '<div>';
-		html += '<div style="font-size:11px;font-weight:600;color:' + vColor + ';margin-bottom:6px;">PROBE \uC2E4\uC81C \uC751\uB2F5 (\uC694\uC57D)</div>';
+		html += '<div style="font-size:11px;font-weight:600;color:' + vColor + ';margin-bottom:6px;">AI \uC751\uB2F5 \uB0B4\uC6A9</div>';
 		// Multi-provider responses
 		if (mpResults.length > 1) {
 			for (var mi = 0; mi < mpResults.length; mi++) {
@@ -3049,7 +3190,7 @@ function renderMultiProviderSummary(data) {
 			factHtml += '</tr>';
 		});
 		factHtml += '</tbody></table>';
-		html += collapsible('Fact Recognition Details (' + items.length + ' facts)', factHtml, true);
+		html += collapsible('Fact Recognition Details (' + items.length + ' facts)', factHtml, false);
 	}
 
 	html += '</div>';

@@ -128,9 +128,18 @@ export interface ProductsTab {
 
 // ── Tab 5: Brand Message ───────────────────────────────────
 
+export interface BrandDimensionEvidence {
+	keyword: string;
+	hits: number;
+}
+
 export interface BrandDimension {
 	label: string;
 	score: number;
+	evidence?: BrandDimensionEvidence[];
+	total_hits?: number;
+	max_hits?: number;
+	page_count?: number;
 }
 
 export interface BrandClaim {
