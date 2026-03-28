@@ -166,6 +166,11 @@ function buildOutputFromState(state: AnalysisToolState, input: LLMAnalysisInput)
 		const homepageScores = scores ?? { overall_score: 0, grade: "Critical", dimensions: [] };
 		const pageScores = mp.pages.map((p) => {
 			const ps = state.pageScores.get(p.url);
+			if (!ps) {
+				console.warn(
+					`[GEO] Page "${p.url}" (${p.path}) has no scores — score_geo was not called or key mismatch. Defaulting to 0.`,
+				);
+			}
 			return {
 				url: p.url,
 				filename: p.path,

@@ -272,20 +272,35 @@ export function createAnalysisToolHandlers(
 
 		score_geo: async (params: any) => {
 			let crawlData: CrawlData | null = null;
+			let resolvedKey: string = params.crawl_data_key ?? "homepage";
 
-			if (params.crawl_data_key === "homepage" || !params.crawl_data_key) {
+			if (resolvedKey === "homepage") {
 				crawlData = state.homepageCrawl;
 			} else if (state.multiPageResult) {
-				const page = state.multiPageResult.pages.find((p) => p.url === params.crawl_data_key);
-				crawlData = page?.crawl_data ?? null;
+				// Try exact URL match first, then fallback to path match
+				const page =
+					state.multiPageResult.pages.find((p) => p.url === resolvedKey) ??
+					state.multiPageResult.pages.find(
+						(p) => p.path === resolvedKey || p.url.endsWith(resolvedKey),
+					);
+				if (page) {
+					crawlData = page.crawl_data;
+					// Normalize key to full URL for consistent lookup later
+					resolvedKey = page.url;
+				}
 			}
 
 			if (!crawlData) {
-				return JSON.stringify({ error: "No crawl data found. Call crawl_page first." });
+				const available = state.multiPageResult
+					? state.multiPageResult.pages.map((p) => p.url).join(", ")
+					: "none";
+				return JSON.stringify({
+					error: `No crawl data found for key "${params.crawl_data_key}". Available pages: ${available}. Use the full URL from crawl_multiple_pages output.`,
+				});
 			}
 
 			const scores = deps.scoreTarget(crawlData);
-			state.pageScores.set(params.crawl_data_key ?? "homepage", scores);
+			state.pageScores.set(resolvedKey, scores);
 			return JSON.stringify(scores);
 		},
 

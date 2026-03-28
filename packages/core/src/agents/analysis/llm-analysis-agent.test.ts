@@ -90,6 +90,133 @@ describe("LLM Analysis Agent", () => {
 		});
 	});
 
+	describe("multipage score_geo URL matching", () => {
+		const subPageCrawlData: CrawlData = {
+			...mockCrawlData,
+			url: "https://example.com/products/phones/",
+			title: "Phones",
+			canonical_url: "https://example.com/products/phones/",
+		};
+		const subPage2CrawlData: CrawlData = {
+			...mockCrawlData,
+			url: "https://example.com/about/",
+			title: "About",
+			canonical_url: "https://example.com/about/",
+		};
+
+		function setupMultipageState() {
+			const state = createAnalysisToolState();
+			state.homepageCrawl = mockCrawlData;
+			state.multiPageResult = {
+				homepage: mockCrawlData,
+				pages: [
+					{ url: "https://example.com/products/phones/", path: "/products/phones/", crawl_data: subPageCrawlData },
+					{ url: "https://example.com/about/", path: "/about/", crawl_data: subPage2CrawlData },
+				],
+				total_pages: 3,
+				crawl_duration_ms: 5000,
+			};
+			return state;
+		}
+
+		it("should score sub-page by exact full URL", async () => {
+			const state = setupMultipageState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+
+			const result = await handlers.score_geo({ crawl_data_key: "https://example.com/products/phones/" });
+			const parsed = JSON.parse(result);
+
+			expect(parsed.error).toBeUndefined();
+			expect(parsed.overall_score).toBe(65);
+			expect(state.pageScores.has("https://example.com/products/phones/")).toBe(true);
+		});
+
+		it("should score sub-page by path fallback", async () => {
+			const state = setupMultipageState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+
+			const result = await handlers.score_geo({ crawl_data_key: "/products/phones/" });
+			const parsed = JSON.parse(result);
+
+			expect(parsed.error).toBeUndefined();
+			expect(parsed.overall_score).toBe(65);
+			// Key should be normalized to full URL
+			expect(state.pageScores.has("https://example.com/products/phones/")).toBe(true);
+			expect(state.pageScores.has("/products/phones/")).toBe(false);
+		});
+
+		it("should score sub-page by URL suffix fallback", async () => {
+			const state = setupMultipageState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+
+			const result = await handlers.score_geo({ crawl_data_key: "/about/" });
+			const parsed = JSON.parse(result);
+
+			expect(parsed.error).toBeUndefined();
+			expect(state.pageScores.has("https://example.com/about/")).toBe(true);
+		});
+
+		it("should return error with available URLs for unknown key", async () => {
+			const state = setupMultipageState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+
+			const result = await handlers.score_geo({ crawl_data_key: "/nonexistent/" });
+			const parsed = JSON.parse(result);
+
+			expect(parsed.error).toBeDefined();
+			expect(parsed.error).toContain("https://example.com/products/phones/");
+			expect(parsed.error).toContain("https://example.com/about/");
+		});
+
+		it("should score all pages so none default to 0", async () => {
+			const state = setupMultipageState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+
+			// Score homepage
+			await handlers.score_geo({ crawl_data_key: "homepage" });
+			// Score all sub-pages by full URL
+			for (const page of state.multiPageResult!.pages) {
+				await handlers.score_geo({ crawl_data_key: page.url });
+			}
+
+			// Verify all pages have scores > 0
+			expect(state.pageScores.get("homepage")!.overall_score).toBeGreaterThan(0);
+			for (const page of state.multiPageResult!.pages) {
+				const ps = state.pageScores.get(page.url);
+				expect(ps).toBeDefined();
+				expect(ps!.overall_score).toBeGreaterThan(0);
+			}
+		});
+
+		it("should produce non-zero aggregate when all pages are scored", async () => {
+			const state = setupMultipageState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+
+			await handlers.score_geo({ crawl_data_key: "homepage" });
+			for (const page of state.multiPageResult!.pages) {
+				await handlers.score_geo({ crawl_data_key: page.url });
+			}
+
+			// Simulate buildOutputFromState aggregation logic
+			const mp = state.multiPageResult!;
+			const homepageScores = state.pageScores.get("homepage")!;
+			const pageScores = mp.pages.map((p) => {
+				const ps = state.pageScores.get(p.url);
+				return { scores: ps ?? { overall_score: 0 } };
+			});
+
+			const weights = [2, ...mp.pages.map(() => 1)];
+			const totalWeight = weights.reduce((a, b) => a + b, 0);
+			const allScores = [homepageScores.overall_score, ...pageScores.map((p) => p.scores.overall_score)];
+			const aggregateScore = Math.round((allScores.reduce((sum, s, i) => sum + s * weights[i], 0) / totalWeight) * 10) / 10;
+
+			// All pages scored 65, so aggregate must also be 65
+			expect(aggregateScore).toBe(65);
+			// No page should have 0
+			expect(allScores.every((s) => s > 0)).toBe(true);
+		});
+	});
+
 	describe("LLMAnalysisResult type contract", () => {
 		it("should have mandatory richReport field", () => {
 			const mockResult: LLMAnalysisResult = {

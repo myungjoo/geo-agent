@@ -41,7 +41,7 @@ Call `classify_site`. If manufacturer (confidence >= 0.4), proceed to multi-page
 Call `crawl_multiple_pages`. This discovers product pages, category pages, and sub-pages (up to 20 pages, depth 3).
 
 **Step 4: Score all pages.**
-Call `score_geo` for the homepage. If multi-page data exists, score key pages individually (product detail pages, category pages).
+Call `score_geo` for the homepage (with `crawl_data_key: "homepage"`). If multi-page data exists, score **every** crawled page individually by calling `score_geo` with `crawl_data_key` set to the **full URL** from the `crawl_multiple_pages` output (e.g., `crawl_data_key: "https://example.com/products/phones/"`).
 
 **Step 5: Extract detailed evaluation data.**
 Call `extract_evaluation_data`. This provides bot policies, schema coverage, marketing claims, JS dependency, product info, and improvement recommendations.
