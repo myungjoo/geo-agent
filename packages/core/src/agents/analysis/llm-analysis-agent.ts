@@ -16,6 +16,7 @@ import {
 	piAiModelFromProvider,
 } from "../../llm/pi-ai-bridge.js";
 import { ProviderConfigManager } from "../../llm/provider-config.js";
+import type { ModelCostOverrideMap } from "../../db/repositories/model-cost-override-repository.js";
 import { loadBuiltinSkill } from "../../skills/skill-loader.js";
 import type { AnalysisOutput } from "./analysis-agent.js";
 import type { RichAnalysisReport } from "./rich-analysis-schema.js";
@@ -54,7 +55,10 @@ export interface LLMAnalysisResult {
  * Resolve a pi-ai Model from the workspace LLM provider settings.
  * Uses whatever provider is configured and enabled with an API key.
  */
-export function resolveModel(workspaceDir: string): { model: Model<Api>; apiKey: string } {
+export function resolveModel(
+	workspaceDir: string,
+	costOverrides?: ModelCostOverrideMap,
+): { model: Model<Api>; apiKey: string; provider: string } {
 	const configManager = new ProviderConfigManager(workspaceDir);
 	const enabled = configManager.getEnabled().filter((p) => p.api_key);
 	if (enabled.length === 0) {
@@ -63,8 +67,8 @@ export function resolveModel(workspaceDir: string): { model: Model<Api>; apiKey:
 		);
 	}
 	const provider = enabled[0];
-	const model = piAiModelFromProvider(provider);
-	return { model, apiKey: provider.api_key! };
+	const model = piAiModelFromProvider(provider, costOverrides);
+	return { model, apiKey: provider.api_key!, provider: provider.provider_id };
 }
 
 // ── LLM-Driven Analysis ─────────────────────────────────────

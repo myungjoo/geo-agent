@@ -94,7 +94,12 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
 	retry_count INTEGER NOT NULL DEFAULT 0,
 	error_message TEXT,
 	resumable INTEGER NOT NULL DEFAULT 0,
-	resume_from_stage TEXT
+	resume_from_stage TEXT,
+	total_tokens_in INTEGER,
+	total_tokens_out INTEGER,
+	total_cost_usd REAL,
+	cost_by_provider TEXT,
+	cost_by_model TEXT
 );
 
 CREATE TABLE IF NOT EXISTS stage_executions (
@@ -123,12 +128,28 @@ CREATE TABLE IF NOT EXISTS error_events (
 	context TEXT NOT NULL DEFAULT '{}',
 	resolved INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS model_cost_overrides (
+	id TEXT PRIMARY KEY,
+	provider_id TEXT NOT NULL,
+	model_id TEXT NOT NULL,
+	input_per_1m REAL NOT NULL DEFAULT 0,
+	output_per_1m REAL NOT NULL DEFAULT 0,
+	cache_read_per_1m REAL NOT NULL DEFAULT 0,
+	cache_write_per_1m REAL NOT NULL DEFAULT 0,
+	note TEXT,
+	is_default INTEGER NOT NULL DEFAULT 0,
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL,
+	UNIQUE(provider_id, model_id)
+);
 `;
 
 // ── Lightweight schema migrations using PRAGMA user_version ──────────
 interface Migration {
 	version: number;
 	table: string;
+	/** Column name to check for ADD COLUMN migrations, or "" for CREATE TABLE migrations */
 	column: string;
 	sql: string;
 }
@@ -152,6 +173,55 @@ const MIGRATIONS: Migration[] = [
 		column: "status",
 		sql: "ALTER TABLE targets ADD COLUMN status TEXT NOT NULL DEFAULT 'active'",
 	},
+	{
+		version: 4,
+		table: "pipeline_runs",
+		column: "total_tokens_in",
+		sql: "ALTER TABLE pipeline_runs ADD COLUMN total_tokens_in INTEGER",
+	},
+	{
+		version: 5,
+		table: "pipeline_runs",
+		column: "total_tokens_out",
+		sql: "ALTER TABLE pipeline_runs ADD COLUMN total_tokens_out INTEGER",
+	},
+	{
+		version: 6,
+		table: "pipeline_runs",
+		column: "total_cost_usd",
+		sql: "ALTER TABLE pipeline_runs ADD COLUMN total_cost_usd REAL",
+	},
+	{
+		version: 7,
+		table: "pipeline_runs",
+		column: "cost_by_provider",
+		sql: "ALTER TABLE pipeline_runs ADD COLUMN cost_by_provider TEXT",
+	},
+	{
+		version: 8,
+		table: "pipeline_runs",
+		column: "cost_by_model",
+		sql: "ALTER TABLE pipeline_runs ADD COLUMN cost_by_model TEXT",
+	},
+	{
+		version: 9,
+		table: "model_cost_overrides",
+		column: "",
+		sql: `CREATE TABLE IF NOT EXISTS model_cost_overrides (
+	id TEXT PRIMARY KEY,
+	provider_id TEXT NOT NULL,
+	model_id TEXT NOT NULL,
+	input_per_1m REAL NOT NULL DEFAULT 0,
+	output_per_1m REAL NOT NULL DEFAULT 0,
+	cache_read_per_1m REAL NOT NULL DEFAULT 0,
+	cache_write_per_1m REAL NOT NULL DEFAULT 0,
+	note TEXT,
+	is_default INTEGER NOT NULL DEFAULT 0,
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL,
+	UNIQUE(provider_id, model_id)
+)`,
+	},
 ];
 
 async function applyMigrations(client: Client): Promise<void> {
@@ -162,12 +232,16 @@ async function applyMigrations(client: Client): Promise<void> {
 	for (const migration of MIGRATIONS) {
 		if (migration.version <= currentVersion) continue;
 
-		// Check if column already exists (idempotent for fresh DBs)
-		const tableInfo = await client.execute(`PRAGMA table_info(${migration.table})`);
-		const columnExists = tableInfo.rows.some((row) => (row.name ?? row[1]) === migration.column);
-
-		if (!columnExists) {
+		if (migration.column === "") {
+			// CREATE TABLE migration — idempotency handled by IF NOT EXISTS in SQL
 			await client.execute(migration.sql);
+		} else {
+			// ADD COLUMN migration — check if column already exists
+			const tableInfo = await client.execute(`PRAGMA table_info(${migration.table})`);
+			const columnExists = tableInfo.rows.some((row) => (row.name ?? row[1]) === migration.column);
+			if (!columnExists) {
+				await client.execute(migration.sql);
+			}
 		}
 
 		await client.execute(`PRAGMA user_version = ${migration.version}`);

@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	type AppSettings,
+	ModelCostOverrideRepository,
 	createDatabase,
 	ensureTables,
 	initWorkspace,
@@ -16,7 +17,7 @@ import { cors } from "hono/cors";
 import { trimTrailingSlash } from "hono/trailing-slash";
 import { authMiddleware, getLoginPage, handleLogin, handleLogout } from "./auth.js";
 import { initPipelineRouter, pipelineRouter } from "./routes/pipeline.js";
-import { settingsRouter } from "./routes/settings.js";
+import { initSettingsRouter, settingsRouter } from "./routes/settings.js";
 import { initTargetsRouter, targetsRouter } from "./routes/targets.js";
 
 // ── SSE Event Broadcaster ────────────────────────────────────
@@ -265,8 +266,10 @@ export async function startServer(
 	const db = createDatabase(settings);
 	await ensureTables(db);
 	await seedDefaultTargets(db);
+	await new ModelCostOverrideRepository(db).seedDefaults();
 	initTargetsRouter(db);
 	initPipelineRouter(db, settings);
+	initSettingsRouter(db);
 
 	const serverPort = port ?? settings.port;
 	const serverHostname = hostname ?? "0.0.0.0";

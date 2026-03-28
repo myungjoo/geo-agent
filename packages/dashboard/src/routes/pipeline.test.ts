@@ -1178,3 +1178,435 @@ describe("POST pipeline — probe_mode query parameter", () => {
 		// Invalid value should default to "single" (not error)
 	});
 });
+
+// ══════════════════════════════════════════════════════════════
+// GET /api/targets/:id/pipeline/:pipelineId/llm-log — cost_summary
+// ══════════════════════════════════════════════════════════════
+
+/** llm_call_log 픽스처 헬퍼 */
+function makeLLMCallLog(overrides: Array<Partial<Record<string, unknown>>> = []) {
+	const defaults = [
+		{
+			seq: 1, timestamp: "2024-01-01T00:00:00.000Z", stage: "ANALYZING",
+			provider: "openai", model: "gpt-4o",
+			prompt_summary: "Analyze this page", response_summary: "Analysis done",
+			tokens_in: 1000, tokens_out: 500, cost_usd: 0.01, duration_ms: 1200,
+		},
+		{
+			seq: 2, timestamp: "2024-01-01T00:01:00.000Z", stage: "ANALYZING",
+			provider: "openai", model: "gpt-4o",
+			prompt_summary: "Score this content", response_summary: "Score: 70",
+			tokens_in: 800, tokens_out: 300, cost_usd: 0.008, duration_ms: 900,
+		},
+		{
+			seq: 3, timestamp: "2024-01-01T00:02:00.000Z", stage: "STRATEGIZING",
+			provider: "anthropic", model: "claude-sonnet-4-6",
+			prompt_summary: "Create strategy", response_summary: "Strategy created",
+			tokens_in: 1200, tokens_out: 600, cost_usd: 0.015, duration_ms: 1500,
+		},
+	];
+	return defaults.map((d, i) => ({ ...d, ...(overrides[i] ?? {}) }));
+}
+
+describe("GET /llm-log — cost_summary", () => {
+	it("returns cost_summary field alongside llm_call_log", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "REPORTING", 0, "test");
+		await stageRepo.complete(exec.id, "Done", {
+			llm_call_log: makeLLMCallLog(),
+			llm_models_used: ["openai/gpt-4o", "anthropic/claude-sonnet-4-6"],
+		});
+
+		const res = await app.request(
+			`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/llm-log`,
+		);
+		expect(res.status).toBe(200);
+		const body = await res.json();
+		expect(body.cost_summary).toBeDefined();
+		expect(typeof body.cost_summary.total_cost_usd).toBe("number");
+		expect(typeof body.cost_summary.total_tokens_in).toBe("number");
+		expect(typeof body.cost_summary.total_tokens_out).toBe("number");
+		expect(body.cost_summary.by_provider).toBeDefined();
+		expect(body.cost_summary.by_model).toBeDefined();
+		expect(body.cost_summary.by_stage).toBeDefined();
+	});
+
+	it("cost_summary aggregates total_cost_usd correctly", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "REPORTING", 0, "test");
+		await stageRepo.complete(exec.id, "Done", {
+			llm_call_log: makeLLMCallLog(), // 0.01 + 0.008 + 0.015 = 0.033
+			llm_models_used: [],
+		});
+
+		const res = await app.request(
+			`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/llm-log`,
+		);
+		const body = await res.json();
+		expect(body.cost_summary.total_cost_usd).toBeCloseTo(0.033, 6);
+	});
+
+	it("cost_summary aggregates tokens correctly", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "REPORTING", 0, "test");
+		await stageRepo.complete(exec.id, "Done", {
+			llm_call_log: makeLLMCallLog(), // in: 1000+800+1200=3000, out: 500+300+600=1400
+			llm_models_used: [],
+		});
+
+		const res = await app.request(
+			`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/llm-log`,
+		);
+		const body = await res.json();
+		expect(body.cost_summary.total_tokens_in).toBe(3000);
+		expect(body.cost_summary.total_tokens_out).toBe(1400);
+	});
+
+	it("cost_summary.by_provider groups by provider correctly", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "REPORTING", 0, "test");
+		await stageRepo.complete(exec.id, "Done", {
+			llm_call_log: makeLLMCallLog(),
+			llm_models_used: [],
+		});
+
+		const res = await app.request(
+			`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/llm-log`,
+		);
+		const body = await res.json();
+		const { by_provider } = body.cost_summary;
+
+		expect(by_provider.openai).toBeDefined();
+		expect(by_provider.openai.calls).toBe(2);
+		expect(by_provider.openai.tokens_in).toBe(1800);
+		expect(by_provider.openai.cost_usd).toBeCloseTo(0.018, 6);
+
+		expect(by_provider.anthropic).toBeDefined();
+		expect(by_provider.anthropic.calls).toBe(1);
+		expect(by_provider.anthropic.cost_usd).toBeCloseTo(0.015, 6);
+	});
+
+	it("cost_summary.by_stage groups by pipeline stage", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "REPORTING", 0, "test");
+		await stageRepo.complete(exec.id, "Done", {
+			llm_call_log: makeLLMCallLog(),
+			llm_models_used: [],
+		});
+
+		const res = await app.request(
+			`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/llm-log`,
+		);
+		const body = await res.json();
+		const { by_stage } = body.cost_summary;
+
+		expect(by_stage.ANALYZING).toBeDefined();
+		expect(by_stage.ANALYZING.calls).toBe(2);
+		expect(by_stage.ANALYZING.cost_usd).toBeCloseTo(0.018, 6);
+
+		expect(by_stage.STRATEGIZING).toBeDefined();
+		expect(by_stage.STRATEGIZING.calls).toBe(1);
+	});
+
+	it("cost_summary is zero when log is empty", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "REPORTING", 0, "test");
+		await stageRepo.complete(exec.id, "Done", {
+			llm_call_log: [],
+			llm_models_used: [],
+		});
+
+		const res = await app.request(
+			`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/llm-log`,
+		);
+		const body = await res.json();
+		expect(body.cost_summary.total_cost_usd).toBe(0);
+		expect(body.cost_summary.total_tokens_in).toBe(0);
+		expect(body.cost_summary.by_provider).toEqual({});
+		expect(body.cost_summary.by_model).toEqual({});
+		expect(body.cost_summary.by_stage).toEqual({});
+	});
+
+	it("cost_summary treats missing cost_usd fields as 0 (old log entries)", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "REPORTING", 0, "test");
+		// Old entries without cost_usd
+		await stageRepo.complete(exec.id, "Done", {
+			llm_call_log: [
+				{ seq: 1, stage: "ANALYZING", provider: "openai", model: "gpt-4o",
+				  tokens_in: 500, tokens_out: 200, duration_ms: 500,
+				  prompt_summary: "p", response_summary: "r", timestamp: "2024-01-01T00:00:00.000Z" },
+			],
+			llm_models_used: [],
+		});
+
+		const res = await app.request(
+			`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/llm-log`,
+		);
+		const body = await res.json();
+		expect(body.cost_summary.total_cost_usd).toBe(0);
+		expect(body.cost_summary.total_tokens_in).toBe(500); // tokens still counted
+		expect(body.cost_summary.by_provider.openai.cost_usd).toBe(0);
+	});
+
+	it("fallback path also includes cost_summary (from non-REPORTING stage)", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		// Store log in ANALYZING (not REPORTING) → triggers fallback scan
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "ANALYZING", 0, "test");
+		await stageRepo.complete(exec.id, "Done", {
+			llm_call_log: makeLLMCallLog(),
+		});
+
+		const res = await app.request(
+			`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/llm-log`,
+		);
+		const body = await res.json();
+		expect(body.cost_summary).toBeDefined();
+		expect(body.cost_summary.total_cost_usd).toBeCloseTo(0.033, 6);
+	});
+
+	it("returns cost_summary with zeros for pipeline with no stage data", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		// No stage executions at all
+		const res = await app.request(
+			`/api/targets/${targetId}/pipeline/${pipeline.pipeline_id}/llm-log`,
+		);
+		const body = await res.json();
+		// empty log → cost_summary still present
+		expect(body.cost_summary).toBeDefined();
+		expect(body.cost_summary.total_cost_usd).toBe(0);
+	});
+});
+
+// ══════════════════════════════════════════════════════════════
+// GET /api/targets/:id/cost-history
+// ══════════════════════════════════════════════════════════════
+
+describe("GET /api/targets/:id/cost-history", () => {
+	it("returns 200 with target_id and history array", async () => {
+		const targetId = await getTargetId();
+
+		const res = await app.request(`/api/targets/${targetId}/cost-history`);
+		expect(res.status).toBe(200);
+		const body = await res.json();
+		expect(body.target_id).toBe(targetId);
+		expect(Array.isArray(body.history)).toBe(true);
+	});
+
+	it("returns empty history when no pipelines exist", async () => {
+		const targetId = await getTargetId();
+
+		const res = await app.request(`/api/targets/${targetId}/cost-history`);
+		const body = await res.json();
+		expect(body.history).toHaveLength(0);
+	});
+
+	it("history includes one entry per pipeline", async () => {
+		const targetId = await getTargetId();
+		await createPipeline(targetId);
+		await createPipeline(targetId);
+		await createPipeline(targetId);
+
+		const res = await app.request(`/api/targets/${targetId}/cost-history`);
+		const body = await res.json();
+		expect(body.history).toHaveLength(3);
+	});
+
+	it("each history entry has required fields", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "REPORTING", 0, "test");
+		await stageRepo.complete(exec.id, "Done", {
+			llm_call_log: makeLLMCallLog(),
+			llm_models_used: [],
+		});
+
+		const res = await app.request(`/api/targets/${targetId}/cost-history`);
+		const body = await res.json();
+		const entry = body.history[0];
+
+		expect(entry.pipeline_id).toBe(pipeline.pipeline_id);
+		expect(entry.started_at).toBeDefined();
+		expect(entry.stage).toBeDefined();
+		expect(typeof entry.total_tokens_in).toBe("number");
+		expect(typeof entry.total_tokens_out).toBe("number");
+		expect(typeof entry.total_cost_usd).toBe("number");
+	});
+
+	it("fallback path: computes cost from stage_executions when DB columns are null", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		// Store log in REPORTING (no updateCostSummary called → DB cols are null)
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "REPORTING", 0, "test");
+		await stageRepo.complete(exec.id, "Done", {
+			llm_call_log: makeLLMCallLog(), // total 0.033
+			llm_models_used: [],
+		});
+
+		const res = await app.request(`/api/targets/${targetId}/cost-history`);
+		const body = await res.json();
+		expect(body.history[0].total_cost_usd).toBeCloseTo(0.033, 6);
+		expect(body.history[0].total_tokens_in).toBe(3000);
+	});
+
+	it("uses stored DB cost data when available (fast path)", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		// Directly update cost summary in DB (simulates pipeline completion)
+		const { PipelineRepository } = await import("@geo-agent/core");
+		const repo = new PipelineRepository(db);
+		await repo.updateCostSummary(pipeline.pipeline_id, {
+			total_tokens_in: 50000,
+			total_tokens_out: 15000,
+			total_cost_usd: 0.999,
+			cost_by_provider: { openai: { calls: 10, tokens_in: 50000, tokens_out: 15000, cost_usd: 0.999 } },
+			cost_by_model: { "gpt-4o": { calls: 10, tokens_in: 50000, tokens_out: 15000, cost_usd: 0.999 } },
+		});
+
+		const res = await app.request(`/api/targets/${targetId}/cost-history`);
+		const body = await res.json();
+		expect(body.history[0].total_cost_usd).toBeCloseTo(0.999, 6);
+		expect(body.history[0].total_tokens_in).toBe(50000);
+		expect(body.history[0].cost_by_provider).toBeDefined();
+		expect(body.history[0].cost_by_provider.openai.calls).toBe(10);
+	});
+
+	it("history entries without any stage data show zero cost", async () => {
+		const targetId = await getTargetId();
+		await createPipeline(targetId);
+
+		const res = await app.request(`/api/targets/${targetId}/cost-history`);
+		const body = await res.json();
+		expect(body.history[0].total_cost_usd).toBe(0);
+		expect(body.history[0].total_tokens_in).toBe(0);
+	});
+
+	it("multiple pipelines are ordered newest first (matches findByTargetId)", async () => {
+		const targetId = await getTargetId();
+		const p1 = await (await createPipeline(targetId)).json();
+		await new Promise((r) => setTimeout(r, 15));
+		const p2 = await (await createPipeline(targetId)).json();
+
+		const res = await app.request(`/api/targets/${targetId}/cost-history`);
+		const body = await res.json();
+		expect(body.history[0].pipeline_id).toBe(p2.pipeline_id);
+		expect(body.history[1].pipeline_id).toBe(p1.pipeline_id);
+	});
+
+	it("does not include cost data from a different target", async () => {
+		const targetA = await getTargetId();
+		const targetB = await getTargetId();
+
+		await createPipeline(targetA);
+		await createPipeline(targetA);
+		await createPipeline(targetB);
+
+		const resA = await app.request(`/api/targets/${targetA}/cost-history`);
+		const bodyA = await resA.json();
+		const resB = await app.request(`/api/targets/${targetB}/cost-history`);
+		const bodyB = await resB.json();
+
+		expect(bodyA.history).toHaveLength(2);
+		expect(bodyB.history).toHaveLength(1);
+		expect(bodyA.target_id).toBe(targetA);
+		expect(bodyB.target_id).toBe(targetB);
+	});
+
+	it("cost_by_provider and cost_by_model are parsed from JSON when stored in DB", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		const { PipelineRepository } = await import("@geo-agent/core");
+		const repo = new PipelineRepository(db);
+		await repo.updateCostSummary(pipeline.pipeline_id, {
+			total_tokens_in: 1000,
+			total_tokens_out: 500,
+			total_cost_usd: 0.05,
+			cost_by_provider: {
+				openai: { calls: 5, tokens_in: 500, tokens_out: 250, cost_usd: 0.025 },
+				anthropic: { calls: 5, tokens_in: 500, tokens_out: 250, cost_usd: 0.025 },
+			},
+			cost_by_model: {
+				"gpt-4o": { calls: 5, tokens_in: 500, tokens_out: 250, cost_usd: 0.025 },
+				"claude-sonnet-4-6": { calls: 5, tokens_in: 500, tokens_out: 250, cost_usd: 0.025 },
+			},
+		});
+
+		const res = await app.request(`/api/targets/${targetId}/cost-history`);
+		const body = await res.json();
+		const entry = body.history[0];
+
+		// Should be parsed objects, not JSON strings
+		expect(typeof entry.cost_by_provider).toBe("object");
+		expect(entry.cost_by_provider.openai.calls).toBe(5);
+		expect(typeof entry.cost_by_model).toBe("object");
+		expect(entry.cost_by_model["gpt-4o"].cost_usd).toBeCloseTo(0.025, 6);
+	});
+
+	it("handles corrupted result_full JSON gracefully in fallback path", async () => {
+		const targetId = await getTargetId();
+		const pRes = await createPipeline(targetId);
+		const pipeline = await pRes.json();
+
+		const stageRepo = new StageExecutionRepository(db);
+		const exec = await stageRepo.create(pipeline.pipeline_id, "ANALYZING", 0, "test");
+		// Store corrupted JSON directly
+		const { createClient: cc } = await import("@libsql/client");
+		const client = cc({ url: `file:${path.join(testDir, "data", "geo-agent.db")}` });
+		await client.execute({
+			sql: "UPDATE stage_executions SET status='completed', result_full=? WHERE id=?",
+			args: ["{invalid json###", exec.id],
+		});
+		client.close();
+
+		// Should not throw — corrupted stage is skipped
+		const res = await app.request(`/api/targets/${targetId}/cost-history`);
+		expect(res.status).toBe(200);
+		const body = await res.json();
+		expect(body.history[0].total_cost_usd).toBe(0);
+	});
+});

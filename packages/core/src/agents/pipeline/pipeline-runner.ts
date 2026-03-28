@@ -1,4 +1,5 @@
 import { CloneManager } from "../../clone/clone-manager.js";
+import type { ModelCostOverrideMap } from "../../db/repositories/model-cost-override-repository.js";
 import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
 import type { LLMProviderSettings } from "../../llm/provider-config.js";
 import { GEO_SCORE_WEIGHTS } from "../../models/geo-score.js";
@@ -95,6 +96,8 @@ export interface PipelineConfig {
 	probe_mode?: "single" | "multi";
 	/** multi 모드에서 사용할 활성 프로바이더 목록 (probe_mode=multi 시 필수) */
 	providers?: LLMProviderSettings[];
+	/** DB 기반 모델 단가 오버라이드 맵 — analysis 에이전트에 전달 */
+	costOverrides?: ModelCostOverrideMap;
 }
 
 export interface LLMCallLogEntry {
@@ -107,6 +110,8 @@ export interface LLMCallLogEntry {
 	response_summary: string;
 	tokens_in?: number;
 	tokens_out?: number;
+	/** Cost of this LLM call in USD (from pi-ai calculateCost) */
+	cost_usd?: number;
 	duration_ms: number;
 	error?: string;
 	/** System instruction summary (max 500 chars) */
@@ -230,6 +235,7 @@ export async function runPipeline(
 				response_summary: (response.content ?? "").slice(0, 1000),
 				tokens_in: response.usage?.prompt_tokens,
 				tokens_out: response.usage?.completion_tokens,
+				cost_usd: response.cost_usd,
 				duration_ms: Date.now() - startMs,
 				system_instruction_summary: sysInstr?.slice(0, 500),
 				request_params: reqParams,
@@ -325,7 +331,7 @@ export async function runPipeline(
 					analysisOutput = result.output;
 					richReport = result.richReport;
 				} else {
-					const piModel = resolveModel(config.workspace_dir);
+					const piModel = resolveModel(config.workspace_dir, config.costOverrides);
 					const result = await runLLMAnalysis(
 						{ target_id: config.target_id, target_url: config.target_url },
 						toolDeps,
@@ -333,6 +339,26 @@ export async function runPipeline(
 					);
 					analysisOutput = result.output;
 					richReport = result.richReport;
+
+					// 이슈 1 수정: piAiAgentLoop은 trackedChatLLM을 우회하므로
+					// agentLoopResult의 누적 토큰/비용을 synthetic entry로 llmCallLog에 주입
+					const ar = result.agentLoopResult;
+					if (ar.totalUsage.input > 0 || ar.totalUsage.output > 0) {
+						llmCallLog.push({
+							seq: ++llmCallSeq,
+							timestamp: new Date().toISOString(),
+							stage: "ANALYZING",
+							provider: piModel.provider,
+							model: piModel.model.id,
+							prompt_summary: `[agent loop — ${ar.iterations} iterations, ${ar.toolCallLog.length} tool calls]`,
+							response_summary: `totalTokens: ${ar.totalUsage.totalTokens}`,
+							tokens_in: ar.totalUsage.input,
+							tokens_out: ar.totalUsage.output,
+							cost_usd: ar.totalCost,
+							duration_ms: 0,
+						});
+						llmModelsUsed.add(`${piModel.provider}/${piModel.model.id}`);
+					}
 				}
 				ctx.setRef("analysis", analysisOutput.report.report_id);
 				// GEO Score (Level 1) — probe 결과가 반영된 종합 점수 사용

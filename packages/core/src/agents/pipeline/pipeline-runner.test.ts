@@ -973,3 +973,148 @@ describe("Pipeline Runner — API compatibility", () => {
 		expect(probes.summary.average_accuracy).toBeLessThanOrEqual(1);
 	});
 });
+
+// ── LLM call log — cost_usd tracking ──────────────────────────────
+
+/** chatLLM mock that includes cost_usd in each response */
+function mockChatLLMWithCost(costPerCall = 0.005): (req: LLMRequest) => Promise<LLMResponse> {
+	return vi.fn().mockImplementation(async (req: LLMRequest) => {
+		const prompt = req.prompt ?? "";
+		const systemPrompt = req.system_instruction ?? "";
+		let content: string;
+
+		if (req.json_mode) {
+			if (prompt.includes("brand recognition") || prompt.includes("LLM consumption quality")) {
+				content = JSON.stringify({
+					brand_recognition: { score: 60, identified_brand: "TestBrand", identified_products: [], reasoning: "Test" },
+					content_quality: { score: 65, clarity: 70, completeness: 60, factual_density: 55, reasoning: "Test" },
+					information_gaps: [],
+					llm_consumption_issues: [],
+					overall_assessment: "Test",
+				});
+			} else if (
+				prompt.includes("optimization plan") ||
+				systemPrompt.includes("strategy") ||
+				prompt.includes("strategy") ||
+				systemPrompt.includes("GEO optimization expert")
+			) {
+				content = JSON.stringify({
+					strategy_rationale: "Test strategy",
+					tasks: [{
+						change_type: "SCHEMA_MARKUP", title: "Add JSON-LD", description: "Add structured data",
+						target_element: null, priority: "high", expected_impact: "10%", specific_data: {},
+					}],
+				});
+			} else if (prompt.includes("validation") || systemPrompt.includes("validation")) {
+				content = JSON.stringify({ score: 75, stop_reason: null, issues: [], improvements: [] });
+			} else {
+				content = JSON.stringify({ result: "ok" });
+			}
+		} else {
+			content = `Cost-tracked response for: ${prompt.slice(0, 30)}`;
+		}
+
+		return {
+			content,
+			model: "cost-model",
+			provider: "cost-provider",
+			latency_ms: 50,
+			usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+			cost_usd: costPerCall,
+		};
+	});
+}
+
+describe("Pipeline Runner — LLM call log cost_usd tracking", () => {
+	it("llm_call_log entries include cost_usd when chatLLM returns it", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLMWithCost(0.005);
+
+		const result = await runPipeline(makeConfig({ target_score: 60, max_cycles: 1 }), deps);
+
+		expect(result.llm_call_log.length).toBeGreaterThan(0);
+		const successEntries = result.llm_call_log.filter((e) => !e.error);
+		expect(successEntries.length).toBeGreaterThan(0);
+		for (const entry of successEntries) {
+			expect(typeof entry.cost_usd).toBe("number");
+			expect(entry.cost_usd).toBeCloseTo(0.005, 6);
+		}
+	});
+
+	it("cost_usd value matches the value returned by chatLLM", async () => {
+		const expectedCost = 0.0123;
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLMWithCost(expectedCost);
+
+		const result = await runPipeline(makeConfig({ target_score: 60, max_cycles: 1 }), deps);
+
+		const successEntries = result.llm_call_log.filter((e) => !e.error);
+		expect(successEntries.length).toBeGreaterThan(0);
+		for (const entry of successEntries) {
+			expect(entry.cost_usd).toBeCloseTo(expectedCost, 6);
+		}
+	});
+
+	it("llm_call_log entries for failed calls do not include cost_usd", async () => {
+		const deps = makeDeps();
+		// chatLLM always throws — every entry goes to the error branch
+		deps.chatLLM = vi.fn().mockRejectedValue(new Error("LLM failed"));
+		const { stageResults, callbacks } = makeStageTracker();
+
+		await runPipeline(makeConfig({ target_score: 60, max_cycles: 1, stageCallbacks: callbacks }), deps);
+
+		// Find any error entries across all stages
+		const allEntries: Array<Record<string, unknown>> = [];
+		for (const s of stageResults) {
+			const full = s.resultFull as { llm_call_log?: Array<Record<string, unknown>> };
+			if (Array.isArray(full?.llm_call_log)) allEntries.push(...full.llm_call_log);
+		}
+		const errorEntries = allEntries.filter((e) => e.error);
+		// Error entries should not have cost_usd (undefined)
+		for (const entry of errorEntries) {
+			expect(entry.cost_usd).toBeUndefined();
+		}
+	});
+
+	it("cost_usd is undefined in entries when chatLLM omits it", async () => {
+		// mockChatLLM() does not include cost_usd — simulates LLM returning no cost
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLM(); // original mock without cost_usd
+		const { stageResults, callbacks } = makeStageTracker();
+
+		await runPipeline(makeConfig({ target_score: 60, max_cycles: 1, stageCallbacks: callbacks }), deps);
+
+		const reporting = stageResults.find((s) => s.stage === "REPORTING");
+		const full = reporting?.resultFull as { llm_call_log: Array<Record<string, unknown>> };
+		const successEntries = full.llm_call_log.filter((e) => !e.error);
+		expect(successEntries.length).toBeGreaterThan(0);
+		for (const entry of successEntries) {
+			expect(entry.cost_usd).toBeUndefined();
+		}
+	});
+
+	it("PipelineResult.llm_call_log contains cost_usd in returned entries", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLMWithCost(0.01);
+
+		const result = await runPipeline(makeConfig({ target_score: 60, max_cycles: 1 }), deps);
+
+		expect(result.llm_call_log.length).toBeGreaterThan(0);
+		const successEntries = result.llm_call_log.filter((e) => !e.error);
+		expect(successEntries.length).toBeGreaterThan(0);
+		expect(successEntries[0].cost_usd).toBeCloseTo(0.01, 6);
+	});
+
+	it("seq numbers are sequential starting from 1 for all entries (with cost_usd)", async () => {
+		const deps = makeDeps();
+		deps.chatLLM = mockChatLLMWithCost(0.001);
+
+		const result = await runPipeline(makeConfig({ target_score: 60, max_cycles: 1 }), deps);
+
+		const seqs = result.llm_call_log.map((e) => e.seq);
+		// seq must be 1..N in order
+		for (let i = 0; i < seqs.length; i++) {
+			expect(seqs[i]).toBe(i + 1);
+		}
+	});
+});

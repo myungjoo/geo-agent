@@ -18,7 +18,12 @@ CREATE TABLE pipeline_runs (
 	retry_count INTEGER NOT NULL DEFAULT 0,
 	error_message TEXT,
 	resumable INTEGER NOT NULL DEFAULT 0,
-	resume_from_stage TEXT
+	resume_from_stage TEXT,
+	total_tokens_in INTEGER,
+	total_tokens_out INTEGER,
+	total_cost_usd REAL,
+	cost_by_provider TEXT,
+	cost_by_model TEXT
 );
 `;
 
@@ -526,5 +531,154 @@ describe("PipelineRepository", () => {
 			expect(latest!.pipeline_id).toBe(p2.pipeline_id);
 			expect(latest!.stage).toBe("INIT");
 		});
+	});
+});
+
+// ─── updateCostSummary ────────────────────────────────────────────────
+
+describe("PipelineRepository — updateCostSummary()", () => {
+	let repo: PipelineRepository;
+
+	beforeEach(async () => {
+		const client = createClient({ url: ":memory:" });
+		await client.executeMultiple(CREATE_TABLE_SQL);
+		const db = drizzle(client, { schema });
+		repo = new PipelineRepository(db);
+	});
+
+	const makeCostData = (overrides = {}) => ({
+		total_tokens_in: 98200,
+		total_tokens_out: 27230,
+		total_cost_usd: 0.847,
+		cost_by_provider: {
+			openai: { calls: 32, tokens_in: 72100, tokens_out: 18400, cost_usd: 0.652 },
+			anthropic: { calls: 12, tokens_in: 21300, tokens_out: 6800, cost_usd: 0.168 },
+		},
+		cost_by_model: {
+			"gpt-4o": { calls: 32, tokens_in: 72100, tokens_out: 18400, cost_usd: 0.652 },
+			"claude-sonnet-4-6": { calls: 12, tokens_in: 21300, tokens_out: 6800, cost_usd: 0.168 },
+		},
+		...overrides,
+	});
+
+	it("persists all cost fields to DB", async () => {
+		const pipeline = await repo.create(FAKE_TARGET_ID);
+		const costData = makeCostData();
+
+		await repo.updateCostSummary(pipeline.pipeline_id, costData);
+
+		const found = await repo.findById(pipeline.pipeline_id);
+		expect(found!.total_tokens_in).toBe(98200);
+		expect(found!.total_tokens_out).toBe(27230);
+		expect(found!.total_cost_usd).toBeCloseTo(0.847, 6);
+		expect(found!.cost_by_provider).toBe(JSON.stringify(costData.cost_by_provider));
+		expect(found!.cost_by_model).toBe(JSON.stringify(costData.cost_by_model));
+	});
+
+	it("cost fields are null before updateCostSummary is called", async () => {
+		const pipeline = await repo.create(FAKE_TARGET_ID);
+		const found = await repo.findById(pipeline.pipeline_id);
+
+		expect(found!.total_tokens_in).toBeNull();
+		expect(found!.total_tokens_out).toBeNull();
+		expect(found!.total_cost_usd).toBeNull();
+		expect(found!.cost_by_provider).toBeNull();
+		expect(found!.cost_by_model).toBeNull();
+	});
+
+	it("can overwrite previously stored cost data", async () => {
+		const pipeline = await repo.create(FAKE_TARGET_ID);
+
+		await repo.updateCostSummary(pipeline.pipeline_id, makeCostData({ total_cost_usd: 0.5 }));
+		await repo.updateCostSummary(pipeline.pipeline_id, makeCostData({ total_cost_usd: 1.2 }));
+
+		const found = await repo.findById(pipeline.pipeline_id);
+		expect(found!.total_cost_usd).toBeCloseTo(1.2, 6);
+	});
+
+	it("handles zero-cost pipeline (no LLM calls)", async () => {
+		const pipeline = await repo.create(FAKE_TARGET_ID);
+		await repo.updateCostSummary(pipeline.pipeline_id, {
+			total_tokens_in: 0,
+			total_tokens_out: 0,
+			total_cost_usd: 0,
+			cost_by_provider: {},
+			cost_by_model: {},
+		});
+
+		const found = await repo.findById(pipeline.pipeline_id);
+		expect(found!.total_tokens_in).toBe(0);
+		expect(found!.total_cost_usd).toBe(0);
+		expect(found!.cost_by_provider).toBe("{}");
+	});
+
+	it("handles single provider with many models", async () => {
+		const pipeline = await repo.create(FAKE_TARGET_ID);
+		const costData = makeCostData({
+			cost_by_provider: {
+				openai: { calls: 50, tokens_in: 100000, tokens_out: 30000, cost_usd: 1.5 },
+			},
+			cost_by_model: {
+				"gpt-4o": { calls: 30, tokens_in: 60000, tokens_out: 18000, cost_usd: 0.9 },
+				"gpt-4o-mini": { calls: 20, tokens_in: 40000, tokens_out: 12000, cost_usd: 0.6 },
+			},
+		});
+
+		await repo.updateCostSummary(pipeline.pipeline_id, costData);
+		const found = await repo.findById(pipeline.pipeline_id);
+
+		const parsedModel = JSON.parse(found!.cost_by_model!);
+		expect(Object.keys(parsedModel)).toHaveLength(2);
+		expect(parsedModel["gpt-4o-mini"].calls).toBe(20);
+	});
+
+	it("does not throw for non-existent pipeline_id", async () => {
+		// updateCostSummary targets a WHERE clause — if no row matches, it's a silent no-op
+		await expect(
+			repo.updateCostSummary(NON_EXISTENT_ID, makeCostData()),
+		).resolves.not.toThrow();
+	});
+
+	it("does not alter stage or other fields when updating cost", async () => {
+		const pipeline = await repo.create(FAKE_TARGET_ID);
+		await repo.updateStage(pipeline.pipeline_id, "COMPLETED");
+
+		await repo.updateCostSummary(pipeline.pipeline_id, makeCostData());
+
+		const found = await repo.findById(pipeline.pipeline_id);
+		expect(found!.stage).toBe("COMPLETED");
+		expect(found!.target_id).toBe(FAKE_TARGET_ID);
+		expect(found!.retry_count).toBe(0);
+	});
+
+	it("stores provider JSON with correct structure (parseable)", async () => {
+		const pipeline = await repo.create(FAKE_TARGET_ID);
+		await repo.updateCostSummary(pipeline.pipeline_id, makeCostData());
+
+		const found = await repo.findById(pipeline.pipeline_id);
+		const parsedProvider = JSON.parse(found!.cost_by_provider!);
+
+		expect(parsedProvider.openai.calls).toBe(32);
+		expect(parsedProvider.openai.tokens_in).toBe(72100);
+		expect(parsedProvider.openai.cost_usd).toBeCloseTo(0.652, 6);
+		expect(parsedProvider.anthropic.calls).toBe(12);
+	});
+
+	it("findByTargetId result includes cost fields after updateCostSummary", async () => {
+		const pipeline = await repo.create(FAKE_TARGET_ID);
+		await repo.updateCostSummary(pipeline.pipeline_id, makeCostData());
+
+		const results = await repo.findByTargetId(FAKE_TARGET_ID);
+		expect(results).toHaveLength(1);
+		expect(results[0].total_cost_usd).toBeCloseTo(0.847, 6);
+		expect(results[0].total_tokens_in).toBe(98200);
+	});
+
+	it("findLatestByTargetId result includes cost fields", async () => {
+		const pipeline = await repo.create(FAKE_TARGET_ID);
+		await repo.updateCostSummary(pipeline.pipeline_id, makeCostData());
+
+		const latest = await repo.findLatestByTargetId(FAKE_TARGET_ID);
+		expect(latest!.total_cost_usd).toBeCloseTo(0.847, 6);
 	});
 });
