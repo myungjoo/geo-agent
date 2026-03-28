@@ -110,7 +110,11 @@ describe("LLM Analysis Agent", () => {
 			state.multiPageResult = {
 				homepage: mockCrawlData,
 				pages: [
-					{ url: "https://example.com/products/phones/", path: "/products/phones/", crawl_data: subPageCrawlData },
+					{
+						url: "https://example.com/products/phones/",
+						path: "/products/phones/",
+						crawl_data: subPageCrawlData,
+					},
 					{ url: "https://example.com/about/", path: "/about/", crawl_data: subPage2CrawlData },
 				],
 				total_pages: 3,
@@ -123,7 +127,9 @@ describe("LLM Analysis Agent", () => {
 			const state = setupMultipageState();
 			const handlers = createAnalysisToolHandlers(mockDeps, state);
 
-			const result = await handlers.score_geo({ crawl_data_key: "https://example.com/products/phones/" });
+			const result = await handlers.score_geo({
+				crawl_data_key: "https://example.com/products/phones/",
+			});
 			const parsed = JSON.parse(result);
 
 			expect(parsed.error).toBeUndefined();
@@ -207,8 +213,13 @@ describe("LLM Analysis Agent", () => {
 
 			const weights = [2, ...mp.pages.map(() => 1)];
 			const totalWeight = weights.reduce((a, b) => a + b, 0);
-			const allScores = [homepageScores.overall_score, ...pageScores.map((p) => p.scores.overall_score)];
-			const aggregateScore = Math.round((allScores.reduce((sum, s, i) => sum + s * weights[i], 0) / totalWeight) * 10) / 10;
+			const allScores = [
+				homepageScores.overall_score,
+				...pageScores.map((p) => p.scores.overall_score),
+			];
+			const aggregateScore =
+				Math.round((allScores.reduce((sum, s, i) => sum + s * weights[i], 0) / totalWeight) * 10) /
+				10;
 
 			// All pages scored 65, so aggregate must also be 65
 			expect(aggregateScore).toBe(65);
