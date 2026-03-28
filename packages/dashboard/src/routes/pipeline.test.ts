@@ -1187,22 +1187,43 @@ describe("POST pipeline — probe_mode query parameter", () => {
 function makeLLMCallLog(overrides: Array<Partial<Record<string, unknown>>> = []) {
 	const defaults = [
 		{
-			seq: 1, timestamp: "2024-01-01T00:00:00.000Z", stage: "ANALYZING",
-			provider: "openai", model: "gpt-4o",
-			prompt_summary: "Analyze this page", response_summary: "Analysis done",
-			tokens_in: 1000, tokens_out: 500, cost_usd: 0.01, duration_ms: 1200,
+			seq: 1,
+			timestamp: "2024-01-01T00:00:00.000Z",
+			stage: "ANALYZING",
+			provider: "openai",
+			model: "gpt-4o",
+			prompt_summary: "Analyze this page",
+			response_summary: "Analysis done",
+			tokens_in: 1000,
+			tokens_out: 500,
+			cost_usd: 0.01,
+			duration_ms: 1200,
 		},
 		{
-			seq: 2, timestamp: "2024-01-01T00:01:00.000Z", stage: "ANALYZING",
-			provider: "openai", model: "gpt-4o",
-			prompt_summary: "Score this content", response_summary: "Score: 70",
-			tokens_in: 800, tokens_out: 300, cost_usd: 0.008, duration_ms: 900,
+			seq: 2,
+			timestamp: "2024-01-01T00:01:00.000Z",
+			stage: "ANALYZING",
+			provider: "openai",
+			model: "gpt-4o",
+			prompt_summary: "Score this content",
+			response_summary: "Score: 70",
+			tokens_in: 800,
+			tokens_out: 300,
+			cost_usd: 0.008,
+			duration_ms: 900,
 		},
 		{
-			seq: 3, timestamp: "2024-01-01T00:02:00.000Z", stage: "STRATEGIZING",
-			provider: "anthropic", model: "claude-sonnet-4-6",
-			prompt_summary: "Create strategy", response_summary: "Strategy created",
-			tokens_in: 1200, tokens_out: 600, cost_usd: 0.015, duration_ms: 1500,
+			seq: 3,
+			timestamp: "2024-01-01T00:02:00.000Z",
+			stage: "STRATEGIZING",
+			provider: "anthropic",
+			model: "claude-sonnet-4-6",
+			prompt_summary: "Create strategy",
+			response_summary: "Strategy created",
+			tokens_in: 1200,
+			tokens_out: 600,
+			cost_usd: 0.015,
+			duration_ms: 1500,
 		},
 	];
 	return defaults.map((d, i) => ({ ...d, ...(overrides[i] ?? {}) }));
@@ -1361,9 +1382,18 @@ describe("GET /llm-log — cost_summary", () => {
 		// Old entries without cost_usd
 		await stageRepo.complete(exec.id, "Done", {
 			llm_call_log: [
-				{ seq: 1, stage: "ANALYZING", provider: "openai", model: "gpt-4o",
-				  tokens_in: 500, tokens_out: 200, duration_ms: 500,
-				  prompt_summary: "p", response_summary: "r", timestamp: "2024-01-01T00:00:00.000Z" },
+				{
+					seq: 1,
+					stage: "ANALYZING",
+					provider: "openai",
+					model: "gpt-4o",
+					tokens_in: 500,
+					tokens_out: 200,
+					duration_ms: 500,
+					prompt_summary: "p",
+					response_summary: "r",
+					timestamp: "2024-01-01T00:00:00.000Z",
+				},
 			],
 			llm_models_used: [],
 		});
@@ -1502,8 +1532,12 @@ describe("GET /api/targets/:id/cost-history", () => {
 			total_tokens_in: 50000,
 			total_tokens_out: 15000,
 			total_cost_usd: 0.999,
-			cost_by_provider: { openai: { calls: 10, tokens_in: 50000, tokens_out: 15000, cost_usd: 0.999 } },
-			cost_by_model: { "gpt-4o": { calls: 10, tokens_in: 50000, tokens_out: 15000, cost_usd: 0.999 } },
+			cost_by_provider: {
+				openai: { calls: 10, tokens_in: 50000, tokens_out: 15000, cost_usd: 0.999 },
+			},
+			cost_by_model: {
+				"gpt-4o": { calls: 10, tokens_in: 50000, tokens_out: 15000, cost_usd: 0.999 },
+			},
 		});
 
 		const res = await app.request(`/api/targets/${targetId}/cost-history`);

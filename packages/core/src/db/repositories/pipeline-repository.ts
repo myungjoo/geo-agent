@@ -168,8 +168,14 @@ export class PipelineRepository {
 			total_tokens_in: number;
 			total_tokens_out: number;
 			total_cost_usd: number;
-			cost_by_provider: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }>;
-			cost_by_model: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }>;
+			cost_by_provider: Record<
+				string,
+				{ calls: number; tokens_in: number; tokens_out: number; cost_usd: number }
+			>;
+			cost_by_model: Record<
+				string,
+				{ calls: number; tokens_in: number; tokens_out: number; cost_usd: number }
+			>;
 		},
 	): Promise<void> {
 		await this.db

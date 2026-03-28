@@ -329,7 +329,7 @@ describe("DB migration (applyMigrations)", () => {
 	});
 });
 
-// ─── pipeline_runs cost columns (migration v4-8) ───────────────────
+// ─── pipeline_runs cost columns (migration v4-8) and model_cost_overrides (v9) ───
 
 describe("pipeline_runs cost columns (migration v4-8)", () => {
 	it("fresh DB includes all 5 cost columns in pipeline_runs", async () => {
@@ -350,7 +350,7 @@ describe("pipeline_runs cost columns (migration v4-8)", () => {
 		expect(colNames).toContain("cost_by_model");
 	});
 
-	it("user_version reaches 8 after all migrations on fresh DB", async () => {
+	it("user_version reaches 9 after all migrations on fresh DB", async () => {
 		const settings = makeSettings();
 		const db = createDatabase(settings);
 		await ensureTables(db);
@@ -362,7 +362,7 @@ describe("pipeline_runs cost columns (migration v4-8)", () => {
 
 		const userVersion =
 			(result.rows[0]?.user_version as number) ?? (result.rows[0]?.[0] as number) ?? 0;
-		expect(userVersion).toBe(8);
+		expect(userVersion).toBe(9);
 	});
 
 	it("migration v4-8 adds cost columns to old pipeline_runs without them", async () => {
@@ -425,7 +425,7 @@ describe("pipeline_runs cost columns (migration v4-8)", () => {
 
 		const userVersion =
 			(version.rows[0]?.user_version as number) ?? (version.rows[0]?.[0] as number) ?? 0;
-		expect(userVersion).toBe(8);
+		expect(userVersion).toBe(9);
 	});
 
 	it("migration v4-8 is idempotent on a DB already at version 8", async () => {
@@ -483,7 +483,13 @@ describe("pipeline_runs cost columns (migration v4-8)", () => {
 		// Insert a row before migration
 		await rawClient.execute({
 			sql: "INSERT INTO pipeline_runs (pipeline_id, target_id, stage, started_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-			args: ["test-id", "target-id", "INIT", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z"],
+			args: [
+				"test-id",
+				"target-id",
+				"INIT",
+				"2024-01-01T00:00:00.000Z",
+				"2024-01-01T00:00:00.000Z",
+			],
 		});
 		await rawClient.execute("PRAGMA user_version = 3");
 		rawClient.close();
@@ -494,10 +500,116 @@ describe("pipeline_runs cost columns (migration v4-8)", () => {
 
 		// The existing row should have NULL for the new cost columns
 		const checkClient = createClient({ url: `file:${dbPath}` });
-		const result = await checkClient.execute("SELECT total_tokens_in, total_cost_usd FROM pipeline_runs WHERE pipeline_id = 'test-id'");
+		const result = await checkClient.execute(
+			"SELECT total_tokens_in, total_cost_usd FROM pipeline_runs WHERE pipeline_id = 'test-id'",
+		);
 		checkClient.close();
 
 		expect(result.rows[0].total_tokens_in).toBeNull();
 		expect(result.rows[0].total_cost_usd).toBeNull();
+	});
+});
+
+// ─── model_cost_overrides table (migration v9) ──────────────────────
+
+describe("model_cost_overrides table (migration v9)", () => {
+	it("fresh DB includes model_cost_overrides table with correct columns", async () => {
+		const settings = makeSettings();
+		const db = createDatabase(settings);
+		await ensureTables(db);
+
+		const dbPath = path.join(settings.workspace_dir, settings.db_path);
+		const client = createClient({ url: `file:${dbPath}` });
+		const result = await client.execute("PRAGMA table_info(model_cost_overrides)");
+		client.close();
+
+		const colNames = result.rows.map((r) => r.name as string);
+		expect(colNames).toContain("id");
+		expect(colNames).toContain("provider_id");
+		expect(colNames).toContain("model_id");
+		expect(colNames).toContain("input_per_1m");
+		expect(colNames).toContain("output_per_1m");
+		expect(colNames).toContain("cache_read_per_1m");
+		expect(colNames).toContain("cache_write_per_1m");
+		expect(colNames).toContain("note");
+		expect(colNames).toContain("is_default");
+		expect(colNames).toContain("created_at");
+		expect(colNames).toContain("updated_at");
+	});
+
+	it("migration v9 creates model_cost_overrides on a DB already at version 8", async () => {
+		const settings = makeSettings();
+		const dbPath = path.join(settings.workspace_dir, settings.db_path);
+		fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+		// Simulate a DB at version 8 (post cost-column migrations, pre model_cost_overrides)
+		const rawClient = createClient({ url: `file:${dbPath}` });
+		await rawClient.execute(`
+			CREATE TABLE targets (
+				id TEXT PRIMARY KEY, url TEXT NOT NULL, name TEXT NOT NULL,
+				description TEXT NOT NULL DEFAULT '', brand TEXT NOT NULL DEFAULT '',
+				topics TEXT NOT NULL DEFAULT '[]', target_queries TEXT NOT NULL DEFAULT '[]',
+				audience TEXT NOT NULL DEFAULT '', competitors TEXT NOT NULL DEFAULT '[]',
+				business_goal TEXT NOT NULL DEFAULT '', target_score REAL,
+				llm_priorities TEXT NOT NULL DEFAULT '[]', clone_base_path TEXT,
+				site_type TEXT NOT NULL DEFAULT 'generic', notifications TEXT,
+				monitoring_interval TEXT NOT NULL DEFAULT 'daily',
+				status TEXT NOT NULL DEFAULT 'active',
+				created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+			)
+		`);
+		await rawClient.execute(`
+			CREATE TABLE pipeline_runs (
+				pipeline_id TEXT PRIMARY KEY,
+				target_id TEXT NOT NULL, stage TEXT NOT NULL,
+				started_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+				completed_at TEXT, analysis_report_ref TEXT,
+				optimization_plan_ref TEXT, validation_report_ref TEXT,
+				retry_count INTEGER NOT NULL DEFAULT 0, error_message TEXT,
+				resumable INTEGER NOT NULL DEFAULT 0, resume_from_stage TEXT,
+				total_tokens_in INTEGER, total_tokens_out INTEGER,
+				total_cost_usd REAL, cost_by_provider TEXT, cost_by_model TEXT,
+				llm_call_log TEXT, llm_errors TEXT, llm_models_used TEXT
+			)
+		`);
+		await rawClient.execute("PRAGMA user_version = 8");
+		rawClient.close();
+
+		// Apply migrations — should create model_cost_overrides and bump to v9
+		const db = createDatabase(settings);
+		await ensureTables(db);
+
+		const checkClient = createClient({ url: `file:${dbPath}` });
+		const tableInfo = await checkClient.execute("PRAGMA table_info(model_cost_overrides)");
+		const versionResult = await checkClient.execute("PRAGMA user_version");
+		checkClient.close();
+
+		const colNames = tableInfo.rows.map((r) => r.name as string);
+		expect(colNames).toContain("id");
+		expect(colNames).toContain("provider_id");
+		expect(colNames).toContain("model_id");
+
+		const userVersion =
+			(versionResult.rows[0]?.user_version as number) ??
+			(versionResult.rows[0]?.[0] as number) ??
+			0;
+		expect(userVersion).toBe(9);
+	});
+
+	it("migration v9 is idempotent — running ensureTables twice does not error", async () => {
+		const settings = makeSettings();
+		const db1 = createDatabase(settings);
+		await ensureTables(db1);
+		// Second call should be a no-op, not throw
+		const db2 = createDatabase(settings);
+		await ensureTables(db2);
+
+		const dbPath = path.join(settings.workspace_dir, settings.db_path);
+		const client = createClient({ url: `file:${dbPath}` });
+		const result = await client.execute("PRAGMA table_info(model_cost_overrides)");
+		client.close();
+
+		// Table should exist exactly once (idempotent IF NOT EXISTS)
+		expect(result.rows.length).toBeGreaterThan(0);
 	});
 });

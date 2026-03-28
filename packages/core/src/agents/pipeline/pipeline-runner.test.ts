@@ -986,8 +986,19 @@ function mockChatLLMWithCost(costPerCall = 0.005): (req: LLMRequest) => Promise<
 		if (req.json_mode) {
 			if (prompt.includes("brand recognition") || prompt.includes("LLM consumption quality")) {
 				content = JSON.stringify({
-					brand_recognition: { score: 60, identified_brand: "TestBrand", identified_products: [], reasoning: "Test" },
-					content_quality: { score: 65, clarity: 70, completeness: 60, factual_density: 55, reasoning: "Test" },
+					brand_recognition: {
+						score: 60,
+						identified_brand: "TestBrand",
+						identified_products: [],
+						reasoning: "Test",
+					},
+					content_quality: {
+						score: 65,
+						clarity: 70,
+						completeness: 60,
+						factual_density: 55,
+						reasoning: "Test",
+					},
 					information_gaps: [],
 					llm_consumption_issues: [],
 					overall_assessment: "Test",
@@ -1000,10 +1011,17 @@ function mockChatLLMWithCost(costPerCall = 0.005): (req: LLMRequest) => Promise<
 			) {
 				content = JSON.stringify({
 					strategy_rationale: "Test strategy",
-					tasks: [{
-						change_type: "SCHEMA_MARKUP", title: "Add JSON-LD", description: "Add structured data",
-						target_element: null, priority: "high", expected_impact: "10%", specific_data: {},
-					}],
+					tasks: [
+						{
+							change_type: "SCHEMA_MARKUP",
+							title: "Add JSON-LD",
+							description: "Add structured data",
+							target_element: null,
+							priority: "high",
+							expected_impact: "10%",
+							specific_data: {},
+						},
+					],
 				});
 			} else if (prompt.includes("validation") || systemPrompt.includes("validation")) {
 				content = JSON.stringify({ score: 75, stop_reason: null, issues: [], improvements: [] });
@@ -1061,7 +1079,10 @@ describe("Pipeline Runner — LLM call log cost_usd tracking", () => {
 		deps.chatLLM = vi.fn().mockRejectedValue(new Error("LLM failed"));
 		const { stageResults, callbacks } = makeStageTracker();
 
-		await runPipeline(makeConfig({ target_score: 60, max_cycles: 1, stageCallbacks: callbacks }), deps);
+		await runPipeline(
+			makeConfig({ target_score: 60, max_cycles: 1, stageCallbacks: callbacks }),
+			deps,
+		);
 
 		// Find any error entries across all stages
 		const allEntries: Array<Record<string, unknown>> = [];
@@ -1082,7 +1103,10 @@ describe("Pipeline Runner — LLM call log cost_usd tracking", () => {
 		deps.chatLLM = mockChatLLM(); // original mock without cost_usd
 		const { stageResults, callbacks } = makeStageTracker();
 
-		await runPipeline(makeConfig({ target_score: 60, max_cycles: 1, stageCallbacks: callbacks }), deps);
+		await runPipeline(
+			makeConfig({ target_score: 60, max_cycles: 1, stageCallbacks: callbacks }),
+			deps,
+		);
 
 		const reporting = stageResults.find((s) => s.stage === "REPORTING");
 		const full = reporting?.resultFull as { llm_call_log: Array<Record<string, unknown>> };

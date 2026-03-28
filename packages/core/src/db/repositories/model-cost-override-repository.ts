@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 import type { GeoDatabase } from "../connection.js";
 import { modelCostOverrides } from "../schema.js";
@@ -153,15 +153,26 @@ export class ModelCostOverrideRepository {
 	constructor(private db: GeoDatabase) {}
 
 	async findAll(): Promise<ModelCostOverride[]> {
-		const rows = await this.db.select().from(modelCostOverrides).orderBy(modelCostOverrides.provider_id, modelCostOverrides.model_id);
-		return rows.map(this.toModel);
-	}
-
-	async findByProviderAndModel(providerId: string, modelId: string): Promise<ModelCostOverride | null> {
 		const rows = await this.db
 			.select()
 			.from(modelCostOverrides)
-			.where(and(eq(modelCostOverrides.provider_id, providerId), eq(modelCostOverrides.model_id, modelId)))
+			.orderBy(modelCostOverrides.provider_id, modelCostOverrides.model_id);
+		return rows.map(this.toModel);
+	}
+
+	async findByProviderAndModel(
+		providerId: string,
+		modelId: string,
+	): Promise<ModelCostOverride | null> {
+		const rows = await this.db
+			.select()
+			.from(modelCostOverrides)
+			.where(
+				and(
+					eq(modelCostOverrides.provider_id, providerId),
+					eq(modelCostOverrides.model_id, modelId),
+				),
+			)
 			.limit(1);
 		return rows.length > 0 ? this.toModel(rows[0]) : null;
 	}
@@ -202,7 +213,13 @@ export class ModelCostOverrideRepository {
 					updated_at: now,
 				})
 				.where(eq(modelCostOverrides.id, existing.id));
-			return { ...existing, ...data, note: data.note ?? existing.note, is_default: data.is_default ?? existing.is_default, updated_at: now };
+			return {
+				...existing,
+				...data,
+				note: data.note ?? existing.note,
+				is_default: data.is_default ?? existing.is_default,
+				updated_at: now,
+			};
 		}
 
 		const id = uuidv4();

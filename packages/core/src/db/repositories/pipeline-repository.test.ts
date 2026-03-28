@@ -634,9 +634,7 @@ describe("PipelineRepository — updateCostSummary()", () => {
 
 	it("does not throw for non-existent pipeline_id", async () => {
 		// updateCostSummary targets a WHERE clause — if no row matches, it's a silent no-op
-		await expect(
-			repo.updateCostSummary(NON_EXISTENT_ID, makeCostData()),
-		).resolves.not.toThrow();
+		await expect(repo.updateCostSummary(NON_EXISTENT_ID, makeCostData())).resolves.not.toThrow();
 	});
 
 	it("does not alter stage or other fields when updating cost", async () => {

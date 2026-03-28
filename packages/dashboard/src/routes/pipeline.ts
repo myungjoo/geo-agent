@@ -180,7 +180,9 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 				});
 				return c.json({ ...pipeline, error: errMsg }, 201);
 			}
-			costOverrides = sharedCostOverrideRepo ? await sharedCostOverrideRepo.buildLookupMap() : undefined;
+			costOverrides = sharedCostOverrideRepo
+				? await sharedCostOverrideRepo.buildLookupMap()
+				: undefined;
 			const client = new GeoLLMClient(workspaceDir, costOverrides);
 			chatLLM = (req) => client.chat(req);
 			console.log(`🤖 LLM enabled: ${providersWithKey.map((p) => p.provider_id).join(", ")}`);
@@ -605,7 +607,10 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/executive-summary", async (c) => {
 		if (providersWithKey.length === 0) {
 			return c.json({ error: "LLM API Key not configured" }, 400);
 		}
-		client = new GeoLLMClient(workspaceDir, sharedCostOverrideRepo ? await sharedCostOverrideRepo.buildLookupMap() : undefined);
+		client = new GeoLLMClient(
+			workspaceDir,
+			sharedCostOverrideRepo ? await sharedCostOverrideRepo.buildLookupMap() : undefined,
+		);
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		return c.json({ error: `LLM initialization failed: ${msg}` }, 500);
@@ -761,7 +766,10 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/recommendations", async (c) => {
 		if (providersWithKey.length === 0) {
 			return c.json({ error: "LLM API Key not configured" }, 400);
 		}
-		client = new GeoLLMClient(workspaceDir, sharedCostOverrideRepo ? await sharedCostOverrideRepo.buildLookupMap() : undefined);
+		client = new GeoLLMClient(
+			workspaceDir,
+			sharedCostOverrideRepo ? await sharedCostOverrideRepo.buildLookupMap() : undefined,
+		);
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		return c.json({ error: `LLM initialization failed: ${msg}` }, 500);
@@ -903,14 +911,26 @@ function aggregateLLMCostFromLog(log: LLMCallLogEntry[]): {
 	total_tokens_in: number;
 	total_tokens_out: number;
 	total_cost_usd: number;
-	cost_by_provider: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }>;
-	cost_by_model: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }>;
+	cost_by_provider: Record<
+		string,
+		{ calls: number; tokens_in: number; tokens_out: number; cost_usd: number }
+	>;
+	cost_by_model: Record<
+		string,
+		{ calls: number; tokens_in: number; tokens_out: number; cost_usd: number }
+	>;
 } {
 	let total_tokens_in = 0;
 	let total_tokens_out = 0;
 	let total_cost_usd = 0;
-	const cost_by_provider: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }> = {};
-	const cost_by_model: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }> = {};
+	const cost_by_provider: Record<
+		string,
+		{ calls: number; tokens_in: number; tokens_out: number; cost_usd: number }
+	> = {};
+	const cost_by_model: Record<
+		string,
+		{ calls: number; tokens_in: number; tokens_out: number; cost_usd: number }
+	> = {};
 
 	for (const e of log) {
 		const costUsd = e.cost_usd ?? 0;
@@ -921,13 +941,15 @@ function aggregateLLMCostFromLog(log: LLMCallLogEntry[]): {
 		total_tokens_out += tokOut;
 		total_cost_usd += costUsd;
 
-		if (!cost_by_provider[e.provider]) cost_by_provider[e.provider] = { calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 };
+		if (!cost_by_provider[e.provider])
+			cost_by_provider[e.provider] = { calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 };
 		cost_by_provider[e.provider].calls++;
 		cost_by_provider[e.provider].tokens_in += tokIn;
 		cost_by_provider[e.provider].tokens_out += tokOut;
 		cost_by_provider[e.provider].cost_usd += costUsd;
 
-		if (!cost_by_model[e.model]) cost_by_model[e.model] = { calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 };
+		if (!cost_by_model[e.model])
+			cost_by_model[e.model] = { calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 };
 		cost_by_model[e.model].calls++;
 		cost_by_model[e.model].tokens_in += tokIn;
 		cost_by_model[e.model].tokens_out += tokOut;
@@ -942,9 +964,18 @@ function computeCostSummary(logs: Array<Record<string, unknown>>) {
 	let totalCostUsd = 0;
 	let totalTokensIn = 0;
 	let totalTokensOut = 0;
-	const byProvider: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }> = {};
-	const byModel: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }> = {};
-	const byStage: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }> = {};
+	const byProvider: Record<
+		string,
+		{ calls: number; tokens_in: number; tokens_out: number; cost_usd: number }
+	> = {};
+	const byModel: Record<
+		string,
+		{ calls: number; tokens_in: number; tokens_out: number; cost_usd: number }
+	> = {};
+	const byStage: Record<
+		string,
+		{ calls: number; tokens_in: number; tokens_out: number; cost_usd: number }
+	> = {};
 
 	for (const e of logs) {
 		const costUsd = typeof e.cost_usd === "number" ? e.cost_usd : 0;
@@ -958,7 +989,8 @@ function computeCostSummary(logs: Array<Record<string, unknown>>) {
 		totalTokensIn += tokIn;
 		totalTokensOut += tokOut;
 
-		if (!byProvider[provider]) byProvider[provider] = { calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 };
+		if (!byProvider[provider])
+			byProvider[provider] = { calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 };
 		byProvider[provider].calls++;
 		byProvider[provider].tokens_in += tokIn;
 		byProvider[provider].tokens_out += tokOut;

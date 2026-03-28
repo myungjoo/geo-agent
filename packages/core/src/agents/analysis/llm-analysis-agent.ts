@@ -9,6 +9,7 @@ import type { Api, Model } from "@mariozechner/pi-ai";
  * No fallback. If LLM fails, the pipeline fails.
  */
 import { v4 as uuidv4 } from "uuid";
+import type { ModelCostOverrideMap } from "../../db/repositories/model-cost-override-repository.js";
 import type { LLMRequest, LLMResponse } from "../../llm/geo-llm-client.js";
 import {
 	type AgentLoopResult,
@@ -16,7 +17,6 @@ import {
 	piAiModelFromProvider,
 } from "../../llm/pi-ai-bridge.js";
 import { ProviderConfigManager } from "../../llm/provider-config.js";
-import type { ModelCostOverrideMap } from "../../db/repositories/model-cost-override-repository.js";
 import { loadBuiltinSkill } from "../../skills/skill-loader.js";
 import type { AnalysisOutput } from "./analysis-agent.js";
 import type { RichAnalysisReport } from "./rich-analysis-schema.js";
