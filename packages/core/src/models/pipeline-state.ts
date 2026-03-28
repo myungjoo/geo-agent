@@ -33,6 +33,13 @@ export const PipelineStateSchema = z.object({
 
 	resumable: z.boolean().default(false),
 	resume_from_stage: PipelineStageSchema.nullable().default(null),
+
+	/** Token/cost tracking — populated on pipeline completion */
+	total_tokens_in: z.number().int().nullable().optional(),
+	total_tokens_out: z.number().int().nullable().optional(),
+	total_cost_usd: z.number().nullable().optional(),
+	cost_by_provider: z.string().nullable().optional(),
+	cost_by_model: z.string().nullable().optional(),
 });
 
 export type PipelineState = z.infer<typeof PipelineStateSchema>;

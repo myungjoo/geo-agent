@@ -328,3 +328,176 @@ describe("DB migration (applyMigrations)", () => {
 		expect(userVersion).toBeGreaterThanOrEqual(3);
 	});
 });
+
+// ─── pipeline_runs cost columns (migration v4-8) ───────────────────
+
+describe("pipeline_runs cost columns (migration v4-8)", () => {
+	it("fresh DB includes all 5 cost columns in pipeline_runs", async () => {
+		const settings = makeSettings();
+		const db = createDatabase(settings);
+		await ensureTables(db);
+
+		const dbPath = path.join(settings.workspace_dir, settings.db_path);
+		const client = createClient({ url: `file:${dbPath}` });
+		const result = await client.execute("PRAGMA table_info(pipeline_runs)");
+		client.close();
+
+		const colNames = result.rows.map((r) => r.name as string);
+		expect(colNames).toContain("total_tokens_in");
+		expect(colNames).toContain("total_tokens_out");
+		expect(colNames).toContain("total_cost_usd");
+		expect(colNames).toContain("cost_by_provider");
+		expect(colNames).toContain("cost_by_model");
+	});
+
+	it("user_version reaches 8 after all migrations on fresh DB", async () => {
+		const settings = makeSettings();
+		const db = createDatabase(settings);
+		await ensureTables(db);
+
+		const dbPath = path.join(settings.workspace_dir, settings.db_path);
+		const client = createClient({ url: `file:${dbPath}` });
+		const result = await client.execute("PRAGMA user_version");
+		client.close();
+
+		const userVersion =
+			(result.rows[0]?.user_version as number) ?? (result.rows[0]?.[0] as number) ?? 0;
+		expect(userVersion).toBe(8);
+	});
+
+	it("migration v4-8 adds cost columns to old pipeline_runs without them", async () => {
+		const settings = makeSettings();
+		const dbPath = path.join(settings.workspace_dir, settings.db_path);
+		fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+		// Simulate a DB at version 3 (old schema without cost columns)
+		const rawClient = createClient({ url: `file:${dbPath}` });
+		await rawClient.execute(`
+			CREATE TABLE targets (
+				id TEXT PRIMARY KEY, url TEXT NOT NULL, name TEXT NOT NULL,
+				description TEXT NOT NULL DEFAULT '', brand TEXT NOT NULL DEFAULT '',
+				topics TEXT NOT NULL DEFAULT '[]', target_queries TEXT NOT NULL DEFAULT '[]',
+				audience TEXT NOT NULL DEFAULT '', competitors TEXT NOT NULL DEFAULT '[]',
+				business_goal TEXT NOT NULL DEFAULT '', target_score REAL,
+				llm_priorities TEXT NOT NULL DEFAULT '[]', clone_base_path TEXT,
+				site_type TEXT NOT NULL DEFAULT 'generic', notifications TEXT,
+				monitoring_interval TEXT NOT NULL DEFAULT 'daily',
+				status TEXT NOT NULL DEFAULT 'active',
+				created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+			)
+		`);
+		await rawClient.execute(`
+			CREATE TABLE pipeline_runs (
+				pipeline_id TEXT PRIMARY KEY,
+				target_id TEXT NOT NULL,
+				stage TEXT NOT NULL,
+				started_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL,
+				completed_at TEXT,
+				analysis_report_ref TEXT,
+				optimization_plan_ref TEXT,
+				validation_report_ref TEXT,
+				retry_count INTEGER NOT NULL DEFAULT 0,
+				error_message TEXT,
+				resumable INTEGER NOT NULL DEFAULT 0,
+				resume_from_stage TEXT
+			)
+		`);
+		// Set user_version = 3 (pre-cost-column state)
+		await rawClient.execute("PRAGMA user_version = 3");
+		rawClient.close();
+
+		// Run migrations
+		const db = createDatabase(settings);
+		await ensureTables(db);
+
+		const checkClient = createClient({ url: `file:${dbPath}` });
+		const tableInfo = await checkClient.execute("PRAGMA table_info(pipeline_runs)");
+		const version = await checkClient.execute("PRAGMA user_version");
+		checkClient.close();
+
+		const colNames = tableInfo.rows.map((r) => r.name as string);
+		expect(colNames).toContain("total_tokens_in");
+		expect(colNames).toContain("total_tokens_out");
+		expect(colNames).toContain("total_cost_usd");
+		expect(colNames).toContain("cost_by_provider");
+		expect(colNames).toContain("cost_by_model");
+
+		const userVersion =
+			(version.rows[0]?.user_version as number) ?? (version.rows[0]?.[0] as number) ?? 0;
+		expect(userVersion).toBe(8);
+	});
+
+	it("migration v4-8 is idempotent on a DB already at version 8", async () => {
+		const settings = makeSettings();
+		const db1 = createDatabase(settings);
+		await ensureTables(db1);
+
+		const dbPath = path.join(settings.workspace_dir, settings.db_path);
+
+		// Run again — should not throw or duplicate columns
+		const db2 = createDatabase(settings);
+		await ensureTables(db2);
+
+		const client = createClient({ url: `file:${dbPath}` });
+		const result = await client.execute("PRAGMA table_info(pipeline_runs)");
+		client.close();
+
+		const colNames = result.rows.map((r) => r.name as string);
+		const totalTokensInCount = colNames.filter((c) => c === "total_tokens_in").length;
+		expect(totalTokensInCount).toBe(1);
+	});
+
+	it("cost columns are nullable by default (NULL for old rows)", async () => {
+		const settings = makeSettings();
+		const dbPath = path.join(settings.workspace_dir, settings.db_path);
+		fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+		// Old schema at version 3
+		const rawClient = createClient({ url: `file:${dbPath}` });
+		await rawClient.execute(`
+			CREATE TABLE targets (
+				id TEXT PRIMARY KEY, url TEXT NOT NULL, name TEXT NOT NULL,
+				description TEXT NOT NULL DEFAULT '', brand TEXT NOT NULL DEFAULT '',
+				topics TEXT NOT NULL DEFAULT '[]', target_queries TEXT NOT NULL DEFAULT '[]',
+				audience TEXT NOT NULL DEFAULT '', competitors TEXT NOT NULL DEFAULT '[]',
+				business_goal TEXT NOT NULL DEFAULT '', target_score REAL,
+				llm_priorities TEXT NOT NULL DEFAULT '[]', clone_base_path TEXT,
+				site_type TEXT NOT NULL DEFAULT 'generic', notifications TEXT,
+				monitoring_interval TEXT NOT NULL DEFAULT 'daily',
+				status TEXT NOT NULL DEFAULT 'active',
+				created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+			)
+		`);
+		await rawClient.execute(`
+			CREATE TABLE pipeline_runs (
+				pipeline_id TEXT PRIMARY KEY,
+				target_id TEXT NOT NULL, stage TEXT NOT NULL,
+				started_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+				completed_at TEXT, analysis_report_ref TEXT,
+				optimization_plan_ref TEXT, validation_report_ref TEXT,
+				retry_count INTEGER NOT NULL DEFAULT 0, error_message TEXT,
+				resumable INTEGER NOT NULL DEFAULT 0, resume_from_stage TEXT
+			)
+		`);
+		// Insert a row before migration
+		await rawClient.execute({
+			sql: "INSERT INTO pipeline_runs (pipeline_id, target_id, stage, started_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+			args: ["test-id", "target-id", "INIT", "2024-01-01T00:00:00.000Z", "2024-01-01T00:00:00.000Z"],
+		});
+		await rawClient.execute("PRAGMA user_version = 3");
+		rawClient.close();
+
+		// Apply migrations
+		const db = createDatabase(settings);
+		await ensureTables(db);
+
+		// The existing row should have NULL for the new cost columns
+		const checkClient = createClient({ url: `file:${dbPath}` });
+		const result = await checkClient.execute("SELECT total_tokens_in, total_cost_usd FROM pipeline_runs WHERE pipeline_id = 'test-id'");
+		checkClient.close();
+
+		expect(result.rows[0].total_tokens_in).toBeNull();
+		expect(result.rows[0].total_cost_usd).toBeNull();
+	});
+});

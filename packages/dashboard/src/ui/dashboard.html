@@ -480,11 +480,41 @@ details.collapsible > .collapsible-content { padding: 16px; }
 
 	<!-- LLM Providers Tab -->
 	<div id="tab-llm" class="hidden">
-		<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-			<h2 style="font-size:18px;">LLM Providers</h2>
-			<button class="btn btn-ghost" onclick="resetAllProviders()">Reset All</button>
+		<!-- Sub-tab navigation -->
+		<div style="display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--border);">
+			<button id="llm-subtab-btn-providers" onclick="switchLLMSubtab('providers')"
+				style="padding:8px 20px;background:none;border:none;cursor:pointer;font-size:14px;color:var(--primary);border-bottom:2px solid var(--primary);margin-bottom:-2px;font-weight:600;">
+				LLM Provider Setting
+			</button>
+			<button id="llm-subtab-btn-cost" onclick="switchLLMSubtab('cost')"
+				style="padding:8px 20px;background:none;border:none;cursor:pointer;font-size:14px;color:var(--text-muted);border-bottom:2px solid transparent;margin-bottom:-2px;">
+				LLM Cost Setting
+			</button>
 		</div>
-		<div id="llmContent"></div>
+
+		<!-- Sub-tab: Provider Setting -->
+		<div id="llm-subtab-providers">
+			<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+				<h2 style="font-size:18px;">LLM Providers</h2>
+				<button class="btn btn-ghost" onclick="resetAllProviders()">Reset All</button>
+			</div>
+			<div id="llmContent"></div>
+		</div>
+
+		<!-- Sub-tab: Cost Setting -->
+		<div id="llm-subtab-cost" class="hidden">
+			<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+				<h2 style="font-size:18px;">LLM Cost Setting</h2>
+				<div style="display:flex;gap:8px;">
+					<button class="btn btn-ghost" onclick="seedDefaultCosts()" title="Perplexity/Azure 기본값 다시 추가">Seed Defaults</button>
+					<button class="btn btn-primary" onclick="openCostModal()">+ Add Override</button>
+				</div>
+			</div>
+			<div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
+				pi-ai 레지스트리에 없거나 단가가 잘못된 모델의 비용을 직접 지정합니다. 여기서 설정한 값은 pi-ai 내장 단가보다 우선 적용됩니다.
+			</div>
+			<div id="costOverrideContent"></div>
+		</div>
 	</div>
 </div>
 
@@ -572,6 +602,58 @@ details.collapsible > .collapsible-content { padding: 16px; }
 	</div>
 </div>
 
+<!-- Cost Override Modal -->
+<div id="costModal" class="modal-overlay hidden">
+	<div class="modal" style="max-width:480px;">
+		<h2 id="costModalTitle">Add Cost Override</h2>
+		<input type="hidden" id="costEditId">
+		<div class="form-row">
+			<div class="form-group">
+				<label>Provider ID *</label>
+				<select id="costProviderId">
+					<option value="openai">openai</option>
+					<option value="anthropic">anthropic</option>
+					<option value="google">google</option>
+					<option value="perplexity">perplexity</option>
+					<option value="microsoft">microsoft (Azure)</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label>Model ID *</label>
+				<input type="text" id="costModelId" placeholder="e.g. sonar-pro">
+			</div>
+		</div>
+		<div class="form-row">
+			<div class="form-group">
+				<label>Input $/1M tokens *</label>
+				<input type="number" id="costInputPer1m" placeholder="3.00" step="0.001" min="0">
+			</div>
+			<div class="form-group">
+				<label>Output $/1M tokens *</label>
+				<input type="number" id="costOutputPer1m" placeholder="15.00" step="0.001" min="0">
+			</div>
+		</div>
+		<div class="form-row">
+			<div class="form-group">
+				<label>Cache Read $/1M</label>
+				<input type="number" id="costCacheRead" placeholder="0" step="0.001" min="0">
+			</div>
+			<div class="form-group">
+				<label>Cache Write $/1M</label>
+				<input type="number" id="costCacheWrite" placeholder="0" step="0.001" min="0">
+			</div>
+		</div>
+		<div class="form-group">
+			<label>Note <span style="font-size:11px;color:var(--text-muted);">(optional)</span></label>
+			<input type="text" id="costNote" placeholder="e.g. Perplexity sonar-pro (web search)">
+		</div>
+		<div class="actions">
+			<button class="btn btn-ghost" onclick="closeModal('costModal')">Cancel</button>
+			<button class="btn btn-primary" onclick="saveCostOverride()">Save</button>
+		</div>
+	</div>
+</div>
+
 <!-- Edit LLM Provider Modal -->
 <div id="llmModal" class="modal-overlay hidden">
 	<div class="modal">
@@ -645,7 +727,7 @@ function switchTab(tabName) {
 	if (tabName === 'targets') loadTargets();
 	if (tabName === 'pipelines') loadPipelines();
 	if (tabName === 'prompts') loadPromptConfigs();
-	if (tabName === 'llm') loadLLMProviders();
+	if (tabName === 'llm') { loadLLMProviders(); loadCostOverrides(); }
 	if (tabName === 'evaluation') initEvalTab();
 }
 
@@ -870,13 +952,16 @@ async function loadPipelines() {
 							<div style="font-size:12px;color:var(--text-muted);">${esc(t.url)}</div>
 						</div>
 					</div>
-					<div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
-						<span class="stage-badge stage-${status.stage}">${status.stage}</span>
-						${isRunning ? '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();stopPipeline(\''+t.id+'\')">Stop</button>' : '<span class="probe-mode-group" style="display:inline-flex;border-radius:6px;overflow:hidden;border:1px solid var(--primary);">' +
-							'<button class="btn btn-primary btn-sm" style="border-radius:0;border:none;padding:4px 10px;" onclick="event.stopPropagation();startPipeline(\''+t.id+'\',\'single\')" title="Single provider probe">Single</button>' +
-							'<button class="btn btn-sm" style="border-radius:0;border:none;border-left:1px solid rgba(255,255,255,0.2);padding:4px 10px;background:var(--primary-dark,#1d4ed8);color:#fff;" onclick="event.stopPropagation();startPipeline(\''+t.id+'\',\'multi\')" title="Multi provider probe (all active providers)">Multi</button>' +
-						'</span>'}
-						${status.is_terminal ? '<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deletePipeline(\''+t.id+'\',\''+status.pipeline_id+'\',\''+esc(t.name)+'\')">🗑️</button>' : ''}
+					<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+						<div style="display:flex;gap:8px;align-items:center;">
+							<span class="stage-badge stage-${status.stage}">${status.stage}</span>
+							${isRunning ? '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();stopPipeline(\''+t.id+'\')">Stop</button>' : '<span class="probe-mode-group" style="display:inline-flex;border-radius:6px;overflow:hidden;border:1px solid var(--primary);">' +
+								'<button class="btn btn-primary btn-sm" style="border-radius:0;border:none;padding:4px 10px;" onclick="event.stopPropagation();startPipeline(\''+t.id+'\',\'single\')" title="Single provider probe">Single</button>' +
+								'<button class="btn btn-sm" style="border-radius:0;border:none;border-left:1px solid rgba(255,255,255,0.2);padding:4px 10px;background:var(--primary-dark,#1d4ed8);color:#fff;" onclick="event.stopPropagation();startPipeline(\''+t.id+'\',\'multi\')" title="Multi provider probe (all active providers)">Multi</button>' +
+							'</span>'}
+							${status.is_terminal ? '<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deletePipeline(\''+t.id+'\',\''+status.pipeline_id+'\',\''+esc(t.name)+'\')">🗑️</button>' : ''}
+						</div>
+						${(status.total_cost_usd != null) ? '<div style="font-size:11px;color:var(--text-muted);text-align:right;">💰 ~$' + status.total_cost_usd.toFixed(4) + ((status.total_tokens_in != null || status.total_tokens_out != null) ? ' (' + ((status.total_tokens_in||0) + (status.total_tokens_out||0)).toLocaleString() + ' tokens)' : '') + '</div>' : '<div style="font-size:11px;color:var(--text-muted);text-align:right;opacity:0.5;">💰 cost not available</div>'}
 					</div>
 				</div>
 				<div style="margin-top:6px;font-size:12px;color:var(--text-muted);">
@@ -1271,6 +1356,7 @@ function buildEvalSubTabs(data) {
 		{ label: '기술', tabs: [
 			{id:'pipeline', icon:'⏱️', label:'실행'},
 			{id:'llmlog', icon:'🔎', label:'LLM Log'},
+			{id:'tokencost', icon:'💰', label:'Token/Cost'},
 			{id:'raw-data', icon:'💾', label:'Raw'}
 		]}
 	];
@@ -1549,6 +1635,9 @@ function renderEvalSubTab(tabId, data, container) {
 		break;
 	case 'llmlog':
 		html = buildLLMLogTab(data);
+		break;
+	case 'tokencost':
+		html = buildTokenCostTab(data);
 		break;
 	case 'raw-data':
 		html = renderRawDataTab(data);
@@ -3814,6 +3903,169 @@ function renderPipelineTab(data) {
 	return html;
 }
 
+function buildTokenCostTab(data) {
+	setTimeout(loadTokenCostData, 0);
+	return '<div id="tokenCostContainer">' +
+		'<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">' +
+		'<h3 style="font-size:14px;margin:0;">Token Usage & Cost Analysis</h3>' +
+		'<button class="btn btn-primary btn-sm" onclick="loadTokenCostData()">Refresh</button>' +
+		'</div>' +
+		'<div id="tokenCostContent"><div style="color:var(--text-muted);font-size:12px;">Loading...</div></div>' +
+		'</div>';
+}
+
+async function loadTokenCostData() {
+	var container = document.getElementById('tokenCostContent');
+	if (!container) return;
+	container.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">Loading...</div>';
+	try {
+		var sel = document.getElementById('evalTargetSelect');
+		var targetId = sel ? sel.value : '';
+		var pipSel = document.getElementById('evalPipelineSelect');
+		var pipelineId = pipSel ? pipSel.value : '';
+		if (!targetId || !pipelineId) { container.innerHTML = '<div class="empty">Select a target and pipeline first.</div>'; return; }
+
+		var resp = await api('/api/targets/' + targetId + '/pipeline/' + pipelineId + '/llm-log');
+		var cs = resp.cost_summary;
+		if (!cs || resp.total_calls === 0) {
+			container.innerHTML = '<div class="empty">No LLM cost data available.</div>';
+			return;
+		}
+
+		var html = '';
+
+		// ── 1. Cost Overview Card ──
+		var totalTokens = cs.total_tokens_in + cs.total_tokens_out;
+		var inPct = totalTokens > 0 ? ((cs.total_tokens_in / totalTokens) * 100).toFixed(1) : '0';
+		var outPct = totalTokens > 0 ? ((cs.total_tokens_out / totalTokens) * 100).toFixed(1) : '0';
+		html += '<div class="card" style="margin-bottom:16px;">';
+		html += '<h4 style="font-size:13px;margin-bottom:12px;">Cost Overview</h4>';
+		html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">';
+		html += '<div style="background:rgba(99,102,241,0.1);padding:12px;border-radius:8px;text-align:center;">';
+		html += '<div style="font-size:11px;color:var(--text-muted);">Total Tokens</div>';
+		html += '<div style="font-size:20px;font-weight:bold;color:#818cf8;">' + fmtNum(totalTokens) + '</div></div>';
+		html += '<div style="background:rgba(59,130,246,0.1);padding:12px;border-radius:8px;text-align:center;">';
+		html += '<div style="font-size:11px;color:var(--text-muted);">Input Tokens</div>';
+		html += '<div style="font-size:20px;font-weight:bold;color:#60a5fa;">' + fmtNum(cs.total_tokens_in) + '</div>';
+		html += '<div style="font-size:10px;color:var(--text-muted);">(' + inPct + '%)</div></div>';
+		html += '<div style="background:rgba(16,185,129,0.1);padding:12px;border-radius:8px;text-align:center;">';
+		html += '<div style="font-size:11px;color:var(--text-muted);">Output Tokens</div>';
+		html += '<div style="font-size:20px;font-weight:bold;color:#34d399;">' + fmtNum(cs.total_tokens_out) + '</div>';
+		html += '<div style="font-size:10px;color:var(--text-muted);">(' + outPct + '%)</div></div>';
+		html += '<div style="background:rgba(245,158,11,0.1);padding:12px;border-radius:8px;text-align:center;">';
+		html += '<div style="font-size:11px;color:var(--text-muted);">Total Cost</div>';
+		html += '<div style="font-size:20px;font-weight:bold;color:#fbbf24;">$' + cs.total_cost_usd.toFixed(4) + '</div></div>';
+		html += '</div>';
+		html += '<div style="margin-top:10px;font-size:11px;color:var(--text-muted);">' + resp.total_calls + ' LLM calls</div>';
+		html += '</div>';
+
+		// ── 2. Provider/Model Breakdown ──
+		html += '<div class="card" style="margin-bottom:16px;">';
+		html += '<h4 style="font-size:13px;margin-bottom:12px;">Cost Breakdown by Provider / Model</h4>';
+
+		// Provider table
+		var providers = Object.keys(cs.by_provider).sort(function(a,b){ return cs.by_provider[b].cost_usd - cs.by_provider[a].cost_usd; });
+		if (providers.length > 0) {
+			var maxProviderCost = Math.max.apply(null, providers.map(function(p){ return cs.by_provider[p].cost_usd; }));
+			html += '<table class="eval-table" style="font-size:11px;margin-bottom:16px;"><thead><tr><th>Provider</th><th>Calls</th><th>Tokens In</th><th>Tokens Out</th><th>Cost</th><th style="width:40%;">Share</th></tr></thead><tbody>';
+			for (var pi = 0; pi < providers.length; pi++) {
+				var p = providers[pi];
+				var pd = cs.by_provider[p];
+				var pct = cs.total_cost_usd > 0 ? ((pd.cost_usd / cs.total_cost_usd) * 100).toFixed(1) : '0';
+				var barW = maxProviderCost > 0 ? ((pd.cost_usd / maxProviderCost) * 100).toFixed(1) : '0';
+				html += '<tr>';
+				html += '<td><strong>' + esc(p) + '</strong></td>';
+				html += '<td>' + pd.calls + '</td>';
+				html += '<td>' + fmtNum(pd.tokens_in) + '</td>';
+				html += '<td>' + fmtNum(pd.tokens_out) + '</td>';
+				html += '<td style="font-family:monospace;">$' + pd.cost_usd.toFixed(4) + '</td>';
+				html += '<td><div style="display:flex;align-items:center;gap:6px;"><div style="background:#6366f1;height:8px;border-radius:4px;width:' + barW + '%;min-width:2px;"></div><span style="font-size:10px;color:var(--text-muted);">' + pct + '%</span></div></td>';
+				html += '</tr>';
+			}
+			html += '</tbody></table>';
+		}
+
+		// Model table
+		var models = Object.keys(cs.by_model).sort(function(a,b){ return cs.by_model[b].cost_usd - cs.by_model[a].cost_usd; });
+		if (models.length > 0) {
+			var maxModelCost = Math.max.apply(null, models.map(function(m){ return cs.by_model[m].cost_usd; }));
+			html += '<div style="font-size:12px;font-weight:600;margin-bottom:6px;">By Model</div>';
+			html += '<table class="eval-table" style="font-size:11px;"><thead><tr><th>Model</th><th>Calls</th><th>Tokens In</th><th>Tokens Out</th><th>Cost</th><th style="width:40%;">Share</th></tr></thead><tbody>';
+			for (var mi = 0; mi < models.length; mi++) {
+				var m = models[mi];
+				var md = cs.by_model[m];
+				var mpct = cs.total_cost_usd > 0 ? ((md.cost_usd / cs.total_cost_usd) * 100).toFixed(1) : '0';
+				var mbarW = maxModelCost > 0 ? ((md.cost_usd / maxModelCost) * 100).toFixed(1) : '0';
+				html += '<tr>';
+				html += '<td><code>' + esc(m) + '</code></td>';
+				html += '<td>' + md.calls + '</td>';
+				html += '<td>' + fmtNum(md.tokens_in) + '</td>';
+				html += '<td>' + fmtNum(md.tokens_out) + '</td>';
+				html += '<td style="font-family:monospace;">$' + md.cost_usd.toFixed(4) + '</td>';
+				html += '<td><div style="display:flex;align-items:center;gap:6px;"><div style="background:#3b82f6;height:8px;border-radius:4px;width:' + mbarW + '%;min-width:2px;"></div><span style="font-size:10px;color:var(--text-muted);">' + mpct + '%</span></div></td>';
+				html += '</tr>';
+			}
+			html += '</tbody></table>';
+		}
+		html += '</div>';
+
+		// ── 3. Cost by Stage ──
+		var stages = Object.keys(cs.by_stage).sort(function(a,b){ return cs.by_stage[b].cost_usd - cs.by_stage[a].cost_usd; });
+		if (stages.length > 0) {
+			var maxStageCost = Math.max.apply(null, stages.map(function(s){ return cs.by_stage[s].cost_usd; }));
+			html += '<div class="card" style="margin-bottom:16px;">';
+			html += '<h4 style="font-size:13px;margin-bottom:12px;">Cost by Pipeline Stage</h4>';
+			for (var si = 0; si < stages.length; si++) {
+				var s = stages[si];
+				var sd = cs.by_stage[s];
+				var sbarW = maxStageCost > 0 ? ((sd.cost_usd / maxStageCost) * 100).toFixed(1) : '0';
+				var spct = cs.total_cost_usd > 0 ? ((sd.cost_usd / cs.total_cost_usd) * 100).toFixed(1) : '0';
+				html += '<div style="margin-bottom:8px;">';
+				html += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">';
+				html += '<span>' + esc(s) + ' <span style="color:var(--text-muted);">(' + sd.calls + ' calls)</span></span>';
+				html += '<span style="font-family:monospace;">$' + sd.cost_usd.toFixed(4) + ' (' + spct + '%)</span>';
+				html += '</div>';
+				html += '<div style="background:rgba(255,255,255,0.05);height:8px;border-radius:4px;overflow:hidden;">';
+				html += '<div style="background:#f59e0b;height:100%;border-radius:4px;width:' + sbarW + '%;"></div>';
+				html += '</div></div>';
+			}
+			html += '</div>';
+		}
+
+		// ── 4. Pipeline Cost History ──
+		try {
+			var histResp = await api('/api/targets/' + targetId + '/cost-history');
+			if (histResp.history && histResp.history.length > 1) {
+				html += '<div class="card">';
+				html += '<h4 style="font-size:13px;margin-bottom:12px;">Pipeline Cost History</h4>';
+				html += '<table class="eval-table" style="font-size:11px;"><thead><tr><th>Pipeline</th><th>Date</th><th>Stage</th><th>Tokens In</th><th>Tokens Out</th><th>Cost</th></tr></thead><tbody>';
+				var totalHistCost = 0;
+				for (var hi = 0; hi < histResp.history.length; hi++) {
+					var h = histResp.history[hi];
+					var isCurrent = h.pipeline_id === pipelineId;
+					var rowStyle = isCurrent ? 'background:rgba(99,102,241,0.1);' : '';
+					totalHistCost += h.total_cost_usd || 0;
+					html += '<tr style="' + rowStyle + '">';
+					html += '<td><code style="font-size:10px;">' + esc((h.pipeline_id||'').slice(0,8)) + '</code>' + (isCurrent ? ' <span class="badge badge-blue" style="font-size:9px;">current</span>' : '') + '</td>';
+					html += '<td>' + (h.started_at ? new Date(h.started_at).toLocaleString() : 'N/A') + '</td>';
+					html += '<td>' + esc(h.stage || '') + '</td>';
+					html += '<td>' + fmtNum(h.total_tokens_in || 0) + '</td>';
+					html += '<td>' + fmtNum(h.total_tokens_out || 0) + '</td>';
+					html += '<td style="font-family:monospace;">' + (typeof h.total_cost_usd === 'number' ? '$' + h.total_cost_usd.toFixed(4) : 'N/A') + '</td>';
+					html += '</tr>';
+				}
+				html += '</tbody></table>';
+				html += '<div style="margin-top:8px;font-size:11px;color:var(--text-muted);">Cumulative cost across ' + histResp.history.length + ' runs: <strong>$' + totalHistCost.toFixed(4) + '</strong></div>';
+				html += '</div>';
+			}
+		} catch (e) { /* ignore history load failure */ }
+
+		container.innerHTML = html;
+	} catch (err) {
+		container.innerHTML = '<div style="color:var(--error);">Failed to load: ' + esc(err.message) + '</div>';
+	}
+}
+
 function buildLLMLogTab(data) {
 	// Auto-load LLM Call Log
 	setTimeout(loadLLMCallLog, 0);
@@ -3843,12 +4095,15 @@ async function loadLLMCallLog() {
 			container.innerHTML = '<div class="empty">No LLM calls recorded. Pipeline may have run in rule-based mode (no API Key).</div>';
 			return;
 		}
-		var html = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Total: ' + resp.total_calls + ' calls | Models: <code>' + esc((resp.llm_models_used||[]).join(', ')) + '</code></div>';
-		html += '<table class="eval-table" style="font-size:11px;"><thead><tr><th>#</th><th>Stage</th><th>Model</th><th>Duration</th><th>Tokens</th><th>Prompt (click to expand)</th></tr></thead><tbody>';
+		var cs = resp.cost_summary;
+		var costInfo = cs ? ' | Cost: <strong>$' + cs.total_cost_usd.toFixed(4) + '</strong> | Tokens: ' + fmtNum(cs.total_tokens_in) + ' in / ' + fmtNum(cs.total_tokens_out) + ' out' : '';
+		var html = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">Total: ' + resp.total_calls + ' calls' + costInfo + ' | Models: <code>' + esc((resp.llm_models_used||[]).join(', ')) + '</code></div>';
+		html += '<table class="eval-table" style="font-size:11px;"><thead><tr><th>#</th><th>Stage</th><th>Model</th><th>Duration</th><th>Tokens</th><th>Cost</th><th>Prompt (click to expand)</th></tr></thead><tbody>';
 		for (var i = 0; i < resp.llm_call_log.length; i++) {
 			var e = resp.llm_call_log[i];
-			var tokStr = (e.tokens_in || '?') + '→' + (e.tokens_out || '?');
+			var tokStr = fmtNum(e.tokens_in || 0) + '→' + fmtNum(e.tokens_out || 0);
 			var durStr = (e.duration_ms / 1000).toFixed(1) + 's';
+			var costStr = typeof e.cost_usd === 'number' ? '$' + e.cost_usd.toFixed(4) : 'N/A';
 			var errBadge = e.error ? ' <span class="badge badge-red">ERROR</span>' : '';
 			html += '<tr onclick="toggleLLMDetail(this)" style="cursor:pointer;">';
 			html += '<td>' + e.seq + '</td>';
@@ -3856,9 +4111,10 @@ async function loadLLMCallLog() {
 			html += '<td><code>' + esc(e.provider + '/' + e.model) + '</code>' + errBadge + '</td>';
 			html += '<td>' + durStr + '</td>';
 			html += '<td>' + tokStr + '</td>';
-			html += '<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(e.prompt_summary.slice(0, 80)) + '...</td>';
+			html += '<td style="font-family:monospace;">' + costStr + '</td>';
+			html += '<td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(e.prompt_summary.slice(0, 80)) + '...</td>';
 			html += '</tr>';
-			html += '<tr class="llm-detail-row" style="display:none;"><td colspan="6">';
+			html += '<tr class="llm-detail-row" style="display:none;"><td colspan="7">';
 			html += '<div style="background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;max-height:500px;overflow:auto;">';
 			if (e.system_instruction_summary) {
 				html += '<div style="margin-bottom:8px;"><strong>🔧 System Instruction:</strong></div>';
@@ -4109,8 +4365,142 @@ async function resetAllProviders() {
 	} catch (e) { toast(e.message, 'error'); }
 }
 
+// ── LLM Sub-tab Switch ────────────────────────────────
+function switchLLMSubtab(name) {
+	['providers','cost'].forEach(n => {
+		document.getElementById('llm-subtab-' + n).classList.toggle('hidden', n !== name);
+		const btn = document.getElementById('llm-subtab-btn-' + n);
+		if (n === name) {
+			btn.style.color = 'var(--primary)';
+			btn.style.borderBottom = '2px solid var(--primary)';
+			btn.style.fontWeight = '600';
+		} else {
+			btn.style.color = 'var(--text-muted)';
+			btn.style.borderBottom = '2px solid transparent';
+			btn.style.fontWeight = 'normal';
+		}
+	});
+}
+
+// ── LLM Cost Overrides ────────────────────────────────
+var costOverrides = [];
+
+async function loadCostOverrides() {
+	try {
+		costOverrides = await api('/api/settings/cost-overrides');
+		renderCostOverrides();
+	} catch (e) { /* silently ignore if not loaded yet */ }
+}
+
+function renderCostOverrides() {
+	const container = document.getElementById('costOverrideContent');
+	if (!container) return;
+	if (!costOverrides || costOverrides.length === 0) {
+		container.innerHTML = '<div class="empty">No cost overrides configured. Click "Seed Defaults" to add Perplexity and Azure defaults.</div>';
+		return;
+	}
+	var html = '<table class="eval-page-table"><thead><tr>'
+		+ '<th>Provider</th><th>Model</th><th>Input $/1M</th><th>Output $/1M</th>'
+		+ '<th>Cache Read</th><th>Cache Write</th><th>Note</th><th>Type</th><th>Actions</th>'
+		+ '</tr></thead><tbody>';
+	for (var i = 0; i < costOverrides.length; i++) {
+		var o = costOverrides[i];
+		html += '<tr>'
+			+ '<td><code>' + esc(o.provider_id) + '</code></td>'
+			+ '<td><code>' + esc(o.model_id) + '</code></td>'
+			+ '<td style="text-align:right;">$' + Number(o.input_per_1m).toFixed(3) + '</td>'
+			+ '<td style="text-align:right;">$' + Number(o.output_per_1m).toFixed(3) + '</td>'
+			+ '<td style="text-align:right;color:var(--text-muted);">$' + Number(o.cache_read_per_1m).toFixed(3) + '</td>'
+			+ '<td style="text-align:right;color:var(--text-muted);">$' + Number(o.cache_write_per_1m).toFixed(3) + '</td>'
+			+ '<td style="font-size:12px;color:var(--text-muted);">' + esc(o.note || '') + '</td>'
+			+ '<td><span style="font-size:11px;padding:2px 6px;border-radius:4px;background:' + (o.is_default ? 'var(--border)' : 'rgba(37,99,235,0.15)') + ';color:' + (o.is_default ? 'var(--text-muted)' : 'var(--primary)') + ';">' + (o.is_default ? 'default' : 'custom') + '</span></td>'
+			+ '<td style="white-space:nowrap;">'
+			+ '<button class="btn btn-ghost btn-sm" onclick="editCostOverride(\'' + esc(o.id) + '\')">Edit</button> '
+			+ '<button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="deleteCostOverride(\'' + esc(o.id) + '\',\'' + esc(o.provider_id) + ':' + esc(o.model_id) + '\')">🗑️</button>'
+			+ '</td></tr>';
+	}
+	html += '</tbody></table>';
+	container.innerHTML = html;
+}
+
+function openCostModal(id) {
+	if (id) {
+		const o = costOverrides.find(x => x.id === id);
+		if (!o) return;
+		document.getElementById('costModalTitle').textContent = 'Edit Cost Override';
+		document.getElementById('costEditId').value = o.id;
+		document.getElementById('costProviderId').value = o.provider_id;
+		document.getElementById('costModelId').value = o.model_id;
+		document.getElementById('costModelId').disabled = true;
+		document.getElementById('costProviderId').disabled = true;
+		document.getElementById('costInputPer1m').value = o.input_per_1m;
+		document.getElementById('costOutputPer1m').value = o.output_per_1m;
+		document.getElementById('costCacheRead').value = o.cache_read_per_1m;
+		document.getElementById('costCacheWrite').value = o.cache_write_per_1m;
+		document.getElementById('costNote').value = o.note || '';
+	} else {
+		document.getElementById('costModalTitle').textContent = 'Add Cost Override';
+		document.getElementById('costEditId').value = '';
+		document.getElementById('costProviderId').value = 'openai';
+		document.getElementById('costProviderId').disabled = false;
+		document.getElementById('costModelId').value = '';
+		document.getElementById('costModelId').disabled = false;
+		document.getElementById('costInputPer1m').value = '';
+		document.getElementById('costOutputPer1m').value = '';
+		document.getElementById('costCacheRead').value = '0';
+		document.getElementById('costCacheWrite').value = '0';
+		document.getElementById('costNote').value = '';
+	}
+	document.getElementById('costModal').classList.remove('hidden');
+}
+
+function editCostOverride(id) { openCostModal(id); }
+
+async function saveCostOverride() {
+	const editId = document.getElementById('costEditId').value;
+	const body = {
+		provider_id: document.getElementById('costProviderId').value,
+		model_id: document.getElementById('costModelId').value.trim(),
+		input_per_1m: parseFloat(document.getElementById('costInputPer1m').value) || 0,
+		output_per_1m: parseFloat(document.getElementById('costOutputPer1m').value) || 0,
+		cache_read_per_1m: parseFloat(document.getElementById('costCacheRead').value) || 0,
+		cache_write_per_1m: parseFloat(document.getElementById('costCacheWrite').value) || 0,
+		note: document.getElementById('costNote').value.trim() || null,
+	};
+	if (!body.model_id) { toast('Model ID is required', 'error'); return; }
+	try {
+		if (editId) {
+			await api('/api/settings/cost-overrides/' + editId, { method: 'PUT', body });
+		} else {
+			await api('/api/settings/cost-overrides', { method: 'POST', body });
+		}
+		toast('Cost override saved');
+		closeModal('costModal');
+		loadCostOverrides();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteCostOverride(id, label) {
+	if (!confirm('Delete cost override for "' + label + '"?')) return;
+	try {
+		await api('/api/settings/cost-overrides/' + id, { method: 'DELETE' });
+		toast('Deleted');
+		loadCostOverrides();
+	} catch (e) { toast(e.message, 'error'); }
+}
+
+async function seedDefaultCosts() {
+	try {
+		costOverrides = await api('/api/settings/cost-overrides/seed-defaults', { method: 'POST' });
+		renderCostOverrides();
+		toast('Default cost overrides seeded');
+	} catch (e) { toast(e.message, 'error'); }
+}
+
 // ── Utils ────────────────────────────────────────────
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function fmtNum(n) { return typeof n === 'number' ? n.toLocaleString() : '?'; }
+function fmtCost(n) { return typeof n === 'number' ? '$' + n.toFixed(4) : 'N/A'; }
 var escHtml = esc;
 
 function collapsible(title, contentHtml, defaultOpen) {

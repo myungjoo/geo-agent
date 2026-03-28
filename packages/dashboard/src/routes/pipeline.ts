@@ -2,6 +2,8 @@ import {
 	type AppSettings,
 	type GeoDatabase,
 	GeoLLMClient,
+	type LLMCallLogEntry,
+	ModelCostOverrideRepository,
 	type PipelineConfig,
 	type PipelineDeps,
 	PipelineRepository,
@@ -26,12 +28,14 @@ import { broadcastSSE } from "../server.js";
 let sharedPipelineRepo: PipelineRepository | null = null;
 let sharedStageRepo: StageExecutionRepository | null = null;
 let sharedTargetRepo: TargetRepository | null = null;
+let sharedCostOverrideRepo: ModelCostOverrideRepository | null = null;
 let sharedSettings: AppSettings | null = null;
 
 export function initPipelineRouter(db: GeoDatabase, settings?: AppSettings): void {
 	sharedPipelineRepo = new PipelineRepository(db);
 	sharedStageRepo = new StageExecutionRepository(db);
 	sharedTargetRepo = new TargetRepository(db);
+	sharedCostOverrideRepo = new ModelCostOverrideRepository(db);
 	if (settings) sharedSettings = settings;
 }
 
@@ -157,6 +161,7 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 		// Build chatLLM dependency — LLM is REQUIRED (ARCHITECTURE.md 9-A.1)
 		const workspaceDir = sharedSettings?.workspace_dir ?? "./run";
 		let chatLLM: PipelineDeps["chatLLM"];
+		let costOverrides: import("@geo-agent/core").ModelCostOverrideMap | undefined;
 		let providersWithKey: ReturnType<ProviderConfigManager["getEnabled"]> = [];
 		try {
 			const configManager = new ProviderConfigManager(workspaceDir);
@@ -175,7 +180,8 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 				});
 				return c.json({ ...pipeline, error: errMsg }, 201);
 			}
-			const client = new GeoLLMClient(workspaceDir);
+			costOverrides = sharedCostOverrideRepo ? await sharedCostOverrideRepo.buildLookupMap() : undefined;
+			const client = new GeoLLMClient(workspaceDir, costOverrides);
 			chatLLM = (req) => client.chat(req);
 			console.log(`🤖 LLM enabled: ${providersWithKey.map((p) => p.provider_id).join(", ")}`);
 		} catch (err) {
@@ -216,6 +222,7 @@ pipelineRouter.post("/:id/pipeline", async (c) => {
 			},
 			probe_mode: probeMode,
 			providers: probeMode === "multi" ? providersWithKey : undefined,
+			costOverrides,
 		};
 
 		// LLM mode is always "llm" (chatLLM is required, ARCHITECTURE.md 9-A.1)
@@ -264,6 +271,16 @@ async function executePipelineAsync(
 	try {
 		console.log(`⏳ Pipeline started for target ${targetId} (${config.target_url}) [LLM-enhanced]`);
 		const result = await runPipeline(config, deps);
+
+		// 파이프라인 완료 후 토큰/비용 집계를 DB에 저장
+		try {
+			const costData = aggregateLLMCostFromLog(result.llm_call_log);
+			if (costData.total_cost_usd > 0 || costData.total_tokens_in > 0) {
+				await repo.updateCostSummary(pipelineId, costData);
+			}
+		} catch {
+			// 비용 집계 실패는 파이프라인 결과에 영향 없음
+		}
 
 		// LLM 인증 에러가 있으면 성공 여부와 관계없이 실패 처리
 		const hasAuthError = result.llm_errors.some((e) => {
@@ -588,7 +605,7 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/executive-summary", async (c) => {
 		if (providersWithKey.length === 0) {
 			return c.json({ error: "LLM API Key not configured" }, 400);
 		}
-		client = new GeoLLMClient(workspaceDir);
+		client = new GeoLLMClient(workspaceDir, sharedCostOverrideRepo ? await sharedCostOverrideRepo.buildLookupMap() : undefined);
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		return c.json({ error: `LLM initialization failed: ${msg}` }, 500);
@@ -744,7 +761,7 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/recommendations", async (c) => {
 		if (providersWithKey.length === 0) {
 			return c.json({ error: "LLM API Key not configured" }, 400);
 		}
-		client = new GeoLLMClient(workspaceDir);
+		client = new GeoLLMClient(workspaceDir, sharedCostOverrideRepo ? await sharedCostOverrideRepo.buildLookupMap() : undefined);
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		return c.json({ error: `LLM initialization failed: ${msg}` }, 500);
@@ -881,6 +898,95 @@ Return ONLY valid JSON.`;
 	}
 });
 
+// ── Helper: aggregate cost data from typed LLM call log (for DB storage) ──
+function aggregateLLMCostFromLog(log: LLMCallLogEntry[]): {
+	total_tokens_in: number;
+	total_tokens_out: number;
+	total_cost_usd: number;
+	cost_by_provider: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }>;
+	cost_by_model: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }>;
+} {
+	let total_tokens_in = 0;
+	let total_tokens_out = 0;
+	let total_cost_usd = 0;
+	const cost_by_provider: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }> = {};
+	const cost_by_model: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }> = {};
+
+	for (const e of log) {
+		const costUsd = e.cost_usd ?? 0;
+		const tokIn = e.tokens_in ?? 0;
+		const tokOut = e.tokens_out ?? 0;
+
+		total_tokens_in += tokIn;
+		total_tokens_out += tokOut;
+		total_cost_usd += costUsd;
+
+		if (!cost_by_provider[e.provider]) cost_by_provider[e.provider] = { calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 };
+		cost_by_provider[e.provider].calls++;
+		cost_by_provider[e.provider].tokens_in += tokIn;
+		cost_by_provider[e.provider].tokens_out += tokOut;
+		cost_by_provider[e.provider].cost_usd += costUsd;
+
+		if (!cost_by_model[e.model]) cost_by_model[e.model] = { calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 };
+		cost_by_model[e.model].calls++;
+		cost_by_model[e.model].tokens_in += tokIn;
+		cost_by_model[e.model].tokens_out += tokOut;
+		cost_by_model[e.model].cost_usd += costUsd;
+	}
+
+	return { total_tokens_in, total_tokens_out, total_cost_usd, cost_by_provider, cost_by_model };
+}
+
+// ── Helper: compute cost_summary from LLM call log entries ──────────
+function computeCostSummary(logs: Array<Record<string, unknown>>) {
+	let totalCostUsd = 0;
+	let totalTokensIn = 0;
+	let totalTokensOut = 0;
+	const byProvider: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }> = {};
+	const byModel: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }> = {};
+	const byStage: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }> = {};
+
+	for (const e of logs) {
+		const costUsd = typeof e.cost_usd === "number" ? e.cost_usd : 0;
+		const tokIn = typeof e.tokens_in === "number" ? e.tokens_in : 0;
+		const tokOut = typeof e.tokens_out === "number" ? e.tokens_out : 0;
+		const provider = String(e.provider ?? "unknown");
+		const model = String(e.model ?? "unknown");
+		const stage = String(e.stage ?? "unknown");
+
+		totalCostUsd += costUsd;
+		totalTokensIn += tokIn;
+		totalTokensOut += tokOut;
+
+		if (!byProvider[provider]) byProvider[provider] = { calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 };
+		byProvider[provider].calls++;
+		byProvider[provider].tokens_in += tokIn;
+		byProvider[provider].tokens_out += tokOut;
+		byProvider[provider].cost_usd += costUsd;
+
+		if (!byModel[model]) byModel[model] = { calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 };
+		byModel[model].calls++;
+		byModel[model].tokens_in += tokIn;
+		byModel[model].tokens_out += tokOut;
+		byModel[model].cost_usd += costUsd;
+
+		if (!byStage[stage]) byStage[stage] = { calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 };
+		byStage[stage].calls++;
+		byStage[stage].tokens_in += tokIn;
+		byStage[stage].tokens_out += tokOut;
+		byStage[stage].cost_usd += costUsd;
+	}
+
+	return {
+		total_cost_usd: Math.round(totalCostUsd * 1_000_000) / 1_000_000,
+		total_tokens_in: totalTokensIn,
+		total_tokens_out: totalTokensOut,
+		by_provider: byProvider,
+		by_model: byModel,
+		by_stage: byStage,
+	};
+}
+
 // GET /api/targets/:id/pipeline/:pipelineId/llm-log — LLM 호출 전체 로그
 pipelineRouter.get("/:id/pipeline/:pipelineId/llm-log", async (c) => {
 	const stageRepo = getStageRepo();
@@ -888,43 +994,106 @@ pipelineRouter.get("/:id/pipeline/:pipelineId/llm-log", async (c) => {
 
 	const stages = await stageRepo.findByPipelineId(pipelineId);
 
+	// Collect all LLM call log entries from all stages
+	let logs: Array<Record<string, unknown>> = [];
+	const modelSet = new Set<string>();
+
 	// Try REPORTING stage first (has the complete log)
 	const reportingStage = stages.find((s) => s.stage === "REPORTING" && s.result_full);
 	if (reportingStage?.result_full) {
 		try {
 			const reportData = JSON.parse(reportingStage.result_full);
-			return c.json({
-				llm_call_log: reportData.llm_call_log ?? [],
-				llm_models_used: reportData.llm_models_used ?? [],
-				total_calls: (reportData.llm_call_log ?? []).length,
-			});
+			if (Array.isArray(reportData.llm_call_log)) {
+				logs = reportData.llm_call_log;
+				for (const entry of logs) {
+					if (entry.provider && entry.model) modelSet.add(`${entry.provider}/${entry.model}`);
+				}
+			}
 		} catch {
 			/* fall through */
 		}
 	}
 
-	// Fallback: scan all stages for llm_call_log entries
-	const allLogs: unknown[] = [];
-	const modelSet = new Set<string>();
-	for (const s of stages) {
-		if (!s.result_full) continue;
-		try {
-			const rf = JSON.parse(s.result_full);
-			if (Array.isArray(rf.llm_call_log)) {
-				allLogs.push(...rf.llm_call_log);
-				for (const entry of rf.llm_call_log) {
-					if (entry.provider && entry.model) modelSet.add(`${entry.provider}/${entry.model}`);
+	// If REPORTING didn't yield results, scan all stages
+	if (logs.length === 0) {
+		for (const s of stages) {
+			if (!s.result_full) continue;
+			try {
+				const rf = JSON.parse(s.result_full);
+				if (Array.isArray(rf.llm_call_log)) {
+					logs.push(...rf.llm_call_log);
+					for (const entry of rf.llm_call_log) {
+						if (entry.provider && entry.model) modelSet.add(`${entry.provider}/${entry.model}`);
+					}
 				}
+			} catch {
+				/* ignore */
 			}
-		} catch {
-			/* ignore */
 		}
 	}
+
 	return c.json({
-		llm_call_log: allLogs,
+		llm_call_log: logs,
 		llm_models_used: Array.from(modelSet),
-		total_calls: allLogs.length,
+		total_calls: logs.length,
+		cost_summary: computeCostSummary(logs),
 	});
+});
+
+// GET /api/targets/:id/cost-history — 파이프라인 실행별 비용 히스토리
+pipelineRouter.get("/:id/cost-history", async (c) => {
+	const repo = getRepo();
+	const stageRepo = getStageRepo();
+	const targetId = c.req.param("id");
+
+	const pipelines = await repo.findByTargetId(targetId);
+	const history: Array<Record<string, unknown>> = [];
+
+	for (const p of pipelines) {
+		// If cost data is already stored in pipeline_runs, use it
+		if (p.total_cost_usd != null) {
+			history.push({
+				pipeline_id: p.pipeline_id,
+				started_at: p.started_at,
+				completed_at: p.completed_at,
+				stage: p.stage,
+				total_tokens_in: p.total_tokens_in,
+				total_tokens_out: p.total_tokens_out,
+				total_cost_usd: p.total_cost_usd,
+				cost_by_provider: p.cost_by_provider ? JSON.parse(p.cost_by_provider) : null,
+				cost_by_model: p.cost_by_model ? JSON.parse(p.cost_by_model) : null,
+			});
+			continue;
+		}
+
+		// Fallback: compute from stage_executions (for older pipelines)
+		const stages = await stageRepo.findByPipelineId(p.pipeline_id);
+		const logs: Array<Record<string, unknown>> = [];
+		for (const s of stages) {
+			if (!s.result_full) continue;
+			try {
+				const rf = JSON.parse(s.result_full);
+				if (Array.isArray(rf.llm_call_log)) logs.push(...rf.llm_call_log);
+			} catch {
+				/* ignore */
+			}
+		}
+		const summary = computeCostSummary(logs);
+		history.push({
+			pipeline_id: p.pipeline_id,
+			started_at: p.started_at,
+			completed_at: p.completed_at,
+			stage: p.stage,
+			total_tokens_in: summary.total_tokens_in,
+			total_tokens_out: summary.total_tokens_out,
+			total_cost_usd: summary.total_cost_usd,
+			total_calls: logs.length,
+			cost_by_provider: summary.by_provider,
+			cost_by_model: summary.by_model,
+		});
+	}
+
+	return c.json({ target_id: targetId, history });
 });
 
 // ── Cycle Control Routes ──────────────────────────────────
@@ -1022,6 +1191,31 @@ pipelineRouter.get("/:id/cycle/status", async (c) => {
 		/* ignore */
 	}
 
+	// Cost summary — use stored DB value if available, otherwise scan llm_call_log
+	let totalCostUsd: number | null = pipeline.total_cost_usd ?? null;
+	let totalTokensIn: number | null = pipeline.total_tokens_in ?? null;
+	let totalTokensOut: number | null = pipeline.total_tokens_out ?? null;
+
+	if (totalCostUsd == null) {
+		// Scan stage result_full entries for cost_usd (in-flight or older pipelines)
+		const allLogs: Array<Record<string, unknown>> = [];
+		for (const s of stages) {
+			if (!s.result_full) continue;
+			try {
+				const rf = JSON.parse(s.result_full);
+				if (Array.isArray(rf.llm_call_log)) allLogs.push(...rf.llm_call_log);
+			} catch {
+				/* ignore */
+			}
+		}
+		if (allLogs.length > 0) {
+			const cs = computeCostSummary(allLogs);
+			totalCostUsd = cs.total_cost_usd;
+			totalTokensIn = cs.total_tokens_in;
+			totalTokensOut = cs.total_tokens_out;
+		}
+	}
+
 	return c.json({
 		pipeline_id: pipeline.pipeline_id,
 		stage: pipeline.stage,
@@ -1036,6 +1230,9 @@ pipelineRouter.get("/:id/cycle/status", async (c) => {
 		llm_mode: llmMode,
 		configured_providers: configuredProviders,
 		llm_models_used: llmModels,
+		total_cost_usd: totalCostUsd,
+		total_tokens_in: totalTokensIn,
+		total_tokens_out: totalTokensOut,
 	});
 });
 

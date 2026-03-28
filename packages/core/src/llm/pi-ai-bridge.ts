@@ -25,6 +25,7 @@ import {
 import type { TSchema } from "@mariozechner/pi-ai";
 import type { LLMRequest, LLMResponse } from "./geo-llm-client.js";
 import type { LLMProviderSettings } from "./provider-config.js";
+import type { ModelCostOverrideMap } from "../db/repositories/model-cost-override-repository.js";
 
 // ── Provider Mapping ────────────────────────────────────────
 
@@ -39,9 +40,16 @@ const PROVIDER_MAP: Record<string, string> = {
 
 /**
  * Resolve a pi-ai Model from GEO provider settings.
- * Falls back to env-based API key discovery if no explicit key.
+ * Applies cost overrides from the override map when available.
+ * Falls back to pi-ai's built-in registry, then hardcoded fallback.
+ *
+ * @param provider - GEO LLM provider settings
+ * @param costOverrides - Optional override map keyed by "provider_id:model_id"
  */
-export function piAiModelFromProvider(provider: LLMProviderSettings): Model<Api> {
+export function piAiModelFromProvider(
+	provider: LLMProviderSettings,
+	costOverrides?: ModelCostOverrideMap,
+): Model<Api> {
 	const piProvider = PROVIDER_MAP[provider.provider_id];
 	if (!piProvider) {
 		throw new Error(`Provider "${provider.provider_id}" not mapped to pi-ai provider`);
@@ -52,7 +60,11 @@ export function piAiModelFromProvider(provider: LLMProviderSettings): Model<Api>
 		provider.api_base_url ??
 		(provider.provider_id === "perplexity" ? "https://api.perplexity.ai" : undefined);
 
-	// Try pi-ai's built-in registry first
+	// Check cost override map first (keyed by GEO provider_id:model_id)
+	const overrideKey = `${provider.provider_id}:${provider.default_model}`;
+	const costOverride = costOverrides?.get(overrideKey);
+
+	// Try pi-ai's built-in registry
 	let model: Model<Api> | undefined;
 	try {
 		model = getModel(piProvider as any, provider.default_model as any);
@@ -61,10 +73,17 @@ export function piAiModelFromProvider(provider: LLMProviderSettings): Model<Api>
 	}
 
 	if (model) {
-		if (effectiveBaseUrl) {
-			return { ...model, baseUrl: effectiveBaseUrl };
+		// Apply cost override on top of registry model if present
+		const finalModel = effectiveBaseUrl ? { ...model, baseUrl: effectiveBaseUrl } : { ...model };
+		if (costOverride) {
+			finalModel.cost = {
+				input: costOverride.input_per_1m,
+				output: costOverride.output_per_1m,
+				cacheRead: costOverride.cache_read_per_1m,
+				cacheWrite: costOverride.cache_write_per_1m,
+			};
 		}
-		return model;
+		return finalModel;
 	}
 
 	// Model not in pi-ai's registry — build a minimal Model object
@@ -81,6 +100,17 @@ export function piAiModelFromProvider(provider: LLMProviderSettings): Model<Api>
 	} else {
 		api = "openai-completions";
 	}
+
+	// Use override cost if available; otherwise use minimal fallback
+	const cost = costOverride
+		? {
+				input: costOverride.input_per_1m,
+				output: costOverride.output_per_1m,
+				cacheRead: costOverride.cache_read_per_1m,
+				cacheWrite: costOverride.cache_write_per_1m,
+			}
+		: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+
 	return {
 		id: provider.default_model,
 		name: provider.default_model,
@@ -89,7 +119,7 @@ export function piAiModelFromProvider(provider: LLMProviderSettings): Model<Api>
 		baseUrl: effectiveBaseUrl ?? getDefaultBaseUrl(piProvider),
 		reasoning: false,
 		input: ["text"],
-		cost: { input: 0.002, output: 0.006, cacheRead: 0, cacheWrite: 0 },
+		cost,
 		contextWindow: 128000,
 		maxTokens: provider.max_tokens,
 	} as Model<Api>;

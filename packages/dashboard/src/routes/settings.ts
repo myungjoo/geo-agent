@@ -1,7 +1,9 @@
 import {
 	type AgentId,
 	AgentIdSchema,
+	type GeoDatabase,
 	LLMProviderIdSchema,
+	ModelCostOverrideRepository,
 	PromptCategorySchema,
 	PromptConfigManager,
 	ProviderConfigManager,
@@ -17,6 +19,17 @@ import {
 import { Hono } from "hono";
 
 const settingsRouter = new Hono();
+
+let sharedDb: GeoDatabase | null = null;
+
+export function initSettingsRouter(db: GeoDatabase): void {
+	sharedDb = db;
+}
+
+function getCostOverrideRepo(): ModelCostOverrideRepository {
+	if (!sharedDb) throw new Error("Settings router not initialized");
+	return new ModelCostOverrideRepository(sharedDb);
+}
 
 function getWorkspaceDir() {
 	return loadSettings().workspace_dir;
@@ -247,6 +260,80 @@ settingsRouter.post("/llm-providers/reset-all", (c) => {
 	const manager = new ProviderConfigManager(getWorkspaceDir());
 	const results = manager.resetAll();
 	return c.json(results);
+});
+
+// ── Model Cost Overrides ────────────────────────────────────
+
+// GET /api/settings/cost-overrides — List all cost overrides
+settingsRouter.get("/cost-overrides", async (c) => {
+	const repo = getCostOverrideRepo();
+	const overrides = await repo.findAll();
+	return c.json(overrides);
+});
+
+// POST /api/settings/cost-overrides — Create or update an override (upsert by provider_id+model_id)
+settingsRouter.post("/cost-overrides", async (c) => {
+	const body = await c.req.json().catch(() => null);
+	if (!body || typeof body.provider_id !== "string" || typeof body.model_id !== "string") {
+		return c.json({ error: "provider_id and model_id are required" }, 400);
+	}
+	const inputPerM = Number(body.input_per_1m);
+	const outputPerM = Number(body.output_per_1m);
+	if (Number.isNaN(inputPerM) || Number.isNaN(outputPerM)) {
+		return c.json({ error: "input_per_1m and output_per_1m must be numbers" }, 400);
+	}
+	const repo = getCostOverrideRepo();
+	const result = await repo.upsert({
+		provider_id: body.provider_id,
+		model_id: body.model_id,
+		input_per_1m: inputPerM,
+		output_per_1m: outputPerM,
+		cache_read_per_1m: Number(body.cache_read_per_1m) || 0,
+		cache_write_per_1m: Number(body.cache_write_per_1m) || 0,
+		note: body.note ?? null,
+		is_default: false,
+	});
+	return c.json(result);
+});
+
+// PUT /api/settings/cost-overrides/:id — Update by id
+settingsRouter.put("/cost-overrides/:id", async (c) => {
+	const id = c.req.param("id");
+	const body = await c.req.json().catch(() => null);
+	if (!body) return c.json({ error: "Invalid body" }, 400);
+
+	const repo = getCostOverrideRepo();
+	const all = await repo.findAll();
+	const existing = all.find((o) => o.id === id);
+	if (!existing) return c.json({ error: "Not found" }, 404);
+
+	const result = await repo.upsert({
+		provider_id: existing.provider_id,
+		model_id: existing.model_id,
+		input_per_1m: Number(body.input_per_1m) ?? existing.input_per_1m,
+		output_per_1m: Number(body.output_per_1m) ?? existing.output_per_1m,
+		cache_read_per_1m: Number(body.cache_read_per_1m) ?? existing.cache_read_per_1m,
+		cache_write_per_1m: Number(body.cache_write_per_1m) ?? existing.cache_write_per_1m,
+		note: body.note !== undefined ? body.note : existing.note,
+		is_default: false,
+	});
+	return c.json(result);
+});
+
+// DELETE /api/settings/cost-overrides/:id — Delete override
+settingsRouter.delete("/cost-overrides/:id", async (c) => {
+	const id = c.req.param("id");
+	const repo = getCostOverrideRepo();
+	await repo.delete(id);
+	return c.json({ ok: true });
+});
+
+// POST /api/settings/cost-overrides/seed-defaults — Re-seed default values
+settingsRouter.post("/cost-overrides/seed-defaults", async (c) => {
+	const repo = getCostOverrideRepo();
+	await repo.seedDefaults();
+	const all = await repo.findAll();
+	return c.json(all);
 });
 
 export { settingsRouter };

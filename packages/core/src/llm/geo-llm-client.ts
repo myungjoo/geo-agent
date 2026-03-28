@@ -8,6 +8,7 @@ import { z } from "zod";
 import { piAiComplete, piAiModelFromProvider } from "./pi-ai-bridge.js";
 import type { LLMProviderSettings } from "./provider-config.js";
 import { ProviderConfigManager } from "./provider-config.js";
+import type { ModelCostOverrideMap } from "../db/repositories/model-cost-override-repository.js";
 
 // ── LLM 요청/응답 스키마 ─────────────────────────────────────
 
@@ -89,10 +90,17 @@ export class CostTracker {
 export class GeoLLMClient {
 	private configManager: ProviderConfigManager;
 	private costTracker: CostTracker;
+	private costOverrides: ModelCostOverrideMap | undefined;
 
-	constructor(workspaceDir: string) {
+	constructor(workspaceDir: string, costOverrides?: ModelCostOverrideMap) {
 		this.configManager = new ProviderConfigManager(workspaceDir);
 		this.costTracker = new CostTracker();
+		this.costOverrides = costOverrides;
+	}
+
+	/** Update the cost override map (called after DB changes) */
+	setCostOverrides(overrides: ModelCostOverrideMap): void {
+		this.costOverrides = overrides;
 	}
 
 	/** 활성화된 프로바이더 기반 최적 라우팅 (API key가 있는 프로바이더 우선) */
@@ -128,6 +136,7 @@ export class GeoLLMClient {
 		// Build pi-ai Model, overriding the model ID if request specifies one
 		const piModel = piAiModelFromProvider(
 			model !== provider.default_model ? { ...provider, default_model: model } : provider,
+			this.costOverrides,
 		);
 
 		const response = await piAiComplete(piModel, request, { apiKey: provider.api_key });

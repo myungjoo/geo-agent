@@ -158,6 +158,33 @@ export class PipelineRepository {
 		return true;
 	}
 
+	/**
+	 * Update cost summary fields on pipeline completion.
+	 * Aggregates token/cost data from LLM call logs.
+	 */
+	async updateCostSummary(
+		pipelineId: string,
+		costData: {
+			total_tokens_in: number;
+			total_tokens_out: number;
+			total_cost_usd: number;
+			cost_by_provider: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }>;
+			cost_by_model: Record<string, { calls: number; tokens_in: number; tokens_out: number; cost_usd: number }>;
+		},
+	): Promise<void> {
+		await this.db
+			.update(pipelineRuns)
+			.set({
+				total_tokens_in: costData.total_tokens_in,
+				total_tokens_out: costData.total_tokens_out,
+				total_cost_usd: costData.total_cost_usd,
+				cost_by_provider: JSON.stringify(costData.cost_by_provider),
+				cost_by_model: JSON.stringify(costData.cost_by_model),
+				updated_at: new Date().toISOString(),
+			})
+			.where(eq(pipelineRuns.pipeline_id, pipelineId));
+	}
+
 	private toModel(row: typeof pipelineRuns.$inferSelect): PipelineState {
 		return {
 			pipeline_id: row.pipeline_id,
@@ -173,6 +200,11 @@ export class PipelineRepository {
 			error_message: row.error_message ?? null,
 			resumable: row.resumable,
 			resume_from_stage: (row.resume_from_stage as PipelineStage) ?? null,
+			total_tokens_in: row.total_tokens_in ?? null,
+			total_tokens_out: row.total_tokens_out ?? null,
+			total_cost_usd: row.total_cost_usd ?? null,
+			cost_by_provider: row.cost_by_provider ?? null,
+			cost_by_model: row.cost_by_model ?? null,
 		};
 	}
 }
