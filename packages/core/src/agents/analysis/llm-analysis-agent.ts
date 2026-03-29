@@ -117,6 +117,14 @@ export async function runLLMAnalysis(
 	if (!state.pageScores.has("homepage")) {
 		await toolHandlers.score_geo({ crawl_data_key: "homepage" });
 	}
+	// Ensure all multi-page scores exist — LLM may skip pages due to iteration limits
+	if (state.multiPageResult) {
+		for (const page of state.multiPageResult.pages) {
+			if (!state.pageScores.has(page.url)) {
+				await toolHandlers.score_geo({ crawl_data_key: page.url });
+			}
+		}
+	}
 	if (!state.evalData) {
 		await toolHandlers.extract_evaluation_data({});
 	}
