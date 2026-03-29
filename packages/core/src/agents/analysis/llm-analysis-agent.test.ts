@@ -228,6 +228,86 @@ describe("LLM Analysis Agent", () => {
 		});
 	});
 
+	describe("post-loop multipage score fallback", () => {
+		const subPageCrawlData: CrawlData = {
+			...mockCrawlData,
+			url: "https://example.com/products/phones/",
+			title: "Phones",
+			canonical_url: "https://example.com/products/phones/",
+		};
+		const subPage2CrawlData: CrawlData = {
+			...mockCrawlData,
+			url: "https://example.com/about/",
+			title: "About",
+			canonical_url: "https://example.com/about/",
+		};
+
+		function setupMultipageState() {
+			const state = createAnalysisToolState();
+			state.homepageCrawl = mockCrawlData;
+			state.multiPageResult = {
+				homepage: mockCrawlData,
+				pages: [
+					{
+						url: "https://example.com/products/phones/",
+						path: "/products/phones/",
+						crawl_data: subPageCrawlData,
+					},
+					{ url: "https://example.com/about/", path: "/about/", crawl_data: subPage2CrawlData },
+				],
+				total_pages: 3,
+				crawl_duration_ms: 5000,
+			};
+			return state;
+		}
+
+		it("should auto-score unscored multipage pages in post-loop fallback", async () => {
+			const state = setupMultipageState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+
+			// Simulate: LLM scored homepage but skipped sub-pages (iteration limit)
+			await handlers.score_geo({ crawl_data_key: "homepage" });
+			expect(state.pageScores.has("homepage")).toBe(true);
+			expect(state.pageScores.has("https://example.com/products/phones/")).toBe(false);
+			expect(state.pageScores.has("https://example.com/about/")).toBe(false);
+
+			// Simulate post-loop fallback logic from llm-analysis-agent.ts
+			for (const page of state.multiPageResult!.pages) {
+				if (!state.pageScores.has(page.url)) {
+					await handlers.score_geo({ crawl_data_key: page.url });
+				}
+			}
+
+			// All pages should now have scores
+			expect(state.pageScores.has("https://example.com/products/phones/")).toBe(true);
+			expect(state.pageScores.has("https://example.com/about/")).toBe(true);
+			expect(state.pageScores.get("https://example.com/products/phones/")!.overall_score).toBe(65);
+			expect(state.pageScores.get("https://example.com/about/")!.overall_score).toBe(65);
+		});
+
+		it("should not re-score pages already scored by LLM", async () => {
+			const state = setupMultipageState();
+			const handlers = createAnalysisToolHandlers(mockDeps, state);
+
+			// LLM scored homepage and one sub-page
+			await handlers.score_geo({ crawl_data_key: "homepage" });
+			await handlers.score_geo({ crawl_data_key: "https://example.com/products/phones/" });
+
+			const callCountBefore = (mockDeps.scoreTarget as any).mock.calls.length;
+
+			// Post-loop fallback — should only score the missing /about/ page
+			for (const page of state.multiPageResult!.pages) {
+				if (!state.pageScores.has(page.url)) {
+					await handlers.score_geo({ crawl_data_key: page.url });
+				}
+			}
+
+			const callCountAfter = (mockDeps.scoreTarget as any).mock.calls.length;
+			// Only 1 additional scoreTarget call (for /about/), not 2
+			expect(callCountAfter - callCountBefore).toBe(1);
+		});
+	});
+
 	describe("LLMAnalysisResult type contract", () => {
 		it("should have mandatory richReport field", () => {
 			const mockResult: LLMAnalysisResult = {
