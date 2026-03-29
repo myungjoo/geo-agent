@@ -1,6 +1,4 @@
 import {
-	type AgentId,
-	AgentIdSchema,
 	type GeoDatabase,
 	LLMProviderIdSchema,
 	ModelCostOverrideRepository,
@@ -9,13 +7,7 @@ import {
 	ProviderConfigManager,
 	loadSettings,
 } from "@geo-agent/core";
-import { DEFAULT_PROMPTS } from "@geo-agent/core/prompts/defaults.js";
-import {
-	loadAllPrompts,
-	loadPrompt,
-	resetPrompt,
-	savePrompt,
-} from "@geo-agent/core/prompts/prompt-loader.js";
+import { loadRuntimePrompts } from "@geo-agent/core/prompts/runtime-prompts.js";
 import { Hono } from "hono";
 
 const settingsRouter = new Hono();
@@ -35,80 +27,23 @@ function getWorkspaceDir() {
 	return loadSettings().workspace_dir;
 }
 
-// ── Agent Prompts ─────────────────────────────────────────
+// ── Agent Prompts (읽기 전용 — 실제 런타임 프롬프트 표시) ────
 
-// GET /api/settings/agents/prompts — List all prompts
+// GET /api/settings/agents/prompts — 실제 런타임에 사용되는 모든 프롬프트 목록
 settingsRouter.get("/agents/prompts", (c) => {
-	const prompts = loadAllPrompts(getWorkspaceDir());
+	const prompts = loadRuntimePrompts();
 	return c.json(prompts);
 });
 
-// GET /api/settings/agents/prompts/:agent_id — Get specific prompt
+// GET /api/settings/agents/prompts/:agent_id — 특정 에이전트 런타임 프롬프트
 settingsRouter.get("/agents/prompts/:agent_id", (c) => {
 	const agentId = c.req.param("agent_id");
-	const parsed = AgentIdSchema.safeParse(agentId);
-	if (!parsed.success) {
-		return c.json({ error: "Invalid agent ID" }, 400);
+	const prompts = loadRuntimePrompts();
+	const prompt = prompts.find((p) => p.id === agentId);
+	if (!prompt) {
+		return c.json({ error: `Agent prompt not found: ${agentId}` }, 404);
 	}
-	const prompt = loadPrompt(getWorkspaceDir(), parsed.data);
 	return c.json(prompt);
-});
-
-// PUT /api/settings/agents/prompts/:agent_id — Update prompt
-settingsRouter.put("/agents/prompts/:agent_id", async (c) => {
-	const agentId = c.req.param("agent_id");
-	const parsed = AgentIdSchema.safeParse(agentId);
-	if (!parsed.success) {
-		return c.json({ error: "Invalid agent ID" }, 400);
-	}
-
-	const body = await c.req.json();
-	const config = {
-		...loadPrompt(getWorkspaceDir(), parsed.data),
-		...body,
-		agent_id: parsed.data,
-		is_customized: true,
-		last_modified: new Date().toISOString(),
-	};
-
-	savePrompt(getWorkspaceDir(), config);
-	return c.json(config);
-});
-
-// POST /api/settings/agents/prompts/:agent_id/reset — Reset to default
-settingsRouter.post("/agents/prompts/:agent_id/reset", (c) => {
-	const agentId = c.req.param("agent_id");
-	const parsed = AgentIdSchema.safeParse(agentId);
-	if (!parsed.success) {
-		return c.json({ error: "Invalid agent ID" }, 400);
-	}
-
-	const prompt = resetPrompt(getWorkspaceDir(), parsed.data);
-	return c.json(prompt);
-});
-
-// POST /api/settings/agents/prompts/reset-all — Reset all to default
-settingsRouter.post("/agents/prompts/reset-all", (c) => {
-	const agentIds: AgentId[] = [
-		"orchestrator",
-		"analysis",
-		"strategy",
-		"optimization",
-		"validation",
-		"monitoring",
-	];
-	const results = agentIds.map((id) => resetPrompt(getWorkspaceDir(), id));
-	return c.json(results);
-});
-
-// GET /api/settings/agents/prompts/:agent_id/default — Get default prompt (read-only)
-settingsRouter.get("/agents/prompts/:agent_id/default", (c) => {
-	const agentId = c.req.param("agent_id");
-	const defaults = DEFAULT_PROMPTS[agentId];
-	if (!defaults) {
-		return c.json({ error: "Invalid agent ID" }, 400);
-	}
-	return c.json({ ...defaults, last_modified: "default" });
 });
 
 // ── Unified Prompt Configs (All Categories) ──────────────
@@ -170,7 +105,6 @@ settingsRouter.post("/prompt-configs-reset-all", (c) => {
 	const manager = new PromptConfigManager(getWorkspaceDir());
 	return c.json(manager.resetAll());
 });
-
 // ── LLM Providers ─────────────────────────────────────────
 
 // GET /api/settings/llm-providers — List all provider settings

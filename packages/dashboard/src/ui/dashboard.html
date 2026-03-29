@@ -450,8 +450,20 @@ details.collapsible > .collapsible-content { padding: 16px; }
 
 	<!-- All Prompts & Templates Tab -->
 	<div id="tab-prompts" class="hidden">
+		<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+			<h2 style="font-size:18px;">Agent Prompts</h2>
+			<span class="badge badge-gray" style="font-size:12px; padding:4px 10px;">읽기 전용</span>
+		</div>
+		<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:20px;font-size:13px;color:var(--text-muted);line-height:1.6;">
+			ℹ️ <strong style="color:var(--text);">실제 런타임 프롬프트</strong> — 파이프라인 실행 시 LLM에 전달되는 시스템 지시를 표시합니다.
+			수정은 소스 코드(에이전트 .ts 파일 또는 .skill.md)에서만 가능합니다.
+		</div>
+		<div id="promptsContent"></div>
+
+		<hr style="border:none;border-top:1px solid var(--border);margin:24px 0;">
+
 		<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-			<h2 style="font-size:18px;">All Prompts & Templates</h2>
+			<h2 style="font-size:18px;">Prompt Templates & Configs</h2>
 			<button class="btn btn-ghost" onclick="resetAllPromptConfigs()">Reset All</button>
 		</div>
 		<div id="promptConfigsContent"></div>
@@ -556,23 +568,6 @@ details.collapsible > .collapsible-content { padding: 16px; }
 		<div class="actions">
 			<button class="btn btn-ghost" onclick="closeModal('targetModal')">Cancel</button>
 			<button class="btn btn-primary" onclick="saveTarget()">Save</button>
-		</div>
-	</div>
-</div>
-
-<!-- Edit Prompt Modal (legacy) -->
-<div id="promptModal" class="modal-overlay hidden">
-	<div class="modal">
-		<h2 id="promptModalTitle">Edit Prompt</h2>
-		<input type="hidden" id="promptEditId">
-		<div class="form-group">
-			<label>System Instruction</label>
-			<textarea id="promptText" rows="12"></textarea>
-		</div>
-		<div class="actions">
-			<button class="btn btn-ghost" onclick="closeModal('promptModal')">Cancel</button>
-			<button class="btn btn-danger" onclick="resetPrompt()" style="margin-right:auto;">Reset to Default</button>
-			<button class="btn btn-primary" onclick="savePrompt()">Save</button>
 		</div>
 	</div>
 </div>
@@ -726,7 +721,7 @@ function switchTab(tabName) {
 	window.location.hash = tabName;
 	if (tabName === 'targets') loadTargets();
 	if (tabName === 'pipelines') loadPipelines();
-	if (tabName === 'prompts') loadPromptConfigs();
+	if (tabName === 'prompts') { loadPrompts(); loadPromptConfigs(); }
 	if (tabName === 'llm') { loadLLMProviders(); loadCostOverrides(); }
 	if (tabName === 'evaluation') initEvalTab();
 }
@@ -4154,18 +4149,75 @@ function toggleLLMDetail(row) {
 	}
 }
 
-// ── Agent Prompts (legacy — kept for backward compat) ──
+// ── Agent Prompts (읽기 전용) ─────────────────────────
 async function loadPrompts() {
 	try {
 		prompts = await api('/api/settings/agents/prompts');
 		renderPrompts();
 	} catch (e) { toast(e.message, 'error'); }
 }
-function renderPrompts() {}
-function editPrompt(agentId) {}
-async function savePrompt() {}
-async function resetPrompt() {}
-async function resetAllPrompts() {}
+function renderPromptBlock(text, id) {
+	const short = text.length > 400;
+	const preview = short ? esc(text.slice(0, 400)) + '…' : esc(text);
+	return `<div style="position:relative;">
+		<pre id="pre-${id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:11px;line-height:1.6;white-space:pre-wrap;word-break:break-word;margin:0;overflow:hidden;max-height:${short ? '120px' : 'none'};">${preview}</pre>
+		${short ? `<button class="btn btn-ghost btn-sm" style="margin-top:6px;font-size:11px;" onclick="togglePromptExpand('${id}', ${JSON.stringify(esc(text))})">펼쳐보기 ▼</button>` : ''}
+	</div>`;
+}
+
+function togglePromptExpand(id, fullText) {
+	const pre = document.getElementById('pre-' + id);
+	const btn = pre.nextElementSibling;
+	if (pre.style.maxHeight !== 'none') {
+		pre.style.maxHeight = 'none';
+		pre.innerHTML = fullText;
+		if (btn) btn.textContent = '접기 ▲';
+	} else {
+		pre.style.maxHeight = '120px';
+		pre.innerHTML = fullText.slice(0, 400) + '…';
+		if (btn) btn.textContent = '펼쳐보기 ▼';
+	}
+}
+
+function renderPrompts() {
+	const container = document.getElementById('promptsContent');
+	container.innerHTML = prompts.map((p, pi) => {
+		const sourceBadge = p.source === 'skill_md'
+			? '<span class="badge badge-blue">skill.md</span>'
+			: '<span class="badge badge-gray">inline</span>';
+
+		let bodyHtml;
+		if (p.sub_prompts && p.sub_prompts.length > 1) {
+			// 서브 프롬프트 아코디언
+			bodyHtml = p.sub_prompts.map((sp, si) => {
+				const sid = `sp-${pi}-${si}`;
+				return `<div style="margin-top:10px;">
+					<div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">
+						${esc(sp.label)}
+					</div>
+					${renderPromptBlock(sp.system_instruction, sid)}
+				</div>`;
+			}).join('');
+		} else {
+			bodyHtml = renderPromptBlock(p.system_instruction, `p-${pi}`);
+		}
+
+		return `<div class="card" style="margin-bottom:14px;">
+			<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+				<div>
+					<h2 style="font-size:15px;margin-bottom:4px;">${esc(p.display_name)}</h2>
+					<div style="font-size:11px;color:var(--text-muted);display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+						${sourceBadge}
+						<span class="badge badge-gray">읽기 전용</span>
+						<span style="opacity:0.7;">📄 ${esc(p.source_file)}</span>
+					</div>
+				</div>
+			</div>
+			<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">${esc(p.description)}</div>
+			${bodyHtml}
+		</div>`;
+	}).join('');
+}
 
 // ── Unified Prompt Configs (All Categories) ──────────
 async function loadPromptConfigs() {

@@ -9,6 +9,11 @@ import { type ValidationVerdict, ValidationVerdictSchema } from "../shared/llm-r
  */
 import type { CrawlData, PageScoreResult } from "../shared/types.js";
 
+// ── Exported prompt constants (실제 런타임에 LLM으로 전달되는 시스템 지시) ──────
+
+export const VALIDATION_SYSTEM =
+	'You are a GEO validation expert. Assess optimization quality. Respond with JSON:\n{"improved_aspects":["string"],"remaining_issues":["string"],"llm_friendliness_verdict":"much_better|better|marginally_better|no_change|worse","specific_recommendations":["string"],"confidence":0.0-1.0}';
+
 // ── Types ───────────────────────────────────────────────────
 
 export interface ValidationInput {
@@ -181,8 +186,7 @@ export async function runValidation(
 		deps.chatLLM,
 		{
 			prompt: `Compare the optimization results. Score changed from ${input.before_score} to ${effectiveAfterScore} (delta: ${delta}).\n\nDimension changes:\n${dimensionDeltas.map((d) => `${d.label}: ${d.before} → ${d.after} (${d.delta >= 0 ? "+" : ""}${d.delta})`).join("\n")}\n\nAssess the optimization quality. Respond in JSON format.`,
-			system_instruction:
-				'You are a GEO validation expert. Assess optimization quality. Respond with JSON:\n{"improved_aspects":["string"],"remaining_issues":["string"],"llm_friendliness_verdict":"much_better|better|marginally_better|no_change|worse","specific_recommendations":["string"],"confidence":0.0-1.0}',
+			system_instruction: VALIDATION_SYSTEM,
 			json_mode: true,
 			temperature: 0.1,
 			max_tokens: 1500,

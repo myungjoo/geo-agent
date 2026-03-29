@@ -24,6 +24,14 @@ import type {
 } from "../shared/types.js";
 import { type GeoEvaluationData, extractGeoEvaluationData } from "./geo-eval-extractor.js";
 
+// ── Exported prompt constants (실제 런타임에 LLM으로 전달되는 시스템 지시) ──────
+
+export const READABILITY_SYSTEM =
+	"You are a readability analyst. Classify text readability. Respond with JSON only.";
+
+export const CONTENT_QUALITY_SYSTEM =
+	'You are a GEO (Generative Engine Optimization) expert. Evaluate web pages for LLM consumption quality. Respond with JSON only:\n{\n  "brand_recognition": { "score": 0-100, "identified_brand": "string", "identified_products": ["string"], "reasoning": "string" },\n  "content_quality": { "score": 0-100, "clarity": 0-100, "completeness": 0-100, "factual_density": 0-100, "reasoning": "string" },\n  "information_gaps": [{ "category": "string", "description": "string", "importance": "critical|high|medium|low" }],\n  "llm_consumption_issues": [{ "issue": "string", "recommendation": "string" }],\n  "overall_assessment": "string"\n}';
+
 // ── Analysis Agent Input/Output ─────────────────────────────
 
 export interface AnalysisInput {
@@ -136,8 +144,7 @@ async function computeContentAnalysis(
 	const excerpt = textContent.slice(0, 500);
 	const response = await chatLLM({
 		prompt: `Analyze the readability level of the following text excerpt. Classify it as one of: "technical", "general", or "simplified".\n\n- "technical": specialized vocabulary, complex sentence structures, assumes domain expertise\n- "general": everyday language accessible to most adults, moderate complexity\n- "simplified": very simple language, short sentences, basic vocabulary\n\nText excerpt:\n"""\n${excerpt}\n"""\n\nRespond with JSON only: { "readability_level": "technical"|"general"|"simplified", "reasoning": "brief explanation" }`,
-		system_instruction:
-			"You are a readability analyst. Classify text readability. Respond with JSON only.",
+		system_instruction: READABILITY_SYSTEM,
 		json_mode: true,
 		temperature: 0.1,
 		max_tokens: 200,
@@ -410,7 +417,7 @@ export async function runAnalysis(
 		deps.chatLLM,
 		{
 			prompt: `Evaluate this web page for LLM consumption quality. Analyze brand recognition, content quality, information gaps, and issues that affect how well LLMs can understand and cite this page. Respond in JSON format.\n\nPage context:\n${JSON.stringify(pageContext, null, 2)}`,
-			system_instruction: `You are a GEO (Generative Engine Optimization) expert. Evaluate web pages for LLM consumption quality. Respond with JSON only:\n{\n  "brand_recognition": { "score": 0-100, "identified_brand": "string", "identified_products": ["string"], "reasoning": "string" },\n  "content_quality": { "score": 0-100, "clarity": 0-100, "completeness": 0-100, "factual_density": 0-100, "reasoning": "string" },\n  "information_gaps": [{ "category": "string", "description": "string", "importance": "critical|high|medium|low" }],\n  "llm_consumption_issues": [{ "issue": "string", "recommendation": "string" }],\n  "overall_assessment": "string"\n}`,
+			system_instruction: CONTENT_QUALITY_SYSTEM,
 			json_mode: true,
 			temperature: 0.3,
 			max_tokens: 2000,

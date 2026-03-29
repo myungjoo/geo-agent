@@ -14,6 +14,29 @@ import {
 	safeLLMCall,
 } from "../shared/llm-helpers.js";
 
+// ── Exported prompt constants (실제 런타임에 LLM으로 전달되는 시스템 지시) ──────
+
+export const OPT_META_DESCRIPTION_SYSTEM =
+	"You are an SEO expert specializing in LLM discoverability. Write a single meta description that is factual, keyword-rich, and optimized for AI engines. Output ONLY the description text, no quotes or labels. Keep it under 160 characters.";
+
+export const OPT_OG_TAGS_SYSTEM =
+	"You are a social media optimization expert. Write a single OG description that encourages clicks and shares. Output ONLY the description text, no quotes or labels. Keep it under 200 characters.";
+
+export const OPT_SCHEMA_MARKUP_SYSTEM =
+	"You are a structured data expert. Generate a single JSON-LD object using schema.org vocabulary. Choose the most appropriate @type (WebPage, Product, Article, Organization, etc.) based on the content. Include as many relevant properties as the content supports (name, description, url, image, author, datePublished, etc.). Output ONLY valid JSON, no markdown fences or explanation.";
+
+export const OPT_LLMS_TXT_SYSTEM =
+	"You are a GEO (Generative Engine Optimization) expert. Generate an llms.txt file that helps LLMs understand this site. Use markdown format with: a top-level heading with the site name, a brief description, then sections for key content areas, important pages, and any structured data available. Be specific to the actual site content — do not use generic boilerplate. Output ONLY the llms.txt content.";
+
+export const OPT_SEMANTIC_HEADING_SYSTEM =
+	"You are a web content expert. Write a single H1 heading that is clear, descriptive, and optimized for both users and LLM engines. It should accurately represent the page content. Output ONLY the heading text — no HTML tags, no quotes, no explanation. Keep it under 80 characters.";
+
+export const OPT_CONTENT_DENSITY_SYSTEM =
+	"You are a GEO content specialist. Generate factual, relevant content to improve page density for LLM consumption. Never fabricate data. Use semantic HTML.";
+
+export const OPT_FAQ_SYSTEM =
+	"Generate factual FAQ items based on the page content. Never invent information not present in the content.";
+
 // ── Types ───────────────────────────────────────────────────
 
 export interface OptimizationInput {
@@ -81,8 +104,7 @@ async function optimizeMetadata(
 						deps.chatLLM,
 						{
 							prompt: `Write a concise meta description (max 160 characters) for this web page.\n\nTitle: ${pageTitle}\n\nContent excerpt:\n${pageText}`,
-							system_instruction:
-								"You are an SEO expert specializing in LLM discoverability. Write a single meta description that is factual, keyword-rich, and optimized for AI engines. Output ONLY the description text, no quotes or labels. Keep it under 160 characters.",
+							system_instruction: OPT_META_DESCRIPTION_SYSTEM,
 							json_mode: false,
 							temperature: 0.3,
 							max_tokens: 200,
@@ -109,8 +131,7 @@ async function optimizeMetadata(
 						deps.chatLLM,
 						{
 							prompt: `Write a compelling Open Graph description (max 200 characters) for social sharing of this page.\n\nTitle: ${title.trim()}\n\nContent excerpt:\n${pageText}`,
-							system_instruction:
-								"You are a social media optimization expert. Write a single OG description that encourages clicks and shares. Output ONLY the description text, no quotes or labels. Keep it under 200 characters.",
+							system_instruction: OPT_OG_TAGS_SYSTEM,
 							json_mode: false,
 							temperature: 0.3,
 							max_tokens: 200,
@@ -170,8 +191,7 @@ async function optimizeSchemaMarkup(
 					deps.chatLLM,
 					{
 						prompt: `Generate a rich JSON-LD (schema.org) structured data object for this web page.\n\nTitle: ${pageTitle}\nMeta description: ${metaDesc}\nExisting JSON-LD: ${existingLd}\n\nContent excerpt:\n${pageText}`,
-						system_instruction:
-							"You are a structured data expert. Generate a single JSON-LD object using schema.org vocabulary. Choose the most appropriate @type (WebPage, Product, Article, Organization, etc.) based on the content. Include as many relevant properties as the content supports (name, description, url, image, author, datePublished, etc.). Output ONLY valid JSON, no markdown fences or explanation.",
+						system_instruction: OPT_SCHEMA_MARKUP_SYSTEM,
 						json_mode: true,
 						temperature: 0.3,
 						max_tokens: 800,
@@ -226,8 +246,7 @@ async function optimizeLlmsTxt(
 			deps.chatLLM,
 			{
 				prompt: `Generate an llms.txt file for a website with these pages:\n\n${pageSummaries.join("\n")}\n\nTotal pages: ${htmlFiles.length}`,
-				system_instruction:
-					"You are a GEO (Generative Engine Optimization) expert. Generate an llms.txt file that helps LLMs understand this site. Use markdown format with: a top-level heading with the site name, a brief description, then sections for key content areas, important pages, and any structured data available. Be specific to the actual site content — do not use generic boilerplate. Output ONLY the llms.txt content.",
+				system_instruction: OPT_LLMS_TXT_SYSTEM,
 				json_mode: false,
 				temperature: 0.3,
 				max_tokens: 500,
@@ -265,8 +284,7 @@ async function optimizeSemanticStructure(
 					deps.chatLLM,
 					{
 						prompt: `Suggest a clear, descriptive H1 heading for this web page.\n\nCurrent title tag: ${title}\n\nContent excerpt:\n${pageText}`,
-						system_instruction:
-							"You are a web content expert. Write a single H1 heading that is clear, descriptive, and optimized for both users and LLM engines. It should accurately represent the page content. Output ONLY the heading text — no HTML tags, no quotes, no explanation. Keep it under 80 characters.",
+						system_instruction: OPT_SEMANTIC_HEADING_SYSTEM,
 						json_mode: false,
 						temperature: 0.3,
 						max_tokens: 100,
@@ -317,8 +335,7 @@ async function optimizeContentDensity(
 				deps.chatLLM,
 				{
 					prompt: `This web page has thin content (${wordCount} words). Title: "${title}"\nContent: "${text.slice(0, 1500)}"\n\nWrite 2-3 additional paragraphs of factual, informative content that would help this page be better understood by LLMs. Write in the same language as the existing content. Output only the HTML paragraphs (wrapped in <section> tags).`,
-					system_instruction:
-						"You are a GEO content specialist. Generate factual, relevant content to improve page density for LLM consumption. Never fabricate data. Use semantic HTML.",
+					system_instruction: OPT_CONTENT_DENSITY_SYSTEM,
 					json_mode: false,
 					temperature: 0.4,
 					max_tokens: 1000,
@@ -360,8 +377,7 @@ async function optimizeFaqAddition(
 				deps.chatLLM,
 				{
 					prompt: `Based on this page content, generate a FAQ section with 3-5 questions and answers.\nTitle: "${title}"\nContent: "${text}"\n\nOutput JSON: { "faqs": [{ "question": "...", "answer": "..." }] }`,
-					system_instruction:
-						"Generate factual FAQ items based on the page content. Never invent information not present in the content.",
+					system_instruction: OPT_FAQ_SYSTEM,
 					json_mode: true,
 					temperature: 0.3,
 					max_tokens: 1500,

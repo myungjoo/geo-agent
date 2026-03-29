@@ -22,6 +22,10 @@
 			"import": "./dist/prompts/defaults.js",
 			"types": "./dist/prompts/defaults.d.ts"
 		},
+		"./prompts/runtime-prompts.js": {
+			"import": "./dist/prompts/runtime-prompts.js",
+			"types": "./dist/prompts/runtime-prompts.d.ts"
+		},
 		"./llm/provider-config.js": {
 			"import": "./dist/llm/provider-config.js",
 			"types": "./dist/llm/provider-config.d.ts"

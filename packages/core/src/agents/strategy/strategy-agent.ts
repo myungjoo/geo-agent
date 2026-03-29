@@ -14,6 +14,35 @@ import type { OptimizationPlan, OptimizationTask } from "../../models/optimizati
 import { parseJsonResponse, safeLLMCall } from "../shared/llm-helpers.js";
 import { StrategyLLMResponseSchema } from "../shared/llm-response-schemas.js";
 
+// ── Exported prompt constants (실제 런타임에 LLM으로 전달되는 시스템 지시) ──────
+
+export const STRATEGY_SYSTEM =
+	'You are a GEO optimization expert. Respond with JSON only:\n{"strategy_rationale":"detailed explanation","tasks":[{"change_type":"SCHEMA_MARKUP","title":"...","description":"specific instructions","target_element":null,"priority":"critical","expected_impact":"...","specific_data":{}}],"estimated_delta":15,"confidence":0.7}';
+
+export const STRATEGY_PROMPT_TEMPLATE = `You are a GEO (Generative Engine Optimization) strategist. Analyze the following website assessment and generate a complete optimization strategy with prioritized tasks.
+
+## Current GEO Scores
+- Total: {total}/100
+- Citation Rate: {citation_rate}/100
+- Structured Score: {structured_score}/100
+
+## Structured Data Status
+- JSON-LD present: {json_ld_present}
+- Schema completeness: {schema_completeness}
+- OG tags: {og_tags_present}
+- Meta description: {meta_description}
+
+## Content Analysis
+- Word count: {word_count}
+- Readability level: {readability_level}
+
+## Machine Readability
+- Grade: {grade}
+- Heading hierarchy valid: {heading_hierarchy_valid}
+- Semantic tag ratio: {semantic_tag_ratio}
+
+Generate a complete strategy as JSON. Include tasks using change_type values: METADATA, SCHEMA_MARKUP, LLMS_TXT, SEMANTIC_STRUCTURE, CONTENT_DENSITY, FAQ_SECTION, INTERNAL_LINKING, IMAGE_ALT, CANONICAL, SITEMAP.`;
+
 // ── Strategy Input/Output ───────────────────────────────────
 
 export interface StrategyInput {
@@ -236,8 +265,7 @@ Generate a complete strategy as JSON. Include tasks that address the most impact
 		deps.chatLLM,
 		{
 			prompt,
-			system_instruction:
-				'You are a GEO optimization expert. Respond with JSON only:\n{"strategy_rationale":"detailed explanation","tasks":[{"change_type":"SCHEMA_MARKUP","title":"...","description":"specific instructions","target_element":null,"priority":"critical","expected_impact":"...","specific_data":{}}],"estimated_delta":15,"confidence":0.7}',
+			system_instruction: STRATEGY_SYSTEM,
 			json_mode: true,
 			temperature: 0.2,
 			max_tokens: 3000,

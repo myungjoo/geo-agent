@@ -74,12 +74,15 @@ describe("Dashboard UI routes", () => {
 		expect(html).toContain("llmModal");
 	});
 
-	it("GET /dashboard contains prompt editing elements", async () => {
+	it("GET /dashboard contains read-only prompt display elements", async () => {
 		const res = await app.request("/dashboard");
 		const html = await res.text();
-		expect(html).toContain("promptModal");
-		expect(html).toContain("editPrompt");
-		expect(html).toContain("resetAllPrompts");
+		expect(html).toContain("promptsContent");
+		expect(html).toContain("renderPrompts");
+		expect(html).toContain("읽기 전용");
+		// 레거시 에이전트 프롬프트 편집 모달이 제거되었음을 확인
+		expect(html).not.toContain("promptModal");
+		expect(html).not.toContain("resetAllPrompts");
 	});
 
 	it("GET /dashboard is dark themed", async () => {
