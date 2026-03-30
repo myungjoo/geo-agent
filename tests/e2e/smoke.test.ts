@@ -197,12 +197,12 @@ describe("Pipeline CRUD (no execution)", () => {
 // ── Settings API ────────────────────────────────────────────
 
 describe("Settings API", () => {
-	it("GET /api/settings/agents/prompts → 200 + 5 runtime prompts", async () => {
+	it("GET /api/settings/agents/prompts → 200 + 7 runtime prompts", async () => {
 		const res = await api("/api/settings/agents/prompts");
 		expect(res.status).toBe(200);
 		const data = (await jsonBody(res)) as Record<string, unknown>[];
 		expect(Array.isArray(data)).toBe(true);
-		expect(data.length).toBe(5);
+		expect(data.length).toBe(7);
 	});
 
 	it("GET /api/settings/llm-providers → 200", async () => {
