@@ -19,18 +19,24 @@ import { StrategyLLMResponseSchema } from "../shared/llm-response-schemas.js";
 export const STRATEGY_SYSTEM =
 	'You are a GEO optimization expert. Respond with JSON only:\n{"strategy_rationale":"detailed explanation","tasks":[{"change_type":"SCHEMA_MARKUP","title":"...","description":"specific instructions","target_element":null,"priority":"critical","expected_impact":"...","specific_data":{}}],"estimated_delta":15,"confidence":0.7}';
 
+// NOTE: 실제 런타임에서는 아래 플레이스홀더({...})에 분석 결과 값이 치환됩니다.
+// 원본: strategy-agent.ts runStrategy() 내 const prompt (template literal)
 export const STRATEGY_PROMPT_TEMPLATE = `You are a GEO (Generative Engine Optimization) strategist. Analyze the following website assessment and generate a complete optimization strategy with prioritized tasks.
 
 ## Current GEO Scores
 - Total: {total}/100
 - Citation Rate: {citation_rate}/100
+- Citation Accuracy: {citation_accuracy}/100
+- Info Recognition: {info_recognition_score}/100
+- Coverage: {coverage}/100
+- Rank Position: {rank_position}/100
 - Structured Score: {structured_score}/100
 
 ## Structured Data Status
 - JSON-LD present: {json_ld_present}
 - Schema completeness: {schema_completeness}
-- OG tags: {og_tags_present}
-- Meta description: {meta_description}
+- OG tags present: {og_tags_present}
+- Meta description: {meta_description (present|missing)}
 
 ## Content Analysis
 - Word count: {word_count}
@@ -41,7 +47,10 @@ export const STRATEGY_PROMPT_TEMPLATE = `You are a GEO (Generative Engine Optimi
 - Heading hierarchy valid: {heading_hierarchy_valid}
 - Semantic tag ratio: {semantic_tag_ratio}
 
-Generate a complete strategy as JSON. Include tasks using change_type values: METADATA, SCHEMA_MARKUP, LLMS_TXT, SEMANTIC_STRUCTURE, CONTENT_DENSITY, FAQ_SECTION, INTERNAL_LINKING, IMAGE_ALT, CANONICAL, SITEMAP.`;
+## Existing Rule-Based Tasks
+{tasks — 규칙 기반으로 생성된 태스크 목록이 동적으로 삽입됩니다}
+
+Generate a complete strategy as JSON. Include tasks that address the most impactful improvements. Use change_type values from: METADATA, SCHEMA_MARKUP, LLMS_TXT, SEMANTIC_STRUCTURE, CONTENT_DENSITY, FAQ_SECTION, INTERNAL_LINKING, IMAGE_ALT, CANONICAL, SITEMAP.`;
 
 // ── Strategy Input/Output ───────────────────────────────────
 

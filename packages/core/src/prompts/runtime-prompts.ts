@@ -104,7 +104,7 @@ export function loadRuntimePrompts(): RuntimePrompt[] {
 
 		// ── 2. Analysis Agent (정적 분석 LLM 호출 2종) ──────────
 		{
-			id: "analysis-static",
+			id: "analysis",
 			display_name: "Analysis Agent (정적 분석 LLM 호출)",
 			description:
 				"analysis-agent.ts의 computeContentAnalysis()와 runAnalysis()에서 LLM을 호출하는 시스템 지시 2종.",
@@ -204,6 +204,29 @@ export function loadRuntimePrompts(): RuntimePrompt[] {
 			source: "inline",
 			source_file: "agents/validation/validation-agent.ts",
 			system_instruction: VALIDATION_SYSTEM,
+			readonly: true,
+		},
+
+		// ── 6. Orchestrator (미구현 — LLM 프롬프트 예정) ─────────
+		{
+			id: "orchestrator",
+			display_name: "Orchestrator Agent (파이프라인 오케스트레이션)",
+			description:
+				"파이프라인 실행 순서와 상태를 관리하는 오케스트레이터. 현재 정적 로직이며 LLM 기반으로 확장 예정.",
+			source: "inline",
+			source_file: "agents/orchestrator/",
+			system_instruction: "(Not Yet Implemented — 현재 정적 로직으로 동작, LLM 프롬프트 미사용)",
+			readonly: true,
+		},
+
+		// ── 7. Monitoring Agent (미구현) ─────────────────────────
+		{
+			id: "monitoring",
+			display_name: "Monitoring Agent (GEO 추적 및 이상 감지)",
+			description: "주기적 GEO 점수 추적 및 이상 감지 에이전트. 아직 구현되지 않음.",
+			source: "inline",
+			source_file: "agents/monitoring/",
+			system_instruction: "(Not Yet Implemented)",
 			readonly: true,
 		},
 	];
