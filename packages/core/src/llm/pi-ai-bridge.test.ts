@@ -181,6 +181,7 @@ describe("pi-ai-bridge", () => {
 			{ provider_id: "google", model: "gemini-99-future", expectedApi: "google-generative-ai" },
 			{ provider_id: "anthropic", model: "claude-99-future", expectedApi: "anthropic-messages" },
 			{ provider_id: "perplexity", model: "sonar-99-future", expectedApi: "openai-completions" },
+			{ provider_id: "microsoft", model: "gpt-5.4", expectedApi: "openai-responses" },
 		])(
 			"fallback: $provider_id with unknown model '$model' → api=$expectedApi",
 			({ provider_id, model, expectedApi }) => {
@@ -195,6 +196,10 @@ describe("pi-ai-bridge", () => {
 					max_tokens: 4096,
 					temperature: 0.3,
 					rate_limit_rpm: 60,
+					// Azure requires user-provided base URL (no default)
+					...(provider_id === "microsoft" && {
+						api_base_url: "https://test.openai.azure.com",
+					}),
 				};
 
 				const result = piAiModelFromProvider(provider);
@@ -218,6 +223,7 @@ describe("pi-ai-bridge", () => {
 			{ provider_id: "google", model: "unknown-google-model" },
 			{ provider_id: "anthropic", model: "unknown-anthropic-model" },
 			{ provider_id: "perplexity", model: "unknown-perplexity-model" },
+			{ provider_id: "microsoft", model: "unknown-azure-model" },
 		])("fallback model for $provider_id has all required fields", ({ provider_id, model }) => {
 			const provider: LLMProviderSettings = {
 				provider_id,
@@ -230,6 +236,10 @@ describe("pi-ai-bridge", () => {
 				max_tokens: 4096,
 				temperature: 0.3,
 				rate_limit_rpm: 60,
+				// Azure requires user-provided base URL (no default)
+				...(provider_id === "microsoft" && {
+					api_base_url: "https://test.openai.azure.com",
+				}),
 			};
 
 			const result = piAiModelFromProvider(provider);

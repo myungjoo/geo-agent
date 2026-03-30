@@ -141,6 +141,9 @@ export class GeoLLMClient {
 
 		const response = await piAiComplete(piModel, request, { apiKey: provider.api_key });
 
+		// pi-ai의 내부 provider 이름(e.g. "openai")이 아닌 원래 GEO provider_id(e.g. "microsoft")로 표시
+		response.provider = provider.provider_id;
+
 		this.costTracker.record(
 			provider.provider_id,
 			response.model,
