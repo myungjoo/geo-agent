@@ -101,7 +101,7 @@ export async function runLLMAnalysis(
 		apiKey,
 		maxIterations: 15,
 		temperature: 0.3,
-		maxTokens: 8192,
+		maxTokens: model.maxTokens ?? 16384,
 	});
 
 	// Ensure critical tools were called — if LLM skipped them, call them now

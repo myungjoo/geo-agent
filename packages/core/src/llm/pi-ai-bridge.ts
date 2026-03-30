@@ -50,13 +50,27 @@ export function piAiModelFromProvider(
 	provider: LLMProviderSettings,
 	costOverrides?: ModelCostOverrideMap,
 ): Model<Api> {
-	const piProvider = PROVIDER_MAP[provider.provider_id];
+	let piProvider = PROVIDER_MAP[provider.provider_id];
 	if (!piProvider) {
 		throw new Error(`Provider "${provider.provider_id}" not mapped to pi-ai provider`);
 	}
 
+	// Azure v1 model routing: use OpenAI-compatible /openai/v1/responses endpoint
+	// instead of AzureOpenAI SDK's /deployments/{name}/responses path.
+	// The v1 endpoint supports Bearer auth and model-in-body routing,
+	// which works universally across Azure OpenAI resources.
+	// Auto-append "/openai/v1" to the base URL if not already present.
+	let azureV1BaseUrl: string | undefined;
+	if (piProvider === "azure-openai-responses" && provider.api_base_url) {
+		piProvider = "openai";
+		azureV1BaseUrl = provider.api_base_url.includes("/openai/v1")
+			? provider.api_base_url
+			: `${provider.api_base_url.replace(/\/+$/, "")}/openai/v1`;
+	}
+
 	// Perplexity uses OpenAI-compatible API with custom baseUrl
 	const effectiveBaseUrl =
+		azureV1BaseUrl ??
 		provider.api_base_url ??
 		(provider.provider_id === "perplexity" ? "https://api.perplexity.ai" : undefined);
 
@@ -93,6 +107,8 @@ export function piAiModelFromProvider(
 		api = "google-generative-ai";
 	} else if (piProvider === "anthropic") {
 		api = "anthropic-messages";
+	} else if (piProvider === "azure-openai-responses") {
+		api = "azure-openai-responses";
 	} else if (modelId.includes("codex")) {
 		api = "openai-codex-responses";
 	} else if (modelId.startsWith("gpt-5") || modelId.startsWith("o3") || modelId.startsWith("o4")) {

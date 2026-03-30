@@ -52,7 +52,9 @@ export function createProviderChatLLM(provider: LLMProviderSettings): ChatLLMFn 
 	const model = piAiModelFromProvider(provider);
 
 	return async (request: LLMRequest): Promise<LLMResponse> => {
-		return piAiComplete(model, request, { apiKey: provider.api_key });
+		const response = await piAiComplete(model, request, { apiKey: provider.api_key });
+		response.provider = provider.provider_id;
+		return response;
 	};
 }
 
