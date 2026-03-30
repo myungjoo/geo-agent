@@ -33,10 +33,12 @@ const { app } = await import("../server.js");
 
 const EXPECTED_PROMPT_IDS = [
 	"llm-analysis",
-	"analysis-static",
+	"analysis",
 	"strategy",
 	"optimization",
 	"validation",
+	"orchestrator",
+	"monitoring",
 ] as const;
 
 // ── Tests ──────────────────────────────────────────────────────
@@ -52,13 +54,13 @@ afterAll(() => {
 // ── GET /api/settings/agents/prompts ───────────────────────────
 
 describe("GET /api/settings/agents/prompts", () => {
-	it("returns 200 with array of 5 runtime prompts", async () => {
+	it("returns 200 with array of 7 runtime prompts", async () => {
 		const res = await app.request("/api/settings/agents/prompts", { method: "GET" });
 		expect(res.status).toBe(200);
 
 		const body = await res.json();
 		expect(Array.isArray(body)).toBe(true);
-		expect(body).toHaveLength(5);
+		expect(body).toHaveLength(7);
 	});
 
 	it("each prompt has RuntimePrompt schema fields", async () => {
@@ -106,8 +108,8 @@ describe("CL-1: prompts API returns actual runtime prompts, not stubs", () => {
 		expect(body.system_instruction.length).toBeGreaterThan(500);
 	});
 
-	it("analysis-static prompt matches exported READABILITY_SYSTEM constant", async () => {
-		const res = await app.request("/api/settings/agents/prompts/analysis-static", {
+	it("analysis prompt matches exported READABILITY_SYSTEM constant", async () => {
+		const res = await app.request("/api/settings/agents/prompts/analysis", {
 			method: "GET",
 		});
 		expect(res.status).toBe(200);
@@ -224,12 +226,15 @@ describe("GET /api/settings/agents/prompts/:agent_id", () => {
 		expect(res.status).toBe(404);
 	});
 
-	it("returns 404 for old agent IDs (orchestrator, monitoring)", async () => {
-		for (const oldId of ["orchestrator", "monitoring"]) {
-			const res = await app.request(`/api/settings/agents/prompts/${oldId}`, {
+	it("returns 200 for orchestrator and monitoring (Not Yet Implemented)", async () => {
+		for (const id of ["orchestrator", "monitoring"]) {
+			const res = await app.request(`/api/settings/agents/prompts/${id}`, {
 				method: "GET",
 			});
-			expect(res.status).toBe(404);
+			expect(res.status).toBe(200);
+			const body = await res.json();
+			expect(body.system_instruction).toContain("Not Yet Implemented");
+			expect(body.readonly).toBe(true);
 		}
 	});
 });
