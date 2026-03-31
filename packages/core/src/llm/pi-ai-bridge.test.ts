@@ -178,19 +178,30 @@ describe("pi-ai-bridge", () => {
 		 */
 		it.each([
 			{ provider_id: "openai", model: "gpt-99-future", expectedApi: "openai-completions" },
-			{ provider_id: "google", model: "gemini-99-future", expectedApi: "google-generative-ai" },
+			{
+				provider_id: "google",
+				model: "gemini-99-future",
+				expectedApi: "google-generative-ai",
+				apiKey: "AIzaFakeKey",
+			},
+			{
+				provider_id: "google",
+				model: "gemini-99-future",
+				expectedApi: "google-vertex",
+				apiKey: "AQ.VertexKey",
+			},
 			{ provider_id: "anthropic", model: "claude-99-future", expectedApi: "anthropic-messages" },
 			{ provider_id: "perplexity", model: "sonar-99-future", expectedApi: "openai-completions" },
 			{ provider_id: "microsoft", model: "gpt-5.4", expectedApi: "openai-responses" },
 		])(
 			"fallback: $provider_id with unknown model '$model' → api=$expectedApi",
-			({ provider_id, model, expectedApi }) => {
+			({ provider_id, model, expectedApi, apiKey }: any) => {
 				const provider: LLMProviderSettings = {
 					provider_id,
 					display_name: provider_id,
 					enabled: true,
 					auth_method: "api_key",
-					api_key: "test-key",
+					api_key: apiKey ?? "test-key",
 					default_model: model,
 					available_models: [model],
 					max_tokens: 4096,
@@ -220,36 +231,39 @@ describe("pi-ai-bridge", () => {
 		 */
 		it.each([
 			{ provider_id: "openai", model: "unknown-openai-model" },
-			{ provider_id: "google", model: "unknown-google-model" },
+			{ provider_id: "google", model: "unknown-google-model", apiKey: "AIzaFakeKey" },
 			{ provider_id: "anthropic", model: "unknown-anthropic-model" },
 			{ provider_id: "perplexity", model: "unknown-perplexity-model" },
 			{ provider_id: "microsoft", model: "unknown-azure-model" },
-		])("fallback model for $provider_id has all required fields", ({ provider_id, model }) => {
-			const provider: LLMProviderSettings = {
-				provider_id,
-				display_name: provider_id,
-				enabled: true,
-				auth_method: "api_key",
-				api_key: "test-key",
-				default_model: model,
-				available_models: [model],
-				max_tokens: 4096,
-				temperature: 0.3,
-				rate_limit_rpm: 60,
-				// Azure requires user-provided base URL (no default)
-				...(provider_id === "microsoft" && {
-					api_base_url: "https://test.openai.azure.com",
-				}),
-			};
+		])(
+			"fallback model for $provider_id has all required fields",
+			({ provider_id, model, apiKey }: any) => {
+				const provider: LLMProviderSettings = {
+					provider_id,
+					display_name: provider_id,
+					enabled: true,
+					auth_method: "api_key",
+					api_key: apiKey ?? "test-key",
+					default_model: model,
+					available_models: [model],
+					max_tokens: 4096,
+					temperature: 0.3,
+					rate_limit_rpm: 60,
+					// Azure requires user-provided base URL (no default)
+					...(provider_id === "microsoft" && {
+						api_base_url: "https://test.openai.azure.com",
+					}),
+				};
 
-			const result = piAiModelFromProvider(provider);
+				const result = piAiModelFromProvider(provider);
 
-			expect(result.id).toBeTypeOf("string");
-			expect(result.api).toBeTypeOf("string");
-			expect(result.provider).toBeTypeOf("string");
-			expect(result.baseUrl).toBeTypeOf("string");
-			expect(result.baseUrl).toMatch(/^https?:\/\//);
-		});
+				expect(result.id).toBeTypeOf("string");
+				expect(result.api).toBeTypeOf("string");
+				expect(result.provider).toBeTypeOf("string");
+				expect(result.baseUrl).toBeTypeOf("string");
+				expect(result.baseUrl).toMatch(/^https?:\/\//);
+			},
+		);
 
 		it("should override baseUrl when api_base_url is set", () => {
 			const provider: LLMProviderSettings = {

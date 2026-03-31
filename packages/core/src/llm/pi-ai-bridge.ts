@@ -68,6 +68,12 @@ export function piAiModelFromProvider(
 			: `${provider.api_base_url.replace(/\/+$/, "")}/openai/v1`;
 	}
 
+	// Google Vertex AI: API keys starting with "AIza" are Google AI Studio keys
+	// (use google-generative-ai). All other keys are Vertex AI keys (use google-vertex).
+	if (piProvider === "google" && provider.api_key && !provider.api_key.startsWith("AIza")) {
+		piProvider = "google-vertex";
+	}
+
 	// Perplexity uses OpenAI-compatible API with custom baseUrl
 	const effectiveBaseUrl =
 		azureV1BaseUrl ??
@@ -105,6 +111,8 @@ export function piAiModelFromProvider(
 	let api: string;
 	if (piProvider === "google") {
 		api = "google-generative-ai";
+	} else if (piProvider === "google-vertex") {
+		api = "google-vertex";
 	} else if (piProvider === "anthropic") {
 		api = "anthropic-messages";
 	} else if (piProvider === "azure-openai-responses") {
@@ -149,6 +157,8 @@ function getDefaultBaseUrl(provider: string): string {
 			return "https://api.anthropic.com";
 		case "google":
 			return "https://generativelanguage.googleapis.com/v1beta";
+		case "google-vertex":
+			return "https://us-central1-aiplatform.googleapis.com";
 		default:
 			return "";
 	}
@@ -215,8 +225,14 @@ export async function piAiComplete(
 		messages,
 	};
 
+	// Gemini 2.5 thinking models: thinking tokens share the maxOutputTokens budget.
+	// Ensure sufficient room for the actual response by boosting the token limit.
+	const isGoogleThinkingModel =
+		(model.api === "google-generative-ai" || model.api === "google-vertex") &&
+		model.id.includes("2.5");
+
 	// Build onPayload: inject json_mode and/or web_search into raw API payload
-	const needsPayloadHook = request.json_mode || request.web_search;
+	const needsPayloadHook = request.json_mode || request.web_search || isGoogleThinkingModel;
 	const onPayload = needsPayloadHook
 		? (payload: unknown) => {
 				const p = payload as Record<string, unknown>;
@@ -232,12 +248,35 @@ export async function piAiComplete(
 						api === "azure-openai-responses"
 					) {
 						p.text = { format: { type: "json_object" } };
-					} else if (api === "google-generative-ai" || api === "google-vertex") {
+					} else if (api === "google-generative-ai") {
 						const gc = (p.generationConfig ?? {}) as Record<string, unknown>;
 						gc.responseMimeType = "application/json";
 						p.generationConfig = gc;
+					} else if (api === "google-vertex") {
+						const cfg = (p.config ?? {}) as Record<string, unknown>;
+						cfg.responseMimeType = "application/json";
+						p.config = cfg;
 					}
 					// Anthropic: no native json_mode — handled via prompt instructions
+				}
+
+				// ── Gemini 2.5 thinking budget ─────────────────────
+				// Thinking tokens share maxOutputTokens. Cap thinking to avoid
+				// starving the actual response of tokens.
+				if (isGoogleThinkingModel) {
+					if (api === "google-vertex") {
+						const cfg = (p.config ?? {}) as Record<string, unknown>;
+						if (!cfg.thinkingConfig) {
+							cfg.thinkingConfig = { thinkingBudget: 1024 };
+						}
+						p.config = cfg;
+					} else {
+						const gc = (p.generationConfig ?? {}) as Record<string, unknown>;
+						if (!gc.thinkingConfig) {
+							gc.thinkingConfig = { thinkingBudget: 1024 };
+						}
+						p.generationConfig = gc;
+					}
 				}
 
 				// ── web_search ──────────────────────────────────────
@@ -253,7 +292,7 @@ export async function piAiComplete(
 	const response = await complete(model, context, {
 		apiKey: options?.apiKey,
 		temperature: request.temperature,
-		maxTokens: request.max_tokens,
+		maxTokens: request.max_tokens ?? model.maxTokens,
 		onPayload,
 	});
 
